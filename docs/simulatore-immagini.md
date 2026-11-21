@@ -59,12 +59,35 @@ Lettura: con segnale forte un oggetto da 5 kB arriva in circa 25 s, **ma solo 3 
 2. **L'indirizzamento non reggeva il cambio di gradino:** una mappa con un bit per pezzo non va bene quando i frame cambiano dimensione. Soluzione: pezzi da **16 byte**, il frame DATA porta **k pezzi**, la mappa dello STATUS ha **un bit per blocco** (k pezzi al gradino attuale) e il ricevitore tiene la mappa a livello di pezzo. Corretto nel documento.
 3. **Il CRC dell'oggetto intero non serve se si consegnano solo alcuni livelli:** il DONE porta il **CRC del prefisso consegnato**. Corretto.
 4. **Il timer di fallback scattava sul mittente mentre trasmetteva** una finestra lunga (31 s di "silenzio" ai gradini lenti): ora **conta solo il tempo in ascolto**. Corretto.
-5. **Aperto: R11-R14 non sono raggiungibili dall'incontro.** Se il segnale scende sotto la sensibilità di R10 mentre si lavora a gradini più lenti, il ritorno a R10 non basta (esempio: `--prx -128 --scenario degrada --extra 12 --span 300`, con i semi da 1 a 6 una prova su sei fallisce con "negoziazione non riuscita"). Serve un gradino di rifugio più lento o una scansione.
+5. **R11-R14 non erano raggiungibili dall'incontro: corretto con la ricerca a calendario** (vedi sotto). Aiuta molto, ma nei casi estremi resta una consegna su due.
 6. **Aperto: l'incontro costa circa 21 s** a R10, che per immagini piccole è quasi tutto il tempo. Da ridurre.
 7. **Aperto: il gradino FSK a 50 kbit/s (R2) non conviene:** velocità netta di circa 38 kbit/s, come LoRa 500/SF6 (R3) ma con 10 dB in meno di sensibilità stimata.
 
+## La ricerca a calendario: prima e dopo
+Problema: dopo un lungo silenzio le due stazioni tornavano a R10, ma se il segnale era sceso sotto R10 non si ritrovavano più. **Correzione provata sul simulatore:** dopo un silenzio in ascolto di 30 s o più, **entrambe seguono lo stesso calendario di gradini in funzione del tempo** (R10, R11, R12, R13, R14 e di nuovo da capo; da 120 s a ogni gradino), e il mittente manda HELLO al gradino in cui si trova. Per non sfasarsi servono quattro regole, trovate una alla volta con il simulatore:
+- il ricevitore **esce dalla ricerca solo se sente un frame diverso da HELLO**: se la risposta a un HELLO si perde, il suo calendario non si azzera;
+- il mittente, dopo la risposta all'HELLO, **tiene il gradino**, ma se la prova non riesce **riprende lo stesso calendario** (non ne comincia uno nuovo);
+- il ricevitore, dopo aver risposto a un HELLO, **resta al gradino per 12 frame** (almeno 60 s) per dare tempo alle prove, poi riprende il calendario che dipende solo dal tempo;
+- **dopo il ritrovamento non si rifà la raffica di PROBE**: lo scambio di HELLO ha già provato il collegamento, e a gradini lenti la raffica durava più della sosta. Il trasferimento riprende dal punto in cui era (il ricevitore conserva la mappa).
+Inoltre il report delle PROBE parte **a timer** dopo la raffica (non solo se arriva l'ultima), e se nessun gradino ha il margine richiesto si sceglie il più veloce con 3 dB, altrimenti il più lento.
+
+Confronto con il solo ritorno a R10, 12 prove per riga (riuscite):
+
+| Scenario | solo R10 | calendario |
+|---|---|---|
+| rampa da -128 a -140 dBm in 300 s | 12/12 | 12/12 |
+| rampa da -130 a -144 dBm in 200 s | 5/12 | **11/12** |
+| rampa da -134 a -142 dBm in 150 s | 11/12 | **12/12** |
+| salto da -132 a -141 dBm a 60 s | 11/12 | 11/12 |
+| onda fra -132 e -146 dBm (600 s) | 8/12 | 8/12 |
+| salto da -130 a -144 dBm a 60 s (R10 non si sente più) | 2/12 | **10/12** |
+| salto da -134 a -148 dBm (solo R13-R14) | 0/12 | **5/12** |
+| salto da -136 a -147 dBm | 0/12 | **6/12** |
+
+Nessuna regressione nei casi leggeri; guadagno netto dove R10 non si sente più. **Attenzione a come leggere questi numeri:** nel modello i frame corti hanno più probabilità di arrivare (probabilità elevata a byte/64): HELLO e MODE-SET (7-17 byte) si sentono anche qualche dB sotto la sensibilità di R10, per questo il solo ritorno a R10 non va a zero nei casi intermedi. Quanto pesi davvero la lunghezza del frame lo dirà la misura (fase 1).
+
 ## Prove automatiche (`tests/sim/test_sim_immagini.py`)
-Codifica e decodifica di tutti i frame (dimensioni: DATA con intestazione di 6 byte, STATUS di 18, PROBE di 32), frame con versione 2 scartati, **determinismo** (stesso seme, stesso risultato), consegna con CRC giusto a -100, -118 e -128 dBm, tempo crescente al calare del segnale, **budget** (livelli che non entrano non partono, primo livello obbligatorio, rinuncia se non entra), **assenza di collegamento** (13 HELLO, rinuncia dopo circa 10 minuti), **MODE-ACK perso** (disallineamento e recupero), **STATUS persi**, **gradino di -9 dB** a metà trasferimento, segnale ondulato con ritrasmissioni, confronto con la stima della tabella (a -100 dBm 20 kB: 13 s simulati e 13 s stimati).
+Codifica e decodifica di tutti i frame (dimensioni: DATA con intestazione di 6 byte, STATUS di 18, PROBE di 32), frame con versione 2 scartati, **determinismo** (stesso seme, stesso risultato), consegna con CRC giusto a -100, -118 e -128 dBm, tempo crescente al calare del segnale, **budget** (livelli che non entrano non partono, primo livello obbligatorio, rinuncia se non entra), **assenza di collegamento** (13 HELLO, rinuncia dopo circa 10 minuti), **ricerca a calendario** contro solo R10 (8 semi, scenario senza R10), **MODE-ACK perso** (disallineamento e recupero), **STATUS persi**, **gradino di -9 dB** a metà trasferimento, segnale ondulato con ritrasmissioni, confronto con la stima della tabella (a -100 dBm 20 kB: 13 s simulati e 13 s stimati).
 
 ## Prossimi passi
-Ritarare il canale con le misure della fase 1 (sensibilità vere e lunghezza dei frame); aggiungere errori sui bit, la parità XOR e collisioni; provare le correzioni ai punti aperti 5-7 con il simulatore prima di scrivere il firmware.
+Ritarare il canale con le misure della fase 1 (sensibilità vere e lunghezza dei frame); aggiungere errori sui bit, la parità XOR e collisioni; provare le correzioni ai punti aperti 6 e 7 con il simulatore, e capire perché nei casi estremi (solo R13-R14) la consegna riesce solo una volta su due.

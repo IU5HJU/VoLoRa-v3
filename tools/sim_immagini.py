@@ -199,6 +199,10 @@ class Node:
         self.name, self.chip = name, chip
         self.rung = pi.RENDEZVOUS
         self.last_heard = 0.0     # ultimo istante di attivita': frame sentito o trasmissione propria
+        self.had_link = False     # ha sentito almeno un frame in questa sessione (prima la ricerca non c'e': si e' ancora all'incontro)
+        self.hold_until = 0.0     # il ricevitore resta al gradino per un po' dopo aver risposto a un HELLO, per dare tempo alle prove
+        self.hold = False         # il mittente tiene il gradino dopo la risposta a un HELLO, in attesa che una prova confermi
+        self.lost_since = None    # istante in cui e' scaduto il timer di ascolto: da qui in poi vale il calendario della ricerca
 
     def mask(self):
         m = 0
@@ -209,6 +213,26 @@ class Node:
             if ok:
                 m |= 1 << rid
         return m
+
+
+SCAN_ORDER = (10, 11, 12, 13, 14)     # calendario della ricerca dopo un lungo silenzio: gradino di incontro e poi i gradini lenti
+
+
+def scan_dwell_s(rid):
+    """Quanto si resta a un gradino della ricerca: almeno 120 s e abbastanza per tre HELLO."""
+    return max(120.0, 3.0 * (pi.frame_airtime_s(rid, 25) + 2 * GUARD_S))
+
+
+def scan_rung(elapsed_s, order=SCAN_ORDER):
+    """Gradino del calendario `elapsed_s` secondi dopo l'inizio della ricerca (il calendario ricomincia dopo l'ultimo gradino)."""
+    cycle = sum(scan_dwell_s(r) for r in order)
+    e = elapsed_s % cycle
+    for r in order:
+        d = scan_dwell_s(r)
+        if e < d:
+            return r
+        e -= d
+    return order[-1]
 
 
 def fallback_s(rid):
@@ -245,7 +269,8 @@ class Result:
 # -------------------------------------------------------------------------------------------------------------- simulatore
 class Simulator:
     def __init__(self, obj_size=20000, layers=(0.2, 0.5, 1.0), channel=None, chip_a="SX1278", chip_b="SX1278", budget_s=600.0, seed=1,
-                 call_a="IU5HJU", call_b="IK5XYZ", trace=False, window=WINDOW_FRAMES, max_time_s=4 * 3600.0):
+                 call_a="IU5HJU", call_b="IK5XYZ", trace=False, window=WINDOW_FRAMES, max_time_s=4 * 3600.0, ricerca="calendario"):
+        self.ricerca = ricerca
         self.rng = random.Random(seed)
         self.ch = channel or Channel(-100.0, rng=random.Random(seed + 1))
         self.S, self.R = Node("S", chip_a), Node("R", chip_b)
@@ -281,13 +306,18 @@ class Simulator:
             print(line)
 
     def tick(self):
-        """Fallback: chi non sente nessuno per troppo tempo torna al gradino di incontro."""
+        """Dopo un lungo silenzio in ascolto una stazione entra in ricerca: segue il calendario dei gradini (stesso per entrambe, in funzione del tempo).
+        Con ricerca="r10" (vecchio comportamento, per confronto) torna solo al gradino di incontro."""
         for n in (self.S, self.R):
-            if n.rung != pi.RENDEZVOUS and self.t - n.last_heard > fallback_s(n.rung):
-                self.tr(n.name, f"silenzio di {self.t - n.last_heard:.0f} s a R{n.rung}: fallback a R{pi.RENDEZVOUS}")
+            if n.lost_since is None and n.had_link and self.t - n.last_heard > fallback_s(n.rung):
+                n.lost_since = n.last_heard + fallback_s(n.rung)
+                self.tr(n.name, f"silenzio di {self.t - n.last_heard:.0f} s a R{n.rung}: ricerca")
                 self.res.fallbacks += 1
-                self.set_rung(n, pi.RENDEZVOUS)
-                n.last_heard = self.t
+            if n.lost_since is not None and not n.hold and self.t >= n.hold_until:
+                if self.ricerca == "calendario":
+                    self.set_rung(n, scan_rung(self.t - n.lost_since))
+                else:
+                    self.set_rung(n, pi.RENDEZVOUS)
 
     def set_rung(self, node, rid):
         if node.rung != rid:
@@ -318,10 +348,22 @@ class Simulator:
                 heard = False
         if heard:
             rx.last_heard = self.t
+            rx.had_link = True
+            if d is not None and d["tipo"] == T["HELLO"]:
+                if d["reply"]:
+                    rx.hold = True        # il mittente ha la risposta: tiene il gradino, ma resta in ricerca finche' una prova non e' confermata
+                # un HELLO senza risposta non fa uscire il ricevitore dalla ricerca: continua il suo calendario
+            else:
+                rx.lost_since = None      # frame diverso da HELLO: collegamento ristabilito
+                rx.hold = False
             tx_snr = p - noise_floor_dbm(rid)
             self._last_rssi, self._last_snr = p, tx_snr
         self.tr(tx.name, f"{name} {len(frame)}B a R{rid} ({a * 1000:.0f} ms) -> {'sentito' if heard else 'perso'}")
         return d if heard else None
+
+    def give_up(self):
+        """Tempo senza progressi dopo cui si rinuncia: 15 minuti, o quattro finestre al gradino attuale se sono piu' lunghe."""
+        return max(GIVE_UP_S, 4.0 * self.window * pi.frame_airtime_s(self.S.rung, pi.DATA_HEADER + 2 * pi.PIECE))
 
     def k_for(self, rid):
         """Pezzi per frame DATA a un gradino: il minimo fra i due chip (devono capirsi)."""
@@ -336,17 +378,15 @@ class Simulator:
         t = f["tipo"]
         if t == T["HELLO"] and not f["reply"]:
             self.s_caps = f
+            if self.R.lost_since is not None:      # in ricerca: resta qui il tempo di 12 frame, poi riprende il calendario (che e' in funzione del tempo)
+                self.R.hold_until = self.t + max(60.0, 12.0 * pi.frame_airtime_s(self.R.rung, PROBE_BYTES))
             return enc_hello(self.sess, self.call_b, self.R.chip, self.R.mask(), pi.max_frame(pi.RENDEZVOUS, self.R.chip), 100, reply=True)
         if t == T["PROBE"]:
             self.r_rssi.append(self._last_rssi)
             self.r_snr.append(self._last_snr)
             self.probe_heard = getattr(self, "probe_heard", 0) + 1
-            if f["idx"] == f["count"] - 1:
-                rec = self.probe_heard
-                rs, sn = statistics.mean(self.r_rssi), statistics.mean(self.r_snr)
-                self.probe_heard = 0
-                self.r_rssi, self.r_snr = [], []
-                return enc_probe_report(self.sess, f["rung"], f["count"], rec, rs, sn)
+            self.probe_count = f["count"]
+            self.probe_rung = f["rung"]
             return None
         if t == T["MODE_SET"]:
             self.r_pending = (f["rung"], f["k"])
@@ -440,20 +480,26 @@ class Simulator:
     def probe(self, rid_check=None):
         """Raffica di PROBE al gradino attuale; ritorna (ricevuti, attesi, rssi, snr) dal report, o None."""
         n = PROBE_COUNT if self.S.rung <= pi.RENDEZVOUS else 4
-        rep = None
+        self.probe_heard = 0
+        self.r_rssi, self.r_snr = [], []
         for i in range(n):
             r = self.air(self.S, self.R, enc_probe(self.sess, self.S.rung, i, n))
             if r is not None:
-                rp = self.r_handle(r)
-                if rp is not None:
-                    self.guard()
-                    rf = self.air(self.R, self.S, rp)
-                    if rf is not None:
-                        rep = rf
-                    self.guard()
-        if rep is None:
+                self.r_handle(r)
+        # il ricevitore manda il PROBE-REPORT a timer, dopo la raffica, se ne ha sentito almeno uno (come lo STATUS dopo una finestra)
+        if self.probe_heard == 0:
+            self.advance(2 * GUARD_S)
             return None
-        return rep["received"], rep["expected"], rep["rssi"], rep["snr"]
+        rs, sn = statistics.mean(self.r_rssi), statistics.mean(self.r_snr)
+        rep = enc_probe_report(self.sess, self.S.rung, n, self.probe_heard, rs, sn)
+        self.r_rssi, self.r_snr = [], []
+        self.probe_heard = 0
+        self.guard()
+        rf = self.air(self.R, self.S, rep)
+        self.guard()
+        if rf is None:
+            return None
+        return rf["received"], rf["expected"], rf["rssi"], rf["snr"]
 
     def switch(self, target):
         """MODE-SET (3 volte) al gradino attuale e MODE-ACK; poi entrambe passano al nuovo gradino. True se il mittente ha sentito l'ACK."""
@@ -475,33 +521,64 @@ class Simulator:
         return False
 
     def resync(self):
-        """Dopo un cambio non confermato le due stazioni possono stare su gradini diversi: si aspetta il fallback a R10."""
-        wait = max(fallback_s(self.S.rung), fallback_s(self.R.rung)) + 1.0
-        self.tr("--", f"disallineamento (S=R{self.S.rung}, R=R{self.R.rung}): attesa del fallback ({wait:.0f} s)")
-        self.advance(wait)
-        for n in (self.S, self.R):
-            if n.rung != pi.RENDEZVOUS:
-                self.set_rung(n, pi.RENDEZVOUS)
-        self.k_now = self.k_for(pi.RENDEZVOUS)
+        """Dopo un cambio non confermato o un silenzio le due stazioni possono stare su gradini diversi: il mittente aspetta di essere in ricerca
+        come il ricevitore, poi manda HELLO al gradino del calendario in cui si trova finche' il ricevitore risponde."""
+        self.tr("--", f"disallineamento o silenzio (S=R{self.S.rung}, R=R{self.R.rung}): ricerca")
+        t0 = self.t
+        self.S.hold = False
+        if self.ricerca != "calendario":
+            wait = max(fallback_s(self.S.rung), fallback_s(self.R.rung)) + 1.0
+            self.advance(wait)
+            for n in (self.S, self.R):
+                if n.rung != pi.RENDEZVOUS:
+                    self.set_rung(n, pi.RENDEZVOUS)
+            self.k_now = self.k_for(pi.RENDEZVOUS)
+            return
+        while self.S.lost_since is None:          # il mittente entra in ricerca con lo stesso timer del ricevitore
+            self.advance(1.0)
+        while True:
+            hello = enc_hello(self.sess, self.call_a, self.S.chip, self.S.mask(), pi.max_frame(10, self.S.chip), 100)
+            r = self.exchange(hello, T["HELLO"])
+            if r is not None:
+                self.k_now = self.k_for(self.S.rung)
+                self.just_reconnected = True     # lo scambio di HELLO ha gia' provato il collegamento: niente nuova raffica di PROBE
+                self.tr("--", f"ritrovati a R{self.S.rung} dopo {self.t - t0:.0f} s")
+                return
+            self.advance(pi.frame_airtime_s(self.S.rung, 25) * (1.0 + self.rng.random()))
+            if self.t - t0 > max(GIVE_UP_S, 3.0 * sum(scan_dwell_s(r) for r in SCAN_ORDER)):   # tre giri del calendario
+                raise Failure("collegamento perso (la ricerca non ha ritrovato la stazione)")
 
     def predicted_best(self, prx_est, allowed, margin):
-        for r in allowed:
-            if prx_est - pi.sensitivity_dbm(r) >= margin:
-                return r
-        return pi.RENDEZVOUS
+        """Il gradino piu' veloce con il margine richiesto; se nessuno lo ha, con 3 dB; se neppure, il piu' lento ammesso."""
+        for m in (margin, 3.0):
+            for r in allowed:
+                if prx_est - pi.sensitivity_dbm(r) >= m:
+                    return r
+        return allowed[-1]
 
     def negotiate(self, want_up=True):
         """Dal gradino attuale cerca il gradino migliore: misura (PROBE), propone (MODE-SET), verifica (PROBE) e scende se non regge."""
         allowed = self.allowed()
-        for attempt in range(6):
+        if getattr(self, "just_reconnected", False):
+            self.just_reconnected = False
+            return
+        fails = 0
+        for attempt in range(8):
             m = self.probe()
             if m is None:
-                self.advance(5.0)
+                fails += 1
+                if fails >= 2:
+                    self.resync()
+                    fails = 0
+                else:
+                    self.advance(5.0)
                 continue
             rec, exp, rssi, snr = m
             target = self.predicted_best(rssi, allowed, MARGIN_UP_DB)
             if target == self.S.rung:
                 return
+            if target > self.S.rung and rec >= PROBE_OK * exp:
+                return       # il gradino attuale ha appena dimostrato di funzionare (>= 90 % delle prove): non si scende senza motivo
             ok = self.switch(target)
             if not ok:
                 self.resync()
@@ -627,7 +704,7 @@ class Simulator:
                     self.resync()
                     self.negotiate()
                 good_windows = 0
-                if self.t - last_progress > GIVE_UP_S:
+                if self.t - last_progress > self.give_up():
                     raise Failure("collegamento perso (nessun progresso)")
                 continue
             status_fail = 0
@@ -676,7 +753,7 @@ class Simulator:
             else:
                 good_windows = 0
                 up_block -= 1
-            if self.t - last_progress > GIVE_UP_S:
+            if self.t - last_progress > self.give_up():
                 raise Failure("collegamento perso (nessun progresso)")
         # DONE con il CRC dei byte consegnati (fino alla fine dell'ultimo livello completo)
         li = sum(1 for e in self.layer_ends if base >= e)
@@ -715,7 +792,7 @@ class Simulator:
 def run_once(args, seed):
     ch = Channel(args.prx, args.scenario, args.extra, args.when, args.span, rng=random.Random(seed + 1))
     layers = tuple((i + 1) / args.layers for i in range(args.layers))
-    sim = Simulator(args.size, layers, ch, args.chip, args.chip, args.budget, seed, trace=args.trace)
+    sim = Simulator(args.size, layers, ch, args.chip, args.chip, args.budget, seed, trace=args.trace, ricerca=args.ricerca)
     return sim, sim.run()
 
 
@@ -753,6 +830,7 @@ def main():
     ap.add_argument("--budget", type=float, default=600.0, help="budget di tempo per oggetto, s")
     ap.add_argument("--chip", default="SX1278", choices=["SX1278", "SX1262"])
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--ricerca", default="calendario", choices=["calendario", "r10"], help="cosa fanno le stazioni dopo un lungo silenzio: calendario dei gradini lenti (nuovo) o solo ritorno a R10 (vecchio)")
     ap.add_argument("--trace", action="store_true")
     ap.add_argument("--sweep", action="store_true")
     ap.add_argument("--runs", type=int, default=10)

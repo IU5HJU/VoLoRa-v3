@@ -115,6 +115,19 @@ s9, r9 = run(-100.0, 20000, seed=9)
 est = pi.estimate_seconds(20000, 2, "SX1278")
 check(r9.ok and 0.3 * est <= r9.transfer_s <= 3.0 * est, f"trasferimento di 20 kB a -100 dBm: simulato {r9.transfer_s:.0f} s, stima della tabella {est:.0f} s")
 
+# ricerca a calendario (dopo un lungo silenzio): scenario in cui R10 non si sente piu' (-144 dBm), 8 semi
+ok_cal = ok_r10 = 0
+for seed in range(1, 9):
+    for ric in ("calendario", "r10"):
+        ch = sim.Channel(-130.0, "gradino", extra_db=14.0, when_s=60.0, rng=random.Random(seed + 1))
+        sm = sim.Simulator(1000, (1 / 3, 2 / 3, 1.0), ch, "SX1278", "SX1278", 7200.0, seed, ricerca=ric)
+        r = sm.run()
+        if r.ok:
+            ok_cal += ric == "calendario"
+            ok_r10 += ric == "r10"
+check(ok_cal >= ok_r10 + 3, f"ricerca a calendario: {ok_cal}/8 riuscite contro {ok_r10}/8 con il solo ritorno a R10 (R10 non si sente piu')")
+check(sim.scan_rung(0) == 10 and sim.scan_rung(sim.scan_dwell_s(10) + 1) == 11 and sim.scan_rung(sum(sim.scan_dwell_s(r) for r in sim.SCAN_ORDER) + 1) == 10, "calendario: R10, poi R11, e ricomincia dopo il giro")
+
 if fails:
     print(fails, "prove fallite")
     sys.exit(1)
