@@ -17,6 +17,7 @@ SX1278_FSK_FRAME_MAX = 64   # FIFO dell'SX1278 (da confermare con la misura M5)
 FRAME_MAX = 255
 CHUNK_AIRTIME_TARGET = 3.0  # secondi: un pezzo non dovrebbe durare di piu' (perdite e tempi di ritorno)
 MIN_CHUNK = 32
+PIECE = 16               # pezzo: unita' di indirizzamento dell'oggetto (byte); un frame DATA porta k pezzi consecutivi
 
 # id, tipo, parametri, nome. R0-R2 FSK (kbit/s, deviazione kHz); R3-R14 LoRa (BW kHz, SF), CR 4/5.
 RUNGS = [
@@ -64,12 +65,17 @@ def max_frame(rid, chip="SX1278"):
 
 
 def chunk_size(rid, chip="SX1278"):
-    """Byte di dati per frame: il piu' grande (fino al massimo del chip) con tempo in aria entro il bersaglio, ma mai meno di MIN_CHUNK."""
-    top = max_frame(rid, chip) - DATA_HEADER
-    for c in range(top, MIN_CHUNK - 1, -1):
+    """Byte di dati per frame: multiplo di PIECE, il piu' grande (fino al massimo del chip) con tempo in aria entro il bersaglio, ma mai meno di MIN_CHUNK."""
+    top = (max_frame(rid, chip) - DATA_HEADER) // PIECE * PIECE
+    for c in range(top, MIN_CHUNK - 1, -PIECE):
         if frame_airtime_s(rid, c + DATA_HEADER) <= CHUNK_AIRTIME_TARGET:
             return c
     return min(MIN_CHUNK, top)
+
+
+def pieces_per_frame(rid, chip="SX1278"):
+    """k: quanti pezzi porta un frame DATA a questo gradino."""
+    return chunk_size(rid, chip) // PIECE
 
 
 def net_rate_bps(rid, chip="SX1278"):
@@ -105,7 +111,7 @@ def table(chip="SX1278", sizes=(2000, 5000, 20000, 50000)):
 
 
 def markdown_table(chip="SX1278", sizes=(2000, 5000, 20000, 50000)):
-    head = "| R | Gradino | pezzo | frame | velocità netta | sens. stimata | " + " | ".join("%d kB" % (n // 1000) for n in sizes) + " |"
+    head = "| R | Gradino | dati per frame | frame | velocità netta | sens. stimata | " + " | ".join("%d kB" % (n // 1000) for n in sizes) + " |"
     sep = "|---|---|---|---|---|---|" + "---|" * len(sizes)
     out = [head, sep]
     for rid, name, c, t, bps, sens, times in table(chip, sizes):
