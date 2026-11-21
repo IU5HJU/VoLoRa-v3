@@ -8,3 +8,4 @@
 6. **Tag del submodule:** spostarlo sul tag della rc.1 di VoLoRa quando verrà creato.
 7. **Schede sui 430-440 MHz:** le schede 433 MHz hanno filtri e antenne tarati su 433: misurare quanto rendono sugli estremi della gamma (430 e 440 MHz) e con FSK a banda larga. Il campo di sintonia dei chip (SX1278 e SX1262) va confrontato con i datasheet.
 8. **Convivenza:** senza vincoli di band plan, scegliere comunque come non disturbare chi è già sulla stessa frequenza (ascolto prima di trasmettere, identificazione).
+9. **Datasheet Semtech:** [radio-limiti.md](radio-limiti.md) usa fonti secondarie (RadioLib e tabelle LilyGO). Da confermare sui datasheet originali prima di fissare l'architettura.

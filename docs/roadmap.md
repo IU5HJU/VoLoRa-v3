@@ -5,7 +5,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 ## Fase 0: studio e decisioni (solo documenti)
 - Requisiti e definizione di "ruolo specializzato".
 - Ruoli (vedi [architettura.md](architettura.md)) e compatibilità con la v2.
-- Limiti delle radio SX1278 e SX1262: banda LoRa fino a 500 kHz, FSK fino a circa 300 kbit/s nominali, FIFO.
+- Limiti delle radio SX1278 e SX1262: prima bozza in [radio-limiti.md](radio-limiti.md) (da fonti secondarie, da confermare sui datasheet Semtech).
 - Frequenze: libere fra 430 e 440 MHz, senza limiti di banda né di band plan (deciso il 21/11/2026). Resta l'identificazione con il nominativo e niente cifratura.
 - **Esito:** documento di architettura e decisioni scritte ([punti-aperti.md](punti-aperti.md)).
 
