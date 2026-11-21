@@ -15,6 +15,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 - [docs/roadmap.md](docs/roadmap.md): fasi del lavoro.
 - [docs/architettura.md](docs/architettura.md): ruoli, firmware, vincoli.
 - [docs/scala-modi.md](docs/scala-modi.md): bozza della scala dei modi LoRa/FSK (calcolata, non misurata).
+- [docs/piano-misure.md](docs/piano-misure.md): piano di misura della fase 1 (attrezzatura, metodo, misure).
 - [docs/scheda-sd.md](docs/scheda-sd.md): la microSD della T3 e dove conviene usarla.
 - [docs/punti-aperti.md](docs/punti-aperti.md): decisioni ancora da prendere.
 
