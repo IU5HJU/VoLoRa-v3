@@ -37,6 +37,14 @@ Limite del metodo: sotto circa -100 dBm di potenza ricevuta la perdita per accop
 | Multimetro e oscilloscopio con resistenza in serie | M9, assorbimento di ogni modo | corrente in trasmissione, ricezione e durante la scrittura su SD |
 | SDR | M7 (indicativa), verifica dei pacchetti | frequenza, struttura dei pacchetti, banda grossolana; **non** spettro di precisione |
 
+## 2c. Montaggio schermato (bozza)
+- **Una scatola per scheda** (due in tutto), non una sola: con le due schede nella stessa scatola l'accoppiamento interno vanifica l'attenuazione.
+- Collegamento solo con **cavo SMA coassiale** tra le due scatole, passando dalla catena di attenuatori; sul pannello **connettore SMA passante** (bulkhead), chiuso con carico da 50 Ω quando non usato.
+- **L'antenna non si usa** durante le misure: la scheda va sul connettore SMA con il cavo, mai con l'antenna dentro la scatola.
+- **Il cavo USB è una via di fuga** per il segnale: ferrite sul cavo vicino alla scatola, e se possibile alimentazione a batteria con la seriale tenuta fuori dal campo (adattatore USB-seriale a distanza). Si controlla la tenuta con la prova sotto.
+- **Prova di tenuta prima di misurare:** si toglie la catena di attenuatori, si mette un carico da 50 Ω sul trasmettitore e si controlla con SDR o con la scheda ricevente che **non si riceva niente** alla potenza massima. Solo così ha senso misurare sensibilità vicine a -130 dBm.
+- Coperchio con contatto metallico continuo (nastro di alluminio o guarnizione conduttiva se serve).
+
 ## 3. Misure, in ordine
 
 | # | Misura | Come | Esito |
@@ -71,7 +79,7 @@ Data, schede e versione del firmware, frequenza, modo (BW, SF, CR oppure bit rat
 2. **NanoVNA:** modello e campo di frequenza (deve coprire 430-440 MHz con margine).
 3. **Attenuatori:** quali valori hai e fino a che frequenza sono dichiarati; serve poter arrivare a circa 120-130 dB di attenuazione totale (con schermatura).
 4. Hai una **T3 con TCXO**?
-5. Le schede possono stare in una **scatola metallica** schermata?
+5. ~~Le schede possono stare in una scatola metallica?~~ **Sì** (risposta del 21/11/2026). Montaggio al punto 2c.
 
 ## 8. Sessione in laboratorio con analizzatore di spettro (più avanti, discreta)
 Obiettivo: una sola visita **breve**, con tutto preparato prima, per le misure che l'SDR e gli strumenti di casa non permettono:
