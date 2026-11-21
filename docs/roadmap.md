@@ -11,6 +11,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 
 ## Fase 1: caratterizzazione del livello fisico (a banco, con la chiavetta SDR)
 - Scala dei modi, dal più veloce al più robusto: FSK alto e basso bitrate, LoRa BW500 con SF basso, LoRa BW125 con SF alto, fino ai modi estremi (BW bassa, SF12, CR 4/8).
+- Bozza calcolata della scala in [scala-modi.md](scala-modi.md): da sostituire con le misure.
 - Per ogni modo: throughput reale, tempo in aria, sensibilità, banda occupata, perdita di pacchetti.
 - Rendimento delle schede e delle antenne agli estremi della gamma (430 e 440 MHz).
 - **Esito:** tabella modo, velocità, soglia SNR, portata stimata.
