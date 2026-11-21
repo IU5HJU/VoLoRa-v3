@@ -25,6 +25,9 @@ Le schede e gli strumenti sono in [materiale.md](materiale.md). Per cominciare b
    Deve stampare `misura_core: tutte le prove passate`.
 
 ## 3. Caricare il firmware
+**Dal browser (il modo più semplice, senza PlatformIO):** quando la pagina è pubblicata, apri la [pagina di installazione](https://iu5hju.github.io/VoLoRa-v3/) con Chrome, Edge od Opera, collega la scheda, scegli la scheda e premi "Installa il firmware". *(La pagina esiste solo dopo il primo giro riuscito del workflow su GitHub e dopo aver attivato Pages: Settings, Pages, Source: GitHub Actions. Finché non c'è, usa i comandi qui sotto.)*
+
+**Da riga di comando:**
 Con l'**antenna collegata** e la **microSD tolta**:
 ```bash
 pio run -e t3 -t upload          # LoRa32 T3 V1.6.1

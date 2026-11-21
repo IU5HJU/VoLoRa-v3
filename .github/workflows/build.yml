@@ -1,0 +1,130 @@
+name: Build
+
+# Firmware di misura (studio VoLoRa V3): prove sul PC, compilazione per le schede e pagina di installazione su GitHub Pages.
+#   t3         LILYGO LoRa32 T3 V1.6.1 (SX1278)       artefatto firmware-t3
+#   tbeam1262  LILYGO T-Beam V1.2 con radio SX1262    artefatto firmware-tbeam1262
+# Ogni artefatto contiene web_factory.bin: immagine completa da scrivere all'indirizzo 0 (flasher web, esp-web-tools).
+# Su main il job "pages" pubblica su GitHub Pages la pagina (cartella site/) con i binari appena compilati.
+# Richiede, una volta sola: Settings -> Pages -> Source: GitHub Actions.
+# NOTA: il workflow non e' ancora stato eseguito: il primo giro puo' mostrare errori da correggere.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Prove sul PC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Logica del firmware di misura
+        run: make -C firmware/misura test
+      - name: Pilota dal PC con schede finte
+        run: |
+          python3 tools/misura.py scala --simulate --modes L4,F3 --att 100,110 --out "$RUNNER_TEMP/sim.csv" --count 50
+          python3 tools/misura.py analizza "$RUNNER_TEMP/sim.csv"
+
+  firmware:
+    name: Firmware ${{ matrix.board }}
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: t3
+            board: T3 V1.6.1
+            artifact: firmware-t3
+          - env: tbeam1262
+            board: T-Beam V1.2 SX1262
+            artifact: firmware-tbeam1262
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cache di PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/misura/platformio.ini') }}
+      - name: Installa PlatformIO ed esptool
+        run: pip install platformio==6.1.19 esptool==4.8.1
+      - name: Compila
+        working-directory: firmware/misura
+        run: pio run -e ${{ matrix.env }}
+      - name: Crea l'immagine per il flasher
+        run: |
+          set -euo pipefail
+          B=firmware/misura/.pio/build/${{ matrix.env }}
+          BOOT_APP0=$(find "$HOME/.platformio/packages" -name boot_app0.bin | head -n 1)
+          test -n "$BOOT_APP0"
+          mkdir -p dist
+          esptool.py --chip esp32 merge_bin -o dist/web_factory.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 4MB \
+            0x1000 "$B/bootloader.bin" \
+            0x8000 "$B/partitions.bin" \
+            0xe000 "$BOOT_APP0" \
+            0x10000 "$B/firmware.bin"
+          (cd dist && sha256sum web_factory.bin > SHA256SUMS)
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+          if-no-files-found: error
+
+  pages:
+    name: Pubblica su GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: firmware
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-*
+          path: dist
+      - name: Assembla il sito
+        run: |
+          set -euo pipefail
+          tools/make_site.sh dist _site "main-$(TZ=Europe/Rome date +%d/%m/%Y)" "$GITHUB_SHA"
+          find _site -type f | sort
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Prova la pagina (logica; il flasher non si prova)
+        env:
+          PW_CHANNEL: chrome
+        run: |
+          npm install --no-save playwright@1.49.1
+          test -x /opt/google/chrome/chrome || { echo "Chrome non trovato sul runner"; exit 1; }
+          node tests/page/run.js _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Attendi che l'artefatto del sito sia visibile
+        run: sleep 30
+      - name: Pubblica
+        id: deploy
+        uses: actions/deploy-pages@v4

@@ -17,6 +17,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 - [docs/scala-modi.md](docs/scala-modi.md): bozza della scala dei modi LoRa/FSK (calcolata, non misurata).
 - [docs/firmware-misura.md](docs/firmware-misura.md): firmware di misura (non è il V3) e pilota dal PC.
 - [docs/materiale.md](docs/materiale.md), [docs/guida-colleghi.md](docs/guida-colleghi.md) e [docs/prove-sul-campo.md](docs/prove-sul-campo.md): materiale da procurare, guida per chi collabora e protocollo delle prove a distanza.
+- [Pagina di installazione](https://iu5hju.github.io/VoLoRa-v3/) del firmware di misura dal browser (**non ancora pubblicata**: serve il primo giro del workflow e Settings → Pages → Source: GitHub Actions). Il codice è in `site/`, l'assemblaggio in `tools/make_site.sh`.
 - [docs/piano-misure.md](docs/piano-misure.md): piano di misura della fase 1 (attrezzatura, metodo, misure).
 - [docs/scheda-sd.md](docs/scheda-sd.md): la microSD della T3 e dove conviene usarla.
 - [docs/punti-aperti.md](docs/punti-aperti.md): decisioni ancora da prendere.

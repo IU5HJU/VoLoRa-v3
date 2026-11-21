@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoLoRa V3 misura: installa il firmware</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6570; --card:#fff; --line:#d5dae0; --accent:#0b5fc2; --warn-bg:#fff4d6; --warn-line:#e0b400; --err:#b3261e; --code-bg:#eef1f4; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#12161b; --fg:#e6eaee; --muted:#9aa5b1; --card:#1a2028; --line:#2d3641; --accent:#5aa2ff; --warn-bg:#3a3116; --warn-line:#b38f00; --err:#ff8a80; --code-bg:#232b35; } }
+  :root[data-theme="dark"] { --bg:#12161b; --fg:#e6eaee; --muted:#9aa5b1; --card:#1a2028; --line:#2d3641; --accent:#5aa2ff; --warn-bg:#3a3116; --warn-line:#b38f00; --err:#ff8a80; --code-bg:#232b35; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  .eyebrow { font-size:.8rem; font-weight:700; letter-spacing:.18em; color:var(--accent); margin:.6em 0 0; }
+  .eyebrow + h1 { margin-top:.15em; }
+  h1 { font-size:1.5rem; margin:.4em 0 .2em; }
+  h2 { font-size:1.15rem; margin:0 0 .6em; }
+  p { margin:.4em 0; }
+  .muted { color:var(--muted); font-size:.92rem; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin:14px 0; }
+  .warn { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:10px; padding:12px 16px; margin:14px 0; }
+  .warn ul { margin:.3em 0 0 1.2em; padding:0; }
+  label { display:block; font-weight:600; margin:.8em 0 .2em; }
+  select { width:100%; max-width:26rem; padding:8px 10px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+  button { font:inherit; padding:9px 16px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; margin:.5em .5em 0 0; }
+  .hint { font-size:.85rem; color:var(--muted); margin:.2em 0 0; }
+  code, pre { background:var(--code-bg); border-radius:4px; font-size:.9em; }
+  code { padding:1px 5px; }
+  pre { padding:10px 12px; overflow:auto; }
+  .err { color:var(--err); font-weight:600; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">IU5HJU</p>
+  <h1>VoLoRa V3: firmware di misura</h1>
+  <p class="muted">Pagina di installazione del <strong>firmware di misura</strong> (studio del protocollo V3). Non è il firmware V3 ed è <strong>ancora in prova</strong>: può avere errori.</p>
+
+  <div class="warn" id="warn">
+    <strong>Prima di cominciare</strong>
+    <ul>
+      <li><strong>Antenna a 433 MHz (o carico da 50 &Omega;) collegata prima del cavo USB.</strong> Mai alimentare la scheda senza antenna o carico.</li>
+      <li><strong>Togli la microSD</strong> della T3 durante il caricamento.</li>
+      <li>Si trasmette <strong>solo con il proprio nominativo</strong>, con le frequenze e le potenze della propria licenza. Il firmware non trasmette finché non gli dai il nominativo (comando <code>CALL</code>).</li>
+      <li>Serve <strong>Chrome, Edge od Opera</strong> sul computer (non Firefox, non Safari, non il telefono).</li>
+    </ul>
+  </div>
+
+  <section id="install">
+    <h2>1. Installa il firmware</h2>
+    <label for="board">Scheda</label>
+    <select id="board">
+      <option value="t3">LILYGO LoRa32 T3 V1.6.1 (radio SX1278)</option>
+      <option value="tbeam1262">LILYGO T-Beam V1.2 con radio SX1262</option>
+    </select>
+    <p class="hint">Sulla T-Beam guarda la sigla del modulo radio: <strong>SX1278</strong> o <strong>SX1262</strong>. Questo firmware per ora c&rsquo;è solo per la SX1262.</p>
+    <p class="muted" id="ver">Versione: …</p>
+    <esp-web-install-button id="installer" manifest="firmware/t3/manifest.json">
+      <button slot="activate" type="button">Installa il firmware</button>
+      <span slot="unsupported">Browser non supportato: usa Chrome, Edge od Opera su un computer.</span>
+      <span slot="not-allowed">Serve una pagina https.</span>
+    </esp-web-install-button>
+    <p class="hint">Si scrive l&rsquo;immagine completa all&rsquo;indirizzo 0: le impostazioni salvate nella scheda si cancellano (il firmware di misura non ne ha). Collega la scheda con un cavo USB <strong>che porta anche i dati</strong>, premi il pulsante, scegli la porta. Se non compare nessuna porta: driver CH343/CH34x di WCH.</p>
+    <p class="err" id="missing" hidden>Il firmware di questa scheda non &egrave; ancora pubblicato su questa pagina. Compilalo con PlatformIO come nella <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/guida-colleghi.md">guida</a>.</p>
+  </section>
+
+  <section id="dopo">
+    <h2>2. Prima prova</h2>
+    <p>Apri la porta seriale a <strong>921600 baud</strong> (per esempio con <code>pio device monitor -b 921600</code>, o un terminale seriale) e scrivi:</p>
+<pre>INFO
+CALL IL_TUO_NOMINATIVO
+MODE LORA 250 7 5
+RX 60</pre>
+    <p class="muted">Su una seconda scheda, entro 60 secondi: <code>CALL ...</code>, <code>MODE LORA 250 7 5</code>, <code>TX 20 500</code>. Sulla prima devono comparire le righe <code>RX seq=...</code> e alla fine <code>RXSUM ok=20 ...</code>. Tutti i comandi: <code>HELP</code> o la <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/firmware-misura.md">documentazione</a>.</p>
+  </section>
+
+  <p class="muted">Progetto software libero (GPL-3): <a href="https://github.com/IU5HJU/VoLoRa-v3">repository</a> &middot; <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/guida-colleghi.md">guida per chi collabora</a>.</p>
+</main>
+
+<script type="module" src="https://cdn.jsdelivr.net/npm/esp-web-tools@10.1.1/dist/web/install-button.js?module"></script>
+<script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    function manifestPath() { return 'firmware/' + $('board').value + '/manifest.json'; }
+    function check() {
+      // il firmware di questa scheda e' davvero sulla pagina? Se no, il pulsante resta ma si avvisa.
+      fetch(manifestPath(), { cache: 'no-store' }).then(function (r) {
+        $('missing').hidden = r.ok;
+      }).catch(function () { $('missing').hidden = false; });
+    }
+    function update() {
+      $('installer').setAttribute('manifest', manifestPath());
+      check();
+    }
+    $('board').addEventListener('change', update);
+    fetch('version.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) {
+      $('ver').textContent = 'Versione: ' + v.version + ' (commit ' + String(v.commit).slice(0, 7) + ')';
+    }).catch(function () { $('ver').textContent = 'Versione: non disponibile (pagina non ancora pubblicata con il firmware)'; });
+    update();
+  })();
+</script>
+</body>
+</html>
