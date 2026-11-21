@@ -27,6 +27,6 @@ Da decidere: se le immagini passano da ripetitore e reflector.
 5. **Compatibilità v2**: voce e testo, dal submodule.
 
 ## Vincoli
-- Banda occupata e band plan IARU R1 / ARI per i modi digitali sui 70 cm.
+- **Frequenze (deciso il 21/11/2026):** libere fra **430 e 440 MHz**, senza limiti di larghezza di banda né di band plan. Le modalità si scelgono per prestazioni e robustezza.
 - Identificazione periodica del nominativo, nessuna cifratura dei contenuti.
 - Tempo in aria massimo per immagine (budget da fissare).
