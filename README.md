@@ -7,7 +7,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 ## Rapporto con VoLoRa v2
 
 - Voce e testo restano in **protocollo VoLoRa v2** e devono funzionare fra una stazione V3 e una v2.
-- Il codice della v2 si riusa senza copiarlo: sta nel submodule `third_party/VoLoRa-v2`, **fissato a un commit preciso** (oggi `aaee37d`, 21/11/2026; da spostare sul tag della rc.1 quando esisterà).
+- Il codice della v2 si riusa senza copiarlo: sta nel submodule `third_party/VoLoRa-v2`, **fissato al tag `v0.1.0-rc.1`** di VoLoRa (commit `0efa2a3`). Per aggiornarlo si sposta su un altro tag, mai su un ramo.
 - Dopo aver clonato: `git submodule update --init`.
 
 ## Documenti
