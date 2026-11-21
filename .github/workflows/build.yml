@@ -25,9 +25,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Logica del firmware di misura
         run: make -C firmware/misura test
-      - name: Applicazione: logica
+      - name: "Applicazione, logica"
         run: python3 tests/app/test_core.py
-      - name: Applicazione: interfaccia (schermo virtuale)
+      - name: "Applicazione, interfaccia (schermo virtuale)"
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq python3-tk xvfb python3-pil
