@@ -14,6 +14,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 
 - [docs/roadmap.md](docs/roadmap.md): fasi del lavoro.
 - [docs/architettura.md](docs/architettura.md): ruoli, firmware, vincoli.
+- [docs/scheda-sd.md](docs/scheda-sd.md): la microSD della T3 e dove conviene usarla.
 - [docs/punti-aperti.md](docs/punti-aperti.md): decisioni ancora da prendere.
 
 ## Licenza

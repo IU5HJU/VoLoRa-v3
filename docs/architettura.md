@@ -19,6 +19,9 @@ Da decidere: se le immagini passano da ripetitore e reflector.
 - LilyGo LoRa32 T3 V1.6.1 (SX1278) e T-Beam V1.2 (SX1278 o SX1262).
 - Le due radio hanno FIFO diversi (64 e 256 byte circa) e prestazioni diverse in FSK: da verificare sui datasheet e a banco (fase 1).
 
+## Memoria e microSD (T3)
+La T3 non ha PSRAM ma ha lo slot microSD. Nei ruoli senza audio (nodo immagini, nodo Internet) può servire per frammenti, coda e archivio. Dettagli e cautele in [scheda-sd.md](scheda-sd.md).
+
 ## Strati
 1. **Radio**: LoRa e FSK dietro la stessa interfaccia, driver SX1278 e SX1262.
 2. **Collegamento**: scala dei modi, misura del canale, negoziazione.
