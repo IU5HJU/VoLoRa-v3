@@ -37,6 +37,8 @@ Regola usata: banda di ricezione = bit rate + 2 × deviazione, SNR richiesto 12 
 | F5 | 19,2 kbit/s | 10 kHz | 39 kHz | circa -110 dBm | 8 s |
 | F6 | 4,8 kbit/s | 5 kHz | 15 kHz | circa -114 dBm | 33 s |
 
+**Avvertenza sulla banda di ricezione (da RadioLib):** l'SX1278 arriva a 250 kHz di banda di ricezione in FSK, l'SX1262 a 467 kHz. Con banda necessaria = bit rate + 2 × deviazione, F1 (circa 500 kHz) **non entra** nemmeno nell'SX1262 e F2/F3 stanno al limite dell'SX1278. La riga F1 va rivista con deviazioni più strette.
+
 ## Cosa suggerisce la bozza (da confermare con le misure)
 1. **Le due famiglie si incrociano.** In FSK la sensibilità scende sotto -106 dBm solo a velocità basse, mentre LoRa a 500 kHz (L2, 37,5 kbit/s) stimata a -116 dBm è sia più veloce di F4 sia più sensibile. Quindi **FSK serve solo per il gradino più alto** (F1-F3, da 100 a 300 kbit/s, collegamenti forti); **da L3 in giù conviene LoRa**.
 2. **Scala operativa proposta** (sei gradini di partenza, tutti da misurare):

@@ -17,6 +17,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 - **Esito:** tabella modo, velocità, soglia SNR, portata stimata.
 
 ## Fase 2: base comune dei firmware
+- Firmware di misura già scritto (non provato su schede): [firmware-misura.md](firmware-misura.md).
 - Strato radio unico LoRa/FSK, driver SX1278 e SX1262.
 - Build di più firmware (uno per ruolo e per scheda) dallo stesso codice.
 - Livello di compatibilità v2 per voce e testo, verificato con i test della v2.

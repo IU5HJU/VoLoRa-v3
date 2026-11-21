@@ -63,10 +63,8 @@ Limite del metodo: sotto circa -100 dBm di potenza ricevuta la perdita per accop
 ## 4. Cosa registrare per ogni punto
 Data, schede e versione del firmware, frequenza, modo (BW, SF, CR oppure bit rate, deviazione, RxBw), potenza di trasmissione, attenuazione totale, pacchetti inviati e ricevuti, RSSI e SNR medi, tempo in aria misurato, temperatura approssimativa, file di registro. Gli esiti vanno in `docs/misure/` con una tabella per misura.
 
-## 5. Software di prova (da scrivere, nella fase 2)
-- Firmware di misura minimo: un unico firmware con comandi seriali per impostare modo, frequenza e potenza, inviare N pacchetti e contare quelli ricevuti.
-- Script sul PC che esegue la scala dei modi e le attenuazioni e scrive i risultati in un file.
-- Questo firmware non è il V3 e non va confuso con esso.
+## 5. Software di prova
+Scritto il 21/11/2026, non ancora provato su schede: [firmware-misura.md](firmware-misura.md) (firmware `firmware/misura` e pilota `tools/misura.py`). Non è il V3.
 
 ## 6. Rischi
 - **Perdita di pacchetti per accoppiamento diretto:** si risolve con scatola metallica e cavi.
