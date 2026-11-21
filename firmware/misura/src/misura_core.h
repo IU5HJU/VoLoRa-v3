@@ -41,7 +41,8 @@ inline uint32_t loraToaUs(int sf, float bwKhz, int cr, int payloadBytes, int pre
   double symbols = std::ceil(num / (4.0 * (sf - 2 * de))) * cr;
   if (symbols < 0) symbols = 0;
   symbols += 8.0;
-  return static_cast<uint32_t>(((preambleSyms + 4.25) * ts + symbols * ts) * 1e6 + 0.5);
+  const double preFix = sf < 7 ? 6.25 : 4.25;  // SF5 e SF6: 2 simboli in piu' nel preambolo
+  return static_cast<uint32_t>(((preambleSyms + preFix) * ts + symbols * ts) * 1e6 + 0.5);
 }
 
 // Tempo in aria FSK stimato (preambolo + sincronismo da 2 byte + lunghezza fissa + CRC da 2 byte), in microsecondi.

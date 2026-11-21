@@ -6,11 +6,12 @@ import math
 SNR = {5: -2.5, 6: -5, 7: -7.5, 8: -10, 9: -12.5, 10: -15, 11: -17.5, 12: -20}
 NF = 6.0
 
-def lora_toa(sf, bw_khz, cr=1, payload=255, preamble=8):
+def lora_toa(sf, bw_khz, cr=1, payload=255, preamble=8, explicit=True):
     ts = 2 ** sf / (bw_khz * 1000)
     de = 1 if ts > 0.016 else 0
-    n = max(math.ceil((8 * payload - 4 * sf + 28 + 16) / (4 * (sf - 2 * de))) * (cr + 4), 0) + 8
-    return (preamble + 4.25) * ts + n * ts
+    h = 0 if explicit else 1
+    n = max(math.ceil((8 * payload - 4 * sf + 28 + 16 - 20 * h) / (4 * (sf - 2 * de))) * (cr + 4), 0) + 8
+    return (preamble + (6.25 if sf < 7 else 4.25)) * ts + n * ts  # SF5 e SF6: 2 simboli in piu' nel preambolo
 
 def fmt(sec):
     return f"{sec:.0f} s" if sec < 600 else f"{sec/60:.0f} min" if sec < 7200 else f"{sec/3600:.1f} h"

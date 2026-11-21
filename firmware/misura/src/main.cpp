@@ -58,6 +58,10 @@ static bool applyMode() {
     st = radio.begin(P.freqMhz, P.bwKhz, P.sf, P.cr, MISURA_SYNC, P.powerDbm, P.preamble);
 #endif
     if (st == RADIOLIB_ERR_NONE) st = radio.setCRC(true);
+#if !defined(RADIO_SX1262)
+    // SX1278: l'SF6 funziona solo con l'intestazione implicita (RadioLib la attiva da solo): serve la lunghezza fissa del pacchetto di prova
+    if (st == RADIOLIB_ERR_NONE && P.sf == 6) st = radio.implicitHeader(static_cast<size_t>(P.payload));
+#endif
   } else {
 #if defined(RADIO_SX1262)
     st = radio.beginFSK(P.freqMhz, P.kbps, P.devKhz, P.rxBwKhz, P.powerDbm, P.preamble, MISURA_TCXO_V);
@@ -93,7 +97,12 @@ static void showParams() {
 }
 
 static uint32_t expectedToaUs() {
-  return P.fsk ? fskToaUs(P.kbps, P.payload, P.preamble) : loraToaUs(P.sf, P.bwKhz, P.cr, P.payload, P.preamble);
+#if defined(RADIO_SX1262)
+  const bool explicitHdr = true;
+#else
+  const bool explicitHdr = P.sf != 6;  // SX1278 con SF6: intestazione implicita
+#endif
+  return P.fsk ? fskToaUs(P.kbps, P.payload, P.preamble) : loraToaUs(P.sf, P.bwKhz, P.cr, P.payload, P.preamble, true, explicitHdr);
 }
 
 // ---------- Comandi ----------

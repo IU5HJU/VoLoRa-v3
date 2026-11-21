@@ -27,6 +27,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 - Livello di compatibilità v2 per voce e testo, verificato con i test della v2.
 
 ## Fase 3: protocollo immagini
+- Bozza v0.1: [protocollo-immagini.md](protocollo-immagini.md) (scritta il 21/11/2026, prima delle misure).
 - Codifica a livelli: prima una versione piccola e utile, poi i raffinamenti.
 - Frammentazione con pacchetti numerati; conferme selettive o correzione d'errore (Reed-Solomon o fountain), scelta in base alle misure della fase 1.
 - Budget di tempo in aria e passi di ridimensionamento.

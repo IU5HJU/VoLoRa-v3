@@ -14,6 +14,8 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 
 - [docs/roadmap.md](docs/roadmap.md): fasi del lavoro.
 - [docs/architettura.md](docs/architettura.md): ruoli, firmware, vincoli.
+- [docs/applicazione.md](docs/applicazione.md): applicazione con interfaccia grafica per le prove (monitor seriali, tasti rapidi, risultati, invio su GitHub, immagini di prova).
+- [docs/protocollo-immagini.md](docs/protocollo-immagini.md): bozza del protocollo immagini V3 (gradini, frame, negoziazione, ridimensionamento).
 - [docs/scala-modi.md](docs/scala-modi.md): bozza della scala dei modi LoRa/FSK (calcolata, non misurata).
 - [docs/firmware-misura.md](docs/firmware-misura.md): firmware di misura (non è il V3) e pilota dal PC.
 - [docs/materiale.md](docs/materiale.md), [docs/guida-colleghi.md](docs/guida-colleghi.md) e [docs/prove-sul-campo.md](docs/prove-sul-campo.md): materiale da procurare, guida per chi collabora e protocollo delle prove a distanza.

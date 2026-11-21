@@ -47,4 +47,5 @@ Per ogni modo chiede l'attenuazione totale (quella **misurata** col NanoVNA), co
 2. **Misuratore di potenza da 1 mW (0 dBm):** si tara l'uscita a +2 dBm e oltre; sotto lo 0 dBm la potenza si ricava dalla perdita **misurata** della catena di attenuatori.
 3. **RxBw in FSK:** l'SX1278 arriva a **250 kHz** di banda di ricezione, l'SX1262 a 467 kHz. L'FSK a 300 kbit/s con deviazione di 100 kHz (banda necessaria circa 500 kHz) non entra: va provato con banda e deviazione più strette o solo sull'SX1262.
 4. **Pacchetti FSK da più di 64 byte sull'SX1278:** il comando `TX` stampa il codice di errore della radio. È la misura M5 (limite del FIFO). La v2 trasmette fino a 255 byte in FSK con la portante del Morse; resta da verificare per la ricezione.
-5. La **deriva con il caldo e il freddo** va annotata a mano (il firmware non legge la temperatura).
+5. **LoRa SF6 sull'SX1278:** la radio lo ammette solo con l'**intestazione implicita** (RadioLib la attiva da sola, il firmware fissa anche la lunghezza del pacchetto). Con SF5 e SF6 il preambolo vale 2 simboli in più e il tempo in aria calcolato ne tiene conto (corretto il 21/11/2026). Il modo `MODE LORA 500 6 5` su T3 va provato per primo.
+6. La **deriva con il caldo e il freddo** va annotata a mano (il firmware non legge la temperatura).

@@ -25,6 +25,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Logica del firmware di misura
         run: make -C firmware/misura test
+      - name: Applicazione: logica
+        run: python3 tests/app/test_core.py
+      - name: Applicazione: interfaccia (schermo virtuale)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk xvfb python3-pil
+          xvfb-run -a python3 tests/app/test_gui.py
       - name: Pilota dal PC con schede finte
         run: |
           python3 tools/misura.py scala --simulate --modes L4,F3 --att 100,110 --out "$RUNNER_TEMP/sim.csv" --count 50

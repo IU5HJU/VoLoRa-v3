@@ -36,6 +36,8 @@ pio run -e tbeam1262 -t upload   # T-Beam V1.2 con SX1262
 Se la compilazione dà errori, **non provare a correggerli da solo senza dirlo**: apri una segnalazione (vedi il punto 7) con il testo completo dell'errore, la scheda e il sistema operativo. Se la radio SX1262 non parte, riprova aggiungendo `-DMISURA_TCXO_V=0` ai `build_flags` dell'ambiente.
 
 ## 4. Prima prova: le due schede si sentono?
+*(Più comodo: l'[applicazione con interfaccia grafica](applicazione.md), `python3 app`, fa le stesse cose con due monitor e tasti rapidi. Qui sotto il metodo a mano.)*
+
 Apri la seriale a **921600 baud** sulle due schede (`pio device monitor -p PORTA`). Sulla prima:
 ```
 CALL IL_TUO_NOMINATIVO
