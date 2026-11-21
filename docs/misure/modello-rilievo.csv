@@ -1,0 +1,1 @@
+data_ora,nominativo_A,locatore_A,altezza_A_m,nominativo_B,locatore_B,altezza_B_m,distanza_km,percorso,scheda_A,scheda_B,firmware,antenna_A,antenna_B,ros_A,ros_B,freq_mhz,modo,potenza_impostata_dbm,potenza_misurata_dbm,attenuatore_db,meteo,inviati,ricevuti,rovinati,rssi_medio,snr_medio,fei_hz,note

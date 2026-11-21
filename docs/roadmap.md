@@ -16,6 +16,10 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 - Rendimento delle schede e delle antenne agli estremi della gamma (430 e 440 MHz).
 - **Esito:** tabella modo, velocità, soglia SNR, portata stimata.
 
+## Fase 1b: prove a distanza reale, con i colleghi radioamatori
+- Materiale da condividere: [materiale.md](materiale.md). Guida per chi collabora: [guida-colleghi.md](guida-colleghi.md). Protocollo e scheda di rilievo: [prove-sul-campo.md](prove-sul-campo.md).
+- Primo passo: un volontario prova il firmware di misura a banco, prima di distribuirlo.
+
 ## Fase 2: base comune dei firmware
 - Firmware di misura già scritto (non provato su schede): [firmware-misura.md](firmware-misura.md).
 - Strato radio unico LoRa/FSK, driver SX1278 e SX1262.
