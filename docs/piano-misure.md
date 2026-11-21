@@ -10,10 +10,13 @@ Scopo: sostituire le stime di [scala-modi.md](scala-modi.md) con misure. Cosa si
 |---|---|
 | 2 T3 V1.6.1 (SX1278), possibilmente una con TCXO | coppia principale |
 | 2 T-Beam V1.2 con SX1262 | coppia per SF5 e per il confronto SX1262 |
-| Attenuatori SMA fissi (per esempio 10, 20, 30 dB) con carichi da 50 Ω | portare la potenza ricevuta in zona di sensibilità senza irradiare. **Da procurare.** |
+| Attenuatori SMA fissi e carichi da 50 Ω (**disponibili**) | portare la potenza ricevuta in zona di sensibilità senza irradiare. Servono valori che sommati arrivano a circa 120-130 dB, vedi punto 2 |
 | Cavi SMA corti e connettori | collegamento via cavo, schede **nello schermo di una scatola metallica** |
 | Chiavetta SDR (NESDR) | verifica indipendente di frequenza, banda occupata e struttura dei pacchetti (non per la sensibilità: la sua è peggiore) |
-| Misuratore di potenza o analizzatore | taratura dell'uscita, se disponibile (altrimenti si usa il valore dichiarato dal chip) |
+| Misuratore di potenza (**disponibile**) | taratura dell'uscita di ogni modo e a 430, 433,5 e 440 MHz |
+| NanoVNA (**disponibile**) | adattamento e ROS dell'antenna e dei percorsi RF delle schede, perdita degli attenuatori e dei cavi alla frequenza di lavoro |
+| Oscilloscopio e multimetro (**disponibili**) | tempi (DIO, SPI, FIFO), corrente con una resistenza in serie, alimentazione |
+| Analizzatore di spettro | **non disponibile**: eventuale sessione in laboratorio più avanti, vedi punto 8 |
 | PC con porta seriale e script di registrazione | registro di ogni prova su file |
 
 ## 2. Metodo di base: collegamento via cavo con attenuazione nota
@@ -24,6 +27,15 @@ Scopo: sostituire le stime di [scala-modi.md](scala-modi.md) con misure. Cosa si
 5. Il **tempo in aria misurato** (da inizio a fine pacchetto) si confronta con la formula.
 
 Limite del metodo: sotto circa -100 dBm di potenza ricevuta la perdita per accoppiamento diretto (schede vicine, senza schermo) può falsare la misura: per questo la scatola metallica e i cavi.
+
+## 2b. Gli strumenti che hai, assegnati alle misure
+| Strumento | Misure | Come |
+|---|---|---|
+| Misuratore di potenza | taratura di tutti i modi, M8 | trasmissione continua (portante) e a pacchetti; **verificare campo di frequenza e sensibilità dello strumento**: con il duty cycle dei pacchetti la lettura media va corretta |
+| NanoVNA | M8, taratura del metodo | si misura la perdita (S21) di cavi e attenuatori a 430, 433,5 e 440 MHz, così l'attenuazione totale è **misurata** e non letta dall'etichetta; ROS dell'antenna; se possibile il percorso RF della scheda |
+| Oscilloscopio | M1, M5, M9 | pin DIO della radio (fine trasmissione, fine ricezione) per il tempo in aria al microsecondo; SPI per il riempimento del FIFO a 64 byte; durata dei blocchi della scrittura su microSD |
+| Multimetro e oscilloscopio con resistenza in serie | M9, assorbimento di ogni modo | corrente in trasmissione, ricezione e durante la scrittura su SD |
+| SDR | M7 (indicativa), verifica dei pacchetti | frequenza, struttura dei pacchetti, banda grossolana; **non** spettro di precisione |
 
 ## 3. Misure, in ordine
 
@@ -55,6 +67,22 @@ Data, schede e versione del firmware, frequenza, modo (BW, SF, CR oppure bit rat
 - Alcune misure (M6, M8) hanno bisogno di strumenti che potrebbero mancare: vanno decisi prima.
 
 ## 7. Domande aperte
-1. Quali strumenti hai già (misuratore di potenza, attenuatori, analizzatore)?
-2. Hai una T3 con TCXO?
-3. Le schede possono stare in una scatola metallica?
+1. **Misuratore di potenza:** modello, campo di frequenza e potenza minima leggibile (serve per sapere se legge anche i livelli bassi di +2 dBm).
+2. **NanoVNA:** modello e campo di frequenza (deve coprire 430-440 MHz con margine).
+3. **Attenuatori:** quali valori hai e fino a che frequenza sono dichiarati; serve poter arrivare a circa 120-130 dB di attenuazione totale (con schermatura).
+4. Hai una **T3 con TCXO**?
+5. Le schede possono stare in una **scatola metallica** schermata?
+
+## 8. Sessione in laboratorio con analizzatore di spettro (più avanti, discreta)
+Obiettivo: una sola visita **breve**, con tutto preparato prima, per le misure che l'SDR e gli strumenti di casa non permettono:
+- **Banda occupata e forma dello spettro** di FSK a 300 kbit/s e deviazione 100 kHz e di LoRa a 500 kHz.
+- **Armoniche e spurie** delle T3 e delle T-Beam alle potenze più alte (importante con banda larga e potenze fino a +20 dBm).
+- **Deviazione reale dell'FSK** e dell'identificativo Morse (la v2 la dà ancora come misura mancante).
+- Frequenza e **deriva** di una portante (confronto con un riferimento), con e senza TCXO.
+
+Come prepararla per essere poco invasivi:
+1. **Lista unica e corta** (una pagina), con le schede già cariche e il firmware di misura già caricato, per non occupare lo strumento a configurare.
+2. **Portare tutto**: cavi SMA, attenuatori, alimentazione, un PC; chiedere solo lo strumento, non altro.
+3. **Misure a potenza bassa o con carico fittizio** (via cavo, nessuna emissione in aria) e **solo dopo aver fatto in casa tutto il resto**, così la visita serve a confermare e non a esplorare.
+4. **Prima accordarsi** su giorno, durata (per esempio un'ora) e chi c'è; rimandare se non è comodo.
+5. **Ringraziare e restituire i risultati** (i grafici e le conclusioni) a chi ha prestato lo strumento.

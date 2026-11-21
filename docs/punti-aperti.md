@@ -10,3 +10,4 @@
 8. **Convivenza:** senza vincoli di band plan, scegliere comunque come non disturbare chi è già sulla stessa frequenza (ascolto prima di trasmettere, identificazione).
 9. **Datasheet Semtech:** [radio-limiti.md](radio-limiti.md) usa fonti secondarie (RadioLib e tabelle LilyGO). Da confermare sui datasheet originali prima di fissare l'architettura.
 10. **MicroSD della T3:** usarla (opzionale) nel nodo immagini; verificare caricamento del firmware con la scheda inserita, corrente, disturbi alla ricezione e comportamento senza scheda. Vedi [scheda-sd.md](scheda-sd.md).
+11. **Strumenti e laboratorio:** [piano-misure.md](piano-misure.md) §2b e §8: strumenti disponibili assegnati alle misure; una sola visita breve in laboratorio per l'analizzatore di spettro, più avanti.
