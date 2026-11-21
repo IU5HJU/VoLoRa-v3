@@ -1,0 +1,32 @@
+# Architettura (bozza, da discutere)
+
+## Principio
+Ogni dispositivo ha **un compito solo** e un firmware che fa soltanto quello. Dallo stesso codice comune si producono più firmware, uno per ruolo e per scheda.
+
+## Ruoli candidati
+
+| Ruolo | Funzione unica | Note |
+|---|---|---|
+| Nodo voce/testo | voce e testo in protocollo v2 | compatibile con le stazioni v2 |
+| Nodo immagini | invio e ricezione di immagini | LoRa e FSK, negoziazione del modo |
+| Ripetitore RX | ascolta e configura la TX | come oggi, firmware dedicato |
+| Ripetitore TX | trasmette | come oggi, firmware dedicato |
+| Nodo Internet | porta i pacchetti al reflector | gateway |
+
+Da decidere: se le immagini passano da ripetitore e reflector.
+
+## Schede e radio
+- LilyGo LoRa32 T3 V1.6.1 (SX1278) e T-Beam V1.2 (SX1278 o SX1262).
+- Le due radio hanno FIFO diversi (64 e 256 byte circa) e prestazioni diverse in FSK: da verificare sui datasheet e a banco (fase 1).
+
+## Strati
+1. **Radio**: LoRa e FSK dietro la stessa interfaccia, driver SX1278 e SX1262.
+2. **Collegamento**: scala dei modi, misura del canale, negoziazione.
+3. **Trasporto immagini**: frammentazione, conferme o correzione d'errore.
+4. **Codifica immagine**: a livelli, dal più piccolo ai raffinamenti.
+5. **Compatibilità v2**: voce e testo, dal submodule.
+
+## Vincoli
+- Banda occupata e band plan IARU R1 / ARI per i modi digitali sui 70 cm.
+- Identificazione periodica del nominativo, nessuna cifratura dei contenuti.
+- Tempo in aria massimo per immagine (budget da fissare).
