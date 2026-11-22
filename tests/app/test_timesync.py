@@ -166,6 +166,34 @@ time.sleep(0.3)
 g3.stop()
 check(g3.lines == 3 and g3.bad == 1 and g3.position() is not None, f"lettore: 3 righe, 1 frase rotta contata ({g3.lines}, {g3.bad})")
 
+# ---- rollover della settimana GPS (ricevitori costruiti prima del 2019) ----
+true_now = datetime.datetime(2026, 11, 22, 15, 19, 55, tzinfo=datetime.timezone.utc).timestamp()
+wrong = true_now - 1024 * 7 * 86400
+check(datetime.datetime.fromtimestamp(wrong, datetime.timezone.utc).strftime("%Y-%m-%d") == "2007-04-08", "il caso reale: 22/11/2026 diventa 08/04/2007")
+fixed, n = ts.unroll_gps_week(wrong, true_now + 3.0)
+check(n == 1 and abs(fixed - true_now) < 1e-6, "rollover corretto: la data torna al 2026")
+fixed, n = ts.unroll_gps_week(wrong, true_now + 4 * 3600)
+check(n == 1 and abs(fixed - true_now) < 1e-6, "rollover corretto anche con il computer sbagliato di 4 ore")
+fixed, n = ts.unroll_gps_week(true_now, true_now + 1.0)
+check(n == 0 and fixed == true_now, "una data giusta non si tocca")
+fixed, n = ts.unroll_gps_week(true_now - 400 * 86400, true_now)
+check(n == 0, "un'ora vecchia di 400 giorni non e' un rollover e non viene toccata")
+clkR = Fake(0.0)
+gR = ts.GpsReader(lambda: None, baud=9600, now=lambda: clkR.t)
+for k in range(5):
+    S = wrong + k
+    hms = datetime.datetime.fromtimestamp(S, datetime.timezone.utc).strftime("%H%M%S")
+    dmy = datetime.datetime.fromtimestamp(S, datetime.timezone.utc).strftime("%d%m%y")
+    arrival = true_now + k + 0.35
+    clkR.t = arrival
+    gR.feed(nmea(f"GPRMC,{hms}.00,A,4347.960,N,01052.817,E,0,0,{dmy},,,A"), arrival, nbytes=70)
+oR = gR.clock_offset()
+check(gR.rollover == 5 and gR.rejected == 0 and oR is not None and abs(oR[0] - (-0.35 + 0.0729)) < 0.01, f"lettore: data corretta, scarto realistico {oR[0]:.3f} s (e non 19 anni)")
+# un'ora impossibile viene scartata e non entra nell'orologio
+g4 = ts.GpsReader(lambda: None, baud=9600, now=lambda: 1e9)
+g4.feed(nmea("GPRMC,120000.00,A,4347.960,N,01052.817,E,0,0,010110,,,A"), 1795359595.0, nbytes=70)
+check(g4.rejected == 1 and g4.clock_offset() is None and g4.last_rejected is not None, "data impossibile (2010): scartata, nessuna sorgente dell'orologio")
+
 # ---- orologio ----
 c = Fake(10000.0)
 clock = ts.Clock(now=lambda: c.t)

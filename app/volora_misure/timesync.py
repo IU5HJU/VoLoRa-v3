@@ -112,6 +112,21 @@ def parse_nmea(line):
 
 
 # ---------------------------------------------------------------------------------------------------------------- GPS
+GPS_WEEK_S = 1024 * 7 * 86400        # i ricevitori vecchi contano le settimane con 10 bit: ogni 19,6 anni la data ritorna indietro
+MAX_GPS_DIFF_S = 2 * 86400           # un'ora GPS che differisce dal computer di piu' di due giorni (dopo la correzione) non e' credibile
+
+
+def unroll_gps_week(utc, ref):
+    """Corregge il rollover della settimana GPS: se la data del GPS e' indietro di un numero intero di 1024 settimane rispetto al computer (a meno di
+    due giorni, per un computer sbagliato di poco), la riporta avanti. Ritorna (utc corretto, numero di cicli aggiunti). L'ora del giorno e il giorno
+    della settimana del GPS restano quelli buoni: il computer serve solo a scegliere l'anno."""
+    diff = ref - utc
+    n = round(diff / GPS_WEEK_S)
+    if n >= 1 and abs(diff - n * GPS_WEEK_S) <= MAX_GPS_DIFF_S:
+        return utc + n * GPS_WEEK_S, n
+    return utc, 0
+
+
 class GpsReader:
     """Legge un GPS da una porta seriale (anche USB): posizione, satelliti, qualita' e scarto dell'orologio.
     `opener()` ritorna un oggetto con readline() -> bytes e, facoltativo, `cd` (PPS sul pin DCD). Con `pps=True` si cerca il fronte del
@@ -127,6 +142,9 @@ class GpsReader:
         self.pps_edges = collections.deque(maxlen=4)
         self.lines = 0
         self.bad = 0
+        self.rollover = 0          # quante volte la data e' stata corretta (rollover della settimana GPS)
+        self.rejected = 0          # ore GPS scartate perche' troppo lontane dal computer
+        self.last_rejected = None
         self.error = None
         self._stop = False
         self._lock = threading.Lock()
@@ -195,7 +213,13 @@ class GpsReader:
             if d["tipo"] == "RMC":
                 self.fix = d["fix"]
             if "utc" in d and d.get("fix", True):
-                utc = d["utc"]
+                utc, n = unroll_gps_week(d["utc"], arrival)
+                if n:
+                    self.rollover += 1
+                if abs(utc - arrival) > MAX_GPS_DIFF_S:       # data impossibile (anche dopo la correzione): non si usa per l'orologio
+                    self.rejected += 1
+                    self.last_rejected = d["utc"]
+                    return
                 sec = round(utc)                      # il PPS segna l'inizio del secondo
                 edge = None
                 for e in reversed(self.pps_edges):

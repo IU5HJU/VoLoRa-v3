@@ -389,9 +389,14 @@ class App:
             else:
                 pos = g.position()
                 loc = geo.maidenhead(pos[0], pos[1]) if pos else "—"
-                self.lbl_gps.configure(text=f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, HDOP {g.hdop if g.hdop is not None else '—'}, "
-                                            f"{pos[0]:.5f}, {pos[1]:.5f} ({loc}), {g.lines} frasi, orologio da {'PPS' if o and o[2] else 'NMEA'}" if pos else
-                                       f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, {g.lines} frasi ricevute")
+                note = ""
+                if g.rollover:
+                    note += " | data GPS corretta (rollover di 1024 settimane)"
+                if g.rejected:
+                    note += f" | {g.rejected} ore GPS scartate (data non credibile: {timesync.fmt_utc(g.last_rejected, ms=False)})"
+                self.lbl_gps.configure(text=(f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, HDOP {g.hdop if g.hdop is not None else '—'}, "
+                                             f"{pos[0]:.5f}, {pos[1]:.5f} ({loc}), {g.lines} frasi, orologio da {'PPS' if o and o[2] else 'NMEA'}" if pos else
+                                             f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, {g.lines} frasi ricevute") + note)
         info = self.clock.info()
         self.lbl_utc.configure(text=timesync.fmt_utc(info["utc"], ms=False))
         diff = self.clock.differences()
