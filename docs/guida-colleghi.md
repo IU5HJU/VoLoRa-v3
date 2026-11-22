@@ -53,6 +53,9 @@ TX 20 500
 Sulla prima devono comparire le righe `RX seq=...` e alla fine `RXSUM ok=20 ...`. Se `ok=0`, controlla frequenza, modo, antenne e che le due schede abbiano lo stesso firmware. Tutti i comandi sono in [firmware-misura.md](firmware-misura.md) (o `HELP`).
 
 ## 5. Le misure
+> **Prove a distanza con una scheda ciascuno:** vedi la scheda "Prove sul campo" dell'applicazione ([applicazione.md](applicazione.md)): sincronizza l'orologio con NTP o GPS, programma la prova a un orario UTC concordato e scambia con il collega la riga dei risultati.
+
+
 - **A banco (via cavo, nelle scatole):** segui [piano-misure.md](piano-misure.md) (sezioni 2, 2b, 2c e 3), per esempio:
   ```bash
   python3 tools/misura.py scala --tx /dev/ttyUSB0 --rx /dev/ttyUSB1 --call IL_TUO_NOMINATIVO --modes L4,L5,L7 --count 200 --out risultati.csv

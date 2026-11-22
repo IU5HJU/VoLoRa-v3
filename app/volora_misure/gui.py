@@ -7,7 +7,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, core, runner, serialio
+from . import __version__, core, field, geo, runner, serialio, timesync
 
 SHORTCUTS = [
     ("F1", "INFO", "Chiede a entrambe le schede il chip e la versione (INFO)"),
@@ -127,6 +127,13 @@ class App:
         self.cfg = core.load_config()
         self.busy = threading.Event()
         self.fake_link = None
+        self.clock = timesync.Clock()
+        self.gps = None
+        self.field_runs = []
+        self.sched = None                      # appuntamento in corso: dizionario
+        self.sched_stop = threading.Event()
+        self.ntp_func = timesync.ntp_sync      # sostituibili dalle prove
+        self.gps_opener = self._open_gps_serial
         self.ui = queue.Queue()   # funzioni da eseguire nel thread dell'interfaccia (i thread di lavoro non toccano Tk)
         root.title(f"VoLoRa V3 misure {__version__}" + (" (schede finte)" if simulate else ""))
         root.geometry("1280x800")
@@ -198,9 +205,404 @@ class App:
         self.tree.pack(fill="x", padx=4, pady=3)
         ttk.Label(self.root, textvariable=self.status, relief="sunken", anchor="w").pack(fill="x", side="bottom")
 
+        self._build_field(nb)
         self._build_images(nb)
         self._build_github(nb)
         self._build_help(nb)
+
+    # ------------------------------------------------------------------------------------------ prove sul campo (una scheda)
+    def _build_field(self, nb):
+        f = ttk.Frame(nb)
+        nb.add(f, text="Prove sul campo")
+        self.tab_field = f
+        ttk.Label(f, text="Una scheda per stazione: ci si accorda a voce (su un'altra banda) su ruolo e orario UTC, l'app fa partire la prova all'ora giusta e poi si "
+                          "scambiano le righe dei risultati.", justify="left").pack(anchor="w", padx=8, pady=(6, 2))
+        # --- orologio
+        c = ttk.LabelFrame(f, text="1. Orologio (UTC)")
+        c.pack(fill="x", padx=8, pady=3)
+        r = ttk.Frame(c); r.pack(fill="x", padx=4, pady=2)
+        self.lbl_utc = tk.Label(r, text="—", font=("TkFixedFont", 13, "bold"), width=26, anchor="w")
+        self.lbl_utc.pack(side="left")
+        self.lbl_src = ttk.Label(r, text="")
+        self.lbl_src.pack(side="left", padx=8)
+        r2 = ttk.Frame(c); r2.pack(fill="x", padx=4, pady=2)
+        ttk.Label(r2, text="Server NTP").pack(side="left")
+        self.ntp_server = tk.StringVar(value=self.cfg.get("ntp", "pool.ntp.org"))
+        ttk.Entry(r2, textvariable=self.ntp_server, width=22).pack(side="left", padx=4)
+        ttk.Button(r2, text="Sincronizza NTP", command=self.sync_ntp).pack(side="left", padx=2)
+        self.lbl_ntp = ttk.Label(r2, text="")
+        self.lbl_ntp.pack(side="left", padx=8)
+        r3 = ttk.Frame(c); r3.pack(fill="x", padx=4, pady=2)
+        ttk.Label(r3, text="GPS (seriale o USB)").pack(side="left")
+        self.gps_port = ttk.Combobox(r3, width=16, values=serialio_ports())
+        self.gps_port.pack(side="left", padx=4)
+        ttk.Button(r3, text="⟳", width=3, command=lambda: self.gps_port.configure(values=serialio_ports())).pack(side="left")
+        self.gps_baud = ttk.Combobox(r3, width=7, state="readonly", values=["4800", "9600", "19200", "38400", "57600", "115200"])
+        self.gps_baud.set("9600")
+        self.gps_baud.pack(side="left", padx=4)
+        self.gps_pps = tk.BooleanVar(value=False)
+        ttk.Checkbutton(r3, text="PPS sul pin DCD", variable=self.gps_pps).pack(side="left", padx=4)
+        self.btn_gps = ttk.Button(r3, text="Collega GPS", command=self.toggle_gps)
+        self.btn_gps.pack(side="left", padx=4)
+        self.lbl_gps = ttk.Label(c, text="GPS non collegato")
+        self.lbl_gps.pack(anchor="w", padx=6, pady=(0, 3))
+        # --- stazioni
+        s = ttk.LabelFrame(f, text="2. Le stazioni")
+        s.pack(fill="x", padx=8, pady=3)
+        g = ttk.Frame(s); g.pack(fill="x", padx=4, pady=2)
+        self.man_pos = tk.StringVar(value=self.cfg.get("man_pos", ""))
+        self.rem_call = tk.StringVar()
+        self.rem_pos = tk.StringVar()
+        for i, (label, var, w, hint) in enumerate((("Mia posizione se manca il GPS", self.man_pos, 24, "lat,lon oppure locatore (JN53ps)"),
+                                                   ("Collega: nominativo", self.rem_call, 10, ""), ("Collega: posizione", self.rem_pos, 24, "lat,lon oppure locatore"))):
+            ttk.Label(g, text=label).grid(row=0, column=2 * i, sticky="w", padx=(0, 3))
+            ttk.Entry(g, textvariable=var, width=w).grid(row=0, column=2 * i + 1, padx=(0, 10))
+        self.lbl_dist = ttk.Label(s, text="")
+        self.lbl_dist.pack(anchor="w", padx=6, pady=(0, 3))
+        # --- appuntamento
+        a = ttk.LabelFrame(f, text="3. Appuntamento")
+        a.pack(fill="x", padx=8, pady=3)
+        r = ttk.Frame(a); r.pack(fill="x", padx=4, pady=2)
+        ttk.Label(r, text="Io").pack(side="left")
+        self.role = tk.StringVar(value="TX")
+        ttk.Radiobutton(r, text="Trasmetto", variable=self.role, value="TX").pack(side="left", padx=4)
+        ttk.Radiobutton(r, text="Ricevo", variable=self.role, value="RX").pack(side="left", padx=(0, 12))
+        ttk.Label(r, text="Scheda").pack(side="left")
+        self.field_board_sel = ttk.Combobox(r, width=3, state="readonly", values=["A", "B"])
+        self.field_board_sel.set("A")
+        self.field_board_sel.pack(side="left", padx=(3, 12))
+        ttk.Label(r, text="Partenza T0 (UTC)").pack(side="left")
+        self.t0_var = tk.StringVar(value="")
+        ttk.Entry(r, textvariable=self.t0_var, width=21).pack(side="left", padx=4)
+        ttk.Button(r, text="fra 3 min", command=lambda: self.t0_var.set(timesync.fmt_utc(int(self.clock.now()) + 180, ms=False).replace(" UTC", ""))).pack(side="left")
+        r2 = ttk.Frame(a); r2.pack(fill="x", padx=4, pady=2)
+        ttk.Label(r2, text="Chi riceve parte con anticipo di (s)").pack(side="left")
+        self.lead_rx = tk.StringVar(value="5")
+        ttk.Entry(r2, textvariable=self.lead_rx, width=4).pack(side="left", padx=(3, 12))
+        ttk.Label(r2, text="Attenuatore in serie (dB)").pack(side="left")
+        self.field_att = tk.StringVar(value="0")
+        ttk.Entry(r2, textvariable=self.field_att, width=5).pack(side="left", padx=(3, 12))
+        self.btn_prog = ttk.Button(r2, text="Programma la prova", command=self.program_run)
+        self.btn_prog.pack(side="left", padx=4)
+        ttk.Button(r2, text="Annulla", command=self.cancel_run).pack(side="left")
+        ttk.Button(r2, text="Copia le condizioni per il collega", command=self.copy_plan).pack(side="left", padx=12)
+        self.lbl_count = tk.Label(a, text="Nessun appuntamento.", font=("TkDefaultFont", 11, "bold"), anchor="w")
+        self.lbl_count.pack(fill="x", padx=6, pady=(2, 4))
+        ttk.Label(a, text="Modo, frequenza, potenza, pacchetto, quanti e intervallo sono quelli della scheda Misure (devono essere uguali per i due colleghi).",
+                  foreground="#666666").pack(anchor="w", padx=6)
+        # --- risultati
+        rr = ttk.LabelFrame(f, text="4. Risultati (scambia la riga con il collega e uniscila)")
+        rr.pack(fill="both", expand=True, padx=8, pady=3)
+        cols = ("t0", "role", "mode", "dist", "sent", "ok", "loss", "rssi", "snr", "err", "src")
+        self.ftree = ttk.Treeview(rr, columns=cols, show="headings", height=5)
+        for c_, t_, w_ in (("t0", "T0 (UTC)", 150), ("role", "Ruolo", 50), ("mode", "Modo", 50), ("dist", "km", 60), ("sent", "Inviati", 60), ("ok", "Ricevuti", 65),
+                           ("loss", "Perdita %", 70), ("rssi", "RSSI", 60), ("snr", "SNR", 55), ("err", "Partenza ms", 85), ("src", "Orologio", 110)):
+            self.ftree.heading(c_, text=t_)
+            self.ftree.column(c_, width=w_, anchor="center")
+        self.ftree.pack(fill="x", padx=4, pady=3)
+        b = ttk.Frame(rr); b.pack(fill="x", padx=4, pady=2)
+        ttk.Button(b, text="Copia i miei dati", command=self.copy_mine).pack(side="left", padx=2)
+        ttk.Button(b, text="Incolla i dati del collega…", command=self.paste_remote).pack(side="left", padx=2)
+        ttk.Button(b, text="Salva CSV di rilievo", command=self.save_field_csv).pack(side="left", padx=2)
+        self.f_extra = {k: tk.StringVar(value=self.cfg.get("f_" + k, "")) for k in ("percorso", "meteo", "scheda", "antenna", "note")}
+        e = ttk.Frame(rr); e.pack(fill="x", padx=4, pady=2)
+        for k, w in (("percorso", 12), ("meteo", 10), ("scheda", 10), ("antenna", 14), ("note", 22)):
+            ttk.Label(e, text=k.capitalize()).pack(side="left")
+            ttk.Entry(e, textvariable=self.f_extra[k], width=w).pack(side="left", padx=(2, 8))
+        self.root.after(250, self._tick_field)
+
+    # ----- orologio, NTP, GPS
+    def _open_gps_serial(self, port, baud):
+        import serial
+        return serial.Serial(port, baud, timeout=1.0)
+
+    def sync_ntp(self):
+        server = self.ntp_server.get().strip()
+        self.lbl_ntp.configure(text="… sincronizzo")
+        def job():
+            try:
+                off, unc, srv = self.ntp_func([server])
+            except Exception as e:  # noqa
+                self.post(lambda: self.lbl_ntp.configure(text=f"errore: {e}"))
+                return
+            def done():
+                self.clock.set_source("ntp", off, unc)
+                self.lbl_ntp.configure(text=f"scarto {off * 1000:+.0f} ms, incertezza {unc * 1000:.0f} ms ({srv})")
+            self.post(done)
+        threading.Thread(target=job, daemon=True).start()
+
+    def toggle_gps(self):
+        if self.gps is not None:
+            self.gps.stop()
+            self.gps = None
+            self.clock.clear_source("gps")
+            self.clock.clear_source("gps-pps")
+            self.btn_gps.configure(text="Collega GPS")
+            self.lbl_gps.configure(text="GPS non collegato")
+            return
+        port, baud = self.gps_port.get().strip(), int(self.gps_baud.get())
+        if not port:
+            messagebox.showinfo("GPS", "Scegli la porta del GPS (seriale o USB, per esempio /dev/ttyACM0 o /dev/ttyUSB0).")
+            return
+        try:
+            g = timesync.GpsReader(lambda: self.gps_opener(port, baud), baud=baud, pps=self.gps_pps.get())
+            g.start()
+        except Exception as e:  # noqa
+            messagebox.showerror("GPS", f"Non riesco ad aprire {port}: {e}")
+            return
+        self.gps = g
+        self.btn_gps.configure(text="Scollega GPS")
+        self.lbl_gps.configure(text=f"GPS collegato su {port} a {baud} baud: attendo le frasi NMEA…")
+
+    def my_position(self):
+        """(lat, lon, origine) dal GPS se ha il fix, altrimenti dalla posizione scritta a mano; None se manca."""
+        if self.gps is not None:
+            p = self.gps.position()
+            if p:
+                return p[0], p[1], "GPS"
+        pos = self._parse_pos(self.man_pos.get())
+        return (pos[0], pos[1], "manuale") if pos else None
+
+    @staticmethod
+    def _parse_pos(s):
+        s = s.strip()
+        if not s:
+            return None
+        try:
+            if "," in s:
+                a, b = s.split(",", 1)
+                return float(a), float(b)
+            return geo.from_maidenhead(s)
+        except ValueError:
+            return None
+
+    def _tick_field(self):
+        # sorgenti dell'orologio dal GPS
+        if self.gps is not None:
+            o = self.gps.clock_offset()
+            self.clock.clear_source("gps"); self.clock.clear_source("gps-pps")
+            if o:
+                self.clock.set_source("gps-pps" if o[2] else "gps", o[0], o[1])
+            g = self.gps
+            if g.error:
+                self.lbl_gps.configure(text=f"GPS: errore {g.error}")
+            else:
+                pos = g.position()
+                loc = geo.maidenhead(pos[0], pos[1]) if pos else "—"
+                self.lbl_gps.configure(text=f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, HDOP {g.hdop if g.hdop is not None else '—'}, "
+                                            f"{pos[0]:.5f}, {pos[1]:.5f} ({loc}), {g.lines} frasi, orologio da {'PPS' if o and o[2] else 'NMEA'}" if pos else
+                                       f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, {g.lines} frasi ricevute")
+        info = self.clock.info()
+        self.lbl_utc.configure(text=timesync.fmt_utc(info["utc"], ms=False))
+        diff = self.clock.differences()
+        extra = ""
+        if ("gps", "ntp") in diff or ("gps-pps", "ntp") in diff:
+            d = diff.get(("gps", "ntp"), diff.get(("gps-pps", "ntp")))
+            extra = f"  |  GPS-NTP {d * 1000:+.0f} ms"
+        self.lbl_src.configure(text=f"sorgente: {info['sorgente']}, incertezza ±{info['incertezza_s'] * 1000:.0f} ms{extra}")
+        # distanza fra le stazioni
+        me, rem = self.my_position(), self._parse_pos(self.rem_pos.get())
+        if me and rem:
+            self.lbl_dist.configure(text=f"Distanza {geo.haversine_km(me[0], me[1], rem[0], rem[1]):.2f} km, direzione {geo.bearing_deg(me[0], me[1], rem[0], rem[1]):.0f}° "
+                                         f"(la mia posizione: {me[2]}, {geo.maidenhead(me[0], me[1])})")
+        elif me:
+            self.lbl_dist.configure(text=f"Mia posizione: {me[0]:.5f}, {me[1]:.5f} ({geo.maidenhead(me[0], me[1])}, da {me[2]}). Manca la posizione del collega.")
+        else:
+            self.lbl_dist.configure(text="Manca la mia posizione (collega il GPS o scrivila a mano).")
+        # conto alla rovescia
+        s = self.sched
+        if s is not None:
+            rest = s["start"] - self.clock.now()
+            if s["state"] == "attesa":
+                self.lbl_count.configure(text=f"{'Ricevo' if s['role'] == 'RX' else 'Trasmetto'}: partenza fra {max(0.0, rest):.1f} s (T0 {timesync.fmt_utc(s['t0'], ms=False)})")
+            elif s["state"] == "in corso":
+                self.lbl_count.configure(text="Prova in corso…")
+        self.root.after(250, self._tick_field)
+
+    # ----- appuntamento
+    def field_board(self):
+        a, b = self.pa.board, self.pb.board
+        sel = self.field_board_sel.get()
+        board = a if sel == "A" else b
+        return board if board is not None else (a or b)
+
+    def plan_text(self):
+        p = self._params()
+        if not p:
+            return ""
+        return (f"PROVA VoLoRa: T0 {self.t0_var.get().strip()} UTC, modo {p['code']}, {p['freq']} MHz, {p['power']} dBm, pacchetto {p['payload']} B, "
+                f"{p['count']} pacchetti ogni {p['interval']} ms. Chi riceve parte {self.lead_rx.get()} s prima.")
+
+    def copy_plan(self):
+        txt = self.plan_text()
+        if txt:
+            self.root.clipboard_clear(); self.root.clipboard_append(txt)
+            self.set_status("Condizioni copiate: " + txt)
+
+    def program_run(self):
+        if self.sched is not None and self.sched["state"] != "fine":
+            self.set_status("C'e' gia' un appuntamento: Annulla prima.")
+            return
+        board, p = self.field_board(), self._params()
+        c = self.call.get().strip().upper()
+        if board is None:
+            messagebox.showinfo("Scheda", "Collega prima la scheda (scheda Misure).")
+            return
+        if not p or not c:
+            self.set_status("Scrivi il nominativo (scheda Misure) e controlla i parametri.")
+            return
+        try:
+            t0 = timesync.parse_utc(self.t0_var.get())
+            lead = float(self.lead_rx.get())
+            att = float(self.field_att.get() or 0)
+        except ValueError:
+            messagebox.showwarning("Appuntamento", "Controlla T0 (UTC, per esempio 2026-11-22 10:30:00 oppure 10:30:00), l'anticipo e l'attenuatore.")
+            return
+        role = self.role.get()
+        plan = timesync.plan_run(t0, p["count"], p["interval"], lead_rx=lead)
+        start = plan["rx_start"] if role == "RX" else plan["tx_start"]
+        if start - self.clock.now() < 5:
+            messagebox.showwarning("Appuntamento", "L'orario e' troppo vicino o gia' passato: servono almeno 5 secondi per configurare la scheda.")
+            return
+        self.sched_stop.clear()
+        self.sched = {"state": "attesa", "role": role, "t0": t0, "start": start}
+        pos = self.my_position()
+        info0 = self.clock.info()
+        self.set_status(f"Prova programmata: {'ricezione' if role == 'RX' else 'trasmissione'} alle {timesync.fmt_utc(start, ms=False)}.")
+        def job():
+            try:
+                runner.configure([board], p["code"], p["power"], p["freq"], p["payload"], c)
+                if role == "RX":
+                    cmd, prefix, timeout = f"RX {plan['rx_window_s']}", "RXSUM", plan["rx_window_s"] + 30
+                else:
+                    cmd, prefix, timeout = f"TX {p['count']} {p['interval']}", "TXSUM", p["count"] * p["interval"] / 1000.0 + 30
+                waiter = board.expect(prefix, timeout)
+                err = timesync.wait_until(self.clock, start, stop=self.sched_stop)
+                if err is None:
+                    waiter.cancel()
+                    self.post(lambda: self._sched_end("Appuntamento annullato."))
+                    return
+                inf = self.clock.info()
+                board.send(cmd)
+                self.sched["state"] = "in corso"
+                line = waiter.wait()
+                if line is None or line.startswith("ERR"):
+                    self.post(lambda: self._sched_end(f"Prova non riuscita: {line or 'nessuna risposta della scheda'}"))
+                    return
+                kind, d = core.parse_line(line)
+                run = {"t0": t0, "role": role, "mode": p["code"], "freq_mhz": p["freq"], "power_dbm": p["power"], "att_db": att, "my_call": c,
+                       "clock_src": inf["sorgente"], "clock_unc_s": inf["incertezza_s"], "start_err_ms": err * 1000.0}
+                if pos:
+                    run.update(my_lat=pos[0], my_lon=pos[1], my_loc=geo.maidenhead(pos[0], pos[1]))
+                if self.gps is not None and self.gps.alt is not None:
+                    run["my_alt"] = self.gps.alt
+                if role == "TX":
+                    run["sent"] = int(d.get("sent", 0))
+                    run["toa_mean_us"], run["toa_calc_us"] = d.get("toa_mean_us"), d.get("calc_us")
+                else:
+                    run.update(rx_ok=int(d.get("ok", 0)), rx_bad=int(d.get("bad", 0)), rssi=d.get("rssi"), snr=d.get("snr"), fei_hz=d.get("fei_hz"))
+                self.post(lambda: (self.add_field_run(run), self._sched_end("Prova conclusa.")))
+            except runner.RunError as e:
+                self.post(lambda: self._sched_end(f"Errore: {e}"))
+        threading.Thread(target=job, daemon=True).start()
+
+    def _sched_end(self, msg):
+        self.sched = None
+        self.lbl_count.configure(text=msg)
+        self.set_status(msg)
+
+    def cancel_run(self):
+        if self.sched is not None:
+            self.sched_stop.set()
+            for b in self.boards():
+                b.send("STOP")
+
+    # ----- risultati
+    def add_field_run(self, run):
+        self.field_runs.append(run)
+        self.ftree.insert("", "end", iid=str(len(self.field_runs) - 1), values=self._field_values(run))
+        self.ftree.yview_moveto(1)
+
+    @staticmethod
+    def _field_values(r):
+        def f(v, nd=1):
+            return "" if v in (None, "") or (isinstance(v, float) and v != v) else (f"{v:.{nd}f}" if isinstance(v, float) else v)
+        return (timesync.fmt_utc(r["t0"], ms=False).replace(" UTC", ""), r["role"], r["mode"], f(r.get("distance_km"), 2), f(r.get("sent")), f(r.get("rx_ok")),
+                f(r.get("loss_pct")), f(r.get("rssi")), f(r.get("snr")), f(r.get("start_err_ms"), 0), r.get("clock_src", ""))
+
+    def _selected_run(self):
+        sel = self.ftree.selection()
+        i = int(sel[0]) if sel else len(self.field_runs) - 1
+        return i if 0 <= i < len(self.field_runs) else None
+
+    def copy_mine(self):
+        i = self._selected_run()
+        if i is None:
+            self.set_status("Non c'e' ancora nessuna prova.")
+            return
+        txt = field.export_line(self.field_runs[i])
+        self.root.clipboard_clear(); self.root.clipboard_append(txt)
+        self.set_status("Copiato: " + txt)
+
+    def paste_remote(self):
+        i = self._selected_run()
+        if i is None:
+            self.set_status("Non c'e' ancora nessuna prova da unire.")
+            return
+        win = tk.Toplevel(self.root)
+        win.title("Dati del collega")
+        ttk.Label(win, text="Incolla qui la riga che comincia con VOLORA-PROVA:").pack(anchor="w", padx=8, pady=4)
+        box = tk.Text(win, width=100, height=5)
+        box.pack(padx=8)
+        try:
+            box.insert("1.0", self.root.clipboard_get())
+        except tk.TclError:
+            pass
+        def ok():
+            self.merge_remote_text(box.get("1.0", "end"), i)
+            win.destroy()
+        ttk.Button(win, text="Unisci", command=ok).pack(pady=6)
+
+    def merge_remote_text(self, text, i=None):
+        i = self._selected_run() if i is None else i
+        try:
+            rem = field.import_line(text)
+        except ValueError as e:
+            messagebox.showwarning("Dati del collega", str(e))
+            return None
+        merged, warn = field.merge(self.field_runs[i], rem)
+        self.field_runs[i] = merged
+        self.ftree.item(str(i), values=self._field_values(merged))
+        self.rem_call.set(rem["call"])
+        if "lat" in rem:
+            self.rem_pos.set(f"{rem['lat']:.5f},{rem['lon']:.5f}")
+        elif rem.get("loc"):
+            self.rem_pos.set(rem["loc"])
+        self.set_status("Dati uniti: " + (f"perdita {merged['loss_pct']} %, " if "loss_pct" in merged else "") + (f"distanza {merged['distance_km']:.2f} km" if "distance_km" in merged else "senza distanza"))
+        if warn:
+            messagebox.showwarning("Controlla", "\n".join(warn))
+        return merged, warn
+
+    def save_field_csv(self):
+        if not self.field_runs:
+            self.set_status("Non ci sono ancora prove.")
+            return
+        p = filedialog.asksaveasfilename(defaultextension=".csv", initialfile=f"{time.strftime('%Y-%m-%d')}-{core.safe_name(self.call.get() or 'campo')}-campo.csv",
+                                         filetypes=[("CSV", "*.csv")])
+        if not p:
+            return
+        x = {k: v.get() for k, v in self.f_extra.items()}
+        import csv as _csv
+        with open(p, "w", newline="", encoding="utf-8") as fh:
+            w = _csv.DictWriter(fh, field.RILIEVO_FIELDS)
+            w.writeheader()
+            for r in self.field_runs:
+                extra = {"percorso": x["percorso"], "meteo": x["meteo"], "note": x["note"]}
+                mine_tx = r["role"] == "TX"
+                extra["scheda_A" if mine_tx else "scheda_B"] = x["scheda"]
+                extra["antenna_A" if mine_tx else "antenna_B"] = x["antenna"]
+                w.writerow(field.to_rilievo_row(r, extra))
+        self.set_status(f"Salvato {p}")
 
     def _build_images(self, nb):
         f = ttk.Frame(nb)
@@ -230,6 +632,7 @@ class App:
 
     def _build_github(self, nb):
         f = ttk.Frame(nb)
+        self.tab_github = f
         nb.add(f, text="GitHub")
         ttk.Label(f, text="Invio dei risultati. Il pulsante 1 salva CSV e note in una cartella; poi scegli 2a o 2b.", justify="left").pack(anchor="w", padx=8, pady=6)
         g = ttk.Frame(f); g.pack(fill="x", padx=8)
@@ -274,7 +677,7 @@ class App:
 
     def action(self, key):
         {"F1": self.a_info, "F2": self.a_call, "F3": self.a_apply, "F4": self.a_measure, "F5": self.a_tx, "F6": self.a_rx, "F7": self.a_cw,
-         "Esc": self.a_stop, "F8": self.save_csv, "F9": lambda: self.nb.select(2), "Ctrl+L": self.a_clear}[key]()
+         "Esc": self.a_stop, "F8": self.save_csv, "F9": lambda: self.nb.select(self.tab_github), "Ctrl+L": self.a_clear}[key]()
 
     # ----- schede -----
     def boards(self):
@@ -422,6 +825,11 @@ class App:
         self.set_status(f"{row['mode']} a {row['att_db']:g} dB: {row['rx_ok']}/{row['sent']} ricevuti, perdita {row['loss_pct']:g} %.")
 
     def _tx_rx(self):
+        a, b = self.pa.board, self.pb.board
+        if a is not None and b is None:       # una scheda sola: fa da trasmettitore e da ricevitore, a seconda del tasto
+            return a, a
+        if b is not None and a is None:
+            return b, b
         if self.txsel.get() == "A":
             return self.pa.board, self.pb.board
         return self.pb.board, self.pa.board
@@ -545,7 +953,10 @@ class App:
 
     def close(self):
         core.save_config({**self.cfg, "call": self.call.get(), "repo": self.gh_repo.get(), "board_a": self.gh_a.get(), "board_b": self.gh_b.get(),
-                          "token": self.gh_token.get()}, self.gh_remember.get())
+                          "token": self.gh_token.get(), "ntp": self.ntp_server.get(), "man_pos": self.man_pos.get(),
+                          **{"f_" + k: v.get() for k, v in self.f_extra.items()}}, self.gh_remember.get())
+        if self.gps is not None:
+            self.gps.stop()
         for b in self.boards():
             b.close()
         self.root.destroy()

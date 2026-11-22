@@ -131,5 +131,109 @@ gui.messagebox.showinfo = lambda *a, **k: shown.append(a)
 app.pb.toggle()
 check(len(shown) == 1 and app.pb.board is None, "senza porta scelta: avviso e nessun collegamento")
 root.destroy()
+
+# ---- prove sul campo con una scheda sola, NTP e GPS finti ----
+import datetime  # noqa: E402
+import tempfile  # noqa: E402
+from volora_misure import timesync, field  # noqa: E402
+
+root = tk.Tk()
+app = gui.App(root, simulate=False)
+link = serialio.FakeLink()
+serialio.SerialBoard = lambda name, port, baud=921600: serialio.FakeBoard(name, link, "SX1278", speed=100.0)
+app.pa.port.set("/dev/ttyACM0")
+app.pa.toggle()
+app.call.set("IU5HJU")
+pump(root, 0.3)
+# F5 e F6 con una scheda sola
+app.vars["count"].set("3"); app.vars["interval"].set("100"); app.vars["payload"].set("64")
+app.action("F3") if False else None
+app.action("F5")
+pump(root, 1.0)
+check("TXSUM sent=3" in app.pa.log.get("1.0", "end"), "una scheda sola: F5 trasmette")
+app.action("F6")
+pump(root, 4.0)
+check("RXSUM" in app.pa.log.get("1.0", "end"), "una scheda sola: F6 ascolta (prima non faceva niente)")
+# NTP finto
+app.ntp_func = lambda servers: (0.25, 0.003, servers[0])
+app.sync_ntp()
+pump(root, 0.5)
+check("ntp" in app.clock.sources and abs(app.clock.sources["ntp"][0] - 0.25) < 1e-9 and "250" in app.lbl_ntp.cget("text"), "NTP: sorgente impostata, scarto mostrato: " + app.lbl_ntp.cget("text"))
+
+
+class FakeGpsSerial:
+    cd = False
+
+    def __init__(self):
+        self.k = 0
+
+    def readline(self):
+        time.sleep(0.05)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        hms = now.strftime("%H%M%S") + ".00"
+        self.k += 1
+        body = (f"GPRMC,{hms},A,4346.176,N,01115.348,E,0,0,{now.strftime('%d%m%y')},,,A" if self.k % 2 else
+                f"GPGGA,{hms},4346.176,N,01115.348,E,1,10,0.8,95.0,M,46.9,M,,")
+        c = 0
+        for ch in body:
+            c ^= ord(ch)
+        return f"${body}*{c:02X}\r\n".encode()
+
+    def close(self):
+        pass
+
+
+app.gps_opener = lambda port, baud: FakeGpsSerial()
+app.gps_port.set("/dev/ttyACM9")
+app.toggle_gps()
+pump(root, 2.0)
+check(app.gps is not None and app.gps.position() is not None and "FIX" in app.lbl_gps.cget("text") and "JN53" in app.lbl_gps.cget("text"), "GPS finto: fix, posizione e locatore: " + app.lbl_gps.cget("text"))
+check("gps" in app.clock.sources, "GPS finto: compare fra le sorgenti dell'orologio")
+check(app.clock.best()[0] == "ntp", "l'orologio sceglie l'NTP (incertezza minore del GPS senza PPS)")
+check("Distanza" in app.lbl_dist.cget("text") or "Manca la posizione del collega" in app.lbl_dist.cget("text"), "etichetta della distanza: " + app.lbl_dist.cget("text")[:70])
+# appuntamento: parte all'ora giusta
+app.role.set("TX")
+app.mode.current(3)
+app.vars["count"].set("5"); app.vars["interval"].set("100"); app.vars["payload"].set("64")
+t0 = int(app.clock.now()) + 7
+app.t0_var.set(timesync.fmt_utc(t0, ms=False).replace(" UTC", ""))
+app.program_run()
+pump(root, 0.5)
+check(app.sched is not None and app.sched["state"] == "attesa" and "partenza fra" in app.lbl_count.cget("text"), "appuntamento: conto alla rovescia: " + app.lbl_count.cget("text"))
+for _ in range(120):
+    pump(root, 0.2)
+    if app.field_runs:
+        break
+check(len(app.field_runs) == 1 and app.field_runs[0]["sent"] == 5 and app.field_runs[0]["role"] == "TX", "la prova e' partita ed e' registrata")
+r = app.field_runs[0]
+check(abs(r["start_err_ms"]) < 60 and r["clock_src"] == "ntp" and r["t0"] == t0, f"errore di partenza {r['start_err_ms']:.1f} ms con orologio {r['clock_src']}")
+check(r.get("my_loc", "").startswith("JN53") and r.get("my_alt") == 95.0, "posizione e quota dal GPS nella prova")
+# unione con il collega
+rem = field.export_line(dict(role="RX", t0=t0, my_call="IK5XYZ", my_lat=44.0, my_lon=11.9, mode=r["mode"], freq_mhz=r["freq_mhz"], rx_ok=5, rx_bad=0, rssi=-100.0, snr=7.0, fei_hz=10.0))
+res = app.merge_remote_text("Dati: " + rem)
+check(res and res[0]["loss_pct"] == 0.0 and 40 < res[0]["distance_km"] < 70 and app.rem_call.get() == "IK5XYZ", f"unione con il collega: distanza {res[0]['distance_km']:.1f} km, perdita {res[0]['loss_pct']} %")
+check("distanza" in app.status.get(), "stato: " + app.status.get())
+app.root.clipboard_clear()
+app.copy_mine()
+check("VOLORA-PROVA 1" in app.root.clipboard_get() and "role=TX" in app.root.clipboard_get(), "copia dei miei dati negli appunti")
+with tempfile.TemporaryDirectory() as td:
+    path = os.path.join(td, "campo.csv")
+    gui.filedialog.asksaveasfilename = lambda **k: path
+    app.f_extra["percorso"].set("in vista"); app.f_extra["meteo"].set("sereno")
+    app.save_field_csv()
+    rows = open(path, encoding="utf-8").read().strip().split("\n")
+    check(len(rows) == 2 and rows[0].split(",") == field.RILIEVO_FIELDS and "IK5XYZ" in rows[1] and "in vista" in rows[1], "CSV di rilievo salvato con la riga della prova")
+app.nb.select(app.tab_field)
+pump(root, 0.4)
+shot(root, "gui-campo.png")
+app.toggle_gps()
+check(app.gps is None and "gps" not in app.clock.sources, "GPS scollegato: sorgente tolta")
+# appuntamento troppo vicino: rifiutato
+shown = []
+gui.messagebox.showwarning = lambda *a, **k: shown.append(a)
+app.t0_var.set(timesync.fmt_utc(int(app.clock.now()) + 2, ms=False).replace(" UTC", ""))
+app.program_run()
+check(len(shown) == 1 and app.sched is None, "appuntamento fra meno di 5 s: rifiutato")
+root.destroy()
 print("interfaccia: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

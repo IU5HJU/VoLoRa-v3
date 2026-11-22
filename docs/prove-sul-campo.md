@@ -25,6 +25,13 @@ Due stazioni, A (trasmette) e B (riceve), alla stessa frequenza e con gli stessi
 6. **Registrare**: tutto quello che c'è nella scheda di rilievo del punto 5. L'RSSI e l'SNR medi vengono dalla scheda ricevente (`RXSUM`).
 7. **Se la scheda ha un GPS** (T-Beam), annotare l'ora di ogni serie per incrociarla con la posizione.
 
+## 4b. Con l'applicazione (consigliato)
+La scheda **Prove sul campo** dell'[applicazione](applicazione.md) fa i passi 4 e 6 in automatico:
+1. Ognuno collega la propria scheda e imposta lo stesso modo, frequenza, potenza, pacchetto, numero e intervallo.
+2. Si sincronizzano gli orologi (NTP dal telefono in hotspot e/o GPS) e ci si accorda su T0 in UTC e sui ruoli.
+3. Si preme "Programma la prova": l'app configura la scheda e fa partire TX o RX all'ora esatta (chi riceve parte 5 s prima).
+4. A prova finita ci si scambia la riga **Copia i miei dati / Incolla i dati del collega**: perdita, distanza (dalle posizioni GPS) e CSV di rilievo escono da soli, con gli avvisi sulle incongruenze.
+
 ## 5. Scheda di rilievo (una per serie di misure)
 Si compila a mano o con il modello [`misure/modello-rilievo.csv`](misure/modello-rilievo.csv).
 
