@@ -39,8 +39,10 @@ class BoardPane(ttk.LabelFrame):
         ttk.Button(top, text="⟳", width=3, command=self.refresh).pack(side="left", padx=2)
         self.btn = ttk.Button(top, text="Collega", command=self.toggle)
         self.btn.pack(side="left", padx=2)
+        self.state = tk.Label(top, text="○ scollegata", fg="#888888", font=("TkDefaultFont", 9, "bold"))
+        self.state.pack(side="left", padx=(8, 2))
         self.chip = ttk.Label(top, text="—")
-        self.chip.pack(side="left", padx=8)
+        self.chip.pack(side="left", padx=4)
         self.log = tk.Text(self, height=16, width=58, wrap="none", state="disabled", font=("TkFixedFont", 9))
         sb = ttk.Scrollbar(self, command=self.log.yview)
         self.log.configure(yscrollcommand=sb.set)
@@ -82,6 +84,9 @@ class BoardPane(ttk.LabelFrame):
         if self.app.autoscroll.get():
             self.log.see("end")
         self.log.configure(state="disabled")
+
+    def set_state(self, text, color):
+        self.state.configure(text=text, fg=color)
 
     def clear(self):
         self.log.configure(state="normal")
@@ -137,6 +142,7 @@ class App:
                 pane.board = board
                 pane.btn.configure(text="Scollega")
                 pane.port.set("(finta)")
+                pane.set_state("● finta", "#1b8a3c")
                 pane.chip.configure(text=board.chip)
 
     # ----- costruzione -----
@@ -275,20 +281,35 @@ class App:
         return [p.board for p in (self.pa, self.pb) if p.board is not None]
 
     def connect(self, pane, port):
+        if not port or port == "(finta)":
+            messagebox.showinfo("Porta", "Scegli prima la porta seriale della scheda (l'elenco si aggiorna con il pulsante ⟳).")
+            return
+        pane.set_state("… apro la porta", "#b8860b")
+        self.root.update_idletasks()
         try:
-            if port in ("", "(finta)") and self.simulate:
-                return
-            pane.board = serialio.SerialBoard(pane.name, port)
-            pane.btn.configure(text="Scollega")
-            self.set_status(f"Scheda {pane.name} collegata su {port}.")
+            board = serialio.SerialBoard(pane.name, port)
         except Exception as e:  # noqa
-            messagebox.showerror("Porta", f"Non riesco ad aprire {port}: {e}\n(serve pyserial: pip install pyserial)")
+            pane.set_state("✗ errore", "#c0392b")
+            pane.show("err", f"[sistema] non riesco ad aprire {port}: {e}")
+            messagebox.showerror("Porta", f"Non riesco ad aprire {port}: {e}\n(serve pyserial: pip install pyserial; su Linux serve anche il gruppo dialout)")
+            return
+        pane.board = board
+        pane.btn.configure(text="Scollega")
+        pane.set_state("● collegata", "#1b8a3c")
+        board.inbox.put(("sys", f"[sistema] collegata a {port} a 921600 baud: la scheda si riavvia, attendo l'avvio…"))
+        self.set_status(f"Scheda {pane.name} collegata su {port}. Chiedo INFO tra un attimo.")
+        # l'apertura della porta riavvia la scheda: dopo l'avvio si chiede INFO, cosi' compaiono subito il chip e la versione
+        self.root.after(1800, lambda p=pane, b=board: b.send("INFO") if p.board is b and b.connected else None)
 
     def disconnect(self, pane):
         if pane.board:
+            pane.board.inbox.put(("sys", "[sistema] scollegata"))
             pane.board.close()
         pane.board = None
         pane.btn.configure(text="Collega")
+        pane.set_state("○ scollegata", "#888888")
+        pane.chip.configure(text="—")
+        self.set_status(f"Scheda {pane.name} scollegata.")
 
     def set_status(self, s):
         self.status.set(s)
@@ -312,6 +333,9 @@ class App:
                 except queue.Empty:
                     break
                 pane.show(kind, text)
+                if kind == "sys" and text.startswith("porta chiusa"):
+                    pane.set_state("✗ porta persa", "#c0392b")
+                    self.set_status(f"Scheda {pane.name}: la porta si e' chiusa (cavo scollegato?).")
                 if kind == "rx" and text.startswith(("INFO", "misura ")):
                     parts = text.split()
                     for chip in ("SX1278", "SX1262"):

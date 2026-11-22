@@ -14,7 +14,7 @@ python3 app --simulate # due schede finte, per vedere come funziona senza hardwa
 Su Windows: `py app`. Nessuna installazione: si lancia dalla cartella del progetto.
 
 ## Come si usa
-1. Collega le due schede (firmware di misura già caricato, antenna o carico collegati) e per ognuna scegli la porta e premi **Collega** (921600 baud). In alto compare il chip riconosciuto.
+1. Collega le due schede (firmware di misura già caricato, antenna o carico collegati) e per ognuna scegli la porta e premi **Collega** (921600 baud). Accanto al pulsante compare l'indicatore (`○ scollegata`, `… apro la porta`, `● collegata`, `✗ errore`, `✗ porta persa`) e nel monitor la riga `[sistema] collegata a ...`. L'apertura della porta riavvia la scheda: dopo circa due secondi l'app manda da sola `INFO` e compare il chip riconosciuto.
 2. **F1** chiede `INFO` a entrambe. Scrivi il nominativo e premi **F2**.
 3. Scegli il modo (L1-L13 LoRa, F1-F6 FSK, come in [scala-modi.md](scala-modi.md)) e premi **F3**: lo imposta su entrambe, con frequenza, potenza e dimensione del pacchetto.
 4. Inserisci l'**attenuazione totale misurata** col NanoVNA e premi **F4**: la scheda scelta come trasmettitore (A o B) manda N pacchetti, l'altra ascolta, e nella tabella compare una riga con pacchetti ricevuti, perdita, RSSI, SNR e deriva di frequenza. Cambia l'attenuazione e ripeti.

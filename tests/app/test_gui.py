@@ -97,5 +97,39 @@ app.action("Esc")
 pump(root, 0.3)
 check("STOP" in app.status.get(), "Esc: STOP")
 root.destroy()
+
+# collegamento con riscontro: SerialBoard sostituita da una scheda finta (nessuna seriale vera)
+from volora_misure import serialio  # noqa: E402
+root = tk.Tk()
+app = gui.App(root, simulate=False)
+link = serialio.FakeLink()
+made = []
+
+
+def fake_serial(name, port, baud=921600):
+    b = serialio.FakeBoard(name, link, "SX1278", speed=100.0)
+    made.append(b)
+    return b
+
+
+serialio.SerialBoard = fake_serial
+pump(root, 0.2)
+check(app.pa.state.cget("text") == "○ scollegata", "prima di collegare: indicatore 'scollegata'")
+app.pa.port.set("/dev/ttyUSB0")
+app.pa.toggle()
+pump(root, 0.3)
+check(app.pa.state.cget("text") == "● collegata" and app.pa.btn.cget("text") == "Scollega", "collegando: indicatore verde e pulsante 'Scollega'")
+check("[sistema] collegata a /dev/ttyUSB0" in app.pa.log.get("1.0", "end"), "collegando: messaggio nel monitor")
+pump(root, 2.3)
+check("INFO misura" in app.pa.log.get("1.0", "end") and app.pa.chip.cget("text") == "SX1278", "dopo l'avvio parte INFO da solo e compare il chip")
+app.pa.toggle()
+pump(root, 0.2)
+check(app.pa.state.cget("text") == "○ scollegata" and app.pa.btn.cget("text") == "Collega", "scollegando: indicatore torna grigio")
+app.pb.port.set("")
+shown = []
+gui.messagebox.showinfo = lambda *a, **k: shown.append(a)
+app.pb.toggle()
+check(len(shown) == 1 and app.pb.board is None, "senza porta scelta: avviso e nessun collegamento")
+root.destroy()
 print("interfaccia: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)
