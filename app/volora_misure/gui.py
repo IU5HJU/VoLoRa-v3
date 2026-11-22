@@ -43,7 +43,7 @@ class BoardPane(ttk.LabelFrame):
         self.state.pack(side="left", padx=(8, 2))
         self.chip = ttk.Label(top, text="—")
         self.chip.pack(side="left", padx=4)
-        self.log = tk.Text(self, height=16, width=58, wrap="none", state="disabled", font=("TkFixedFont", 9))
+        self.log = tk.Text(self, height=16, width=58, wrap="word", state="disabled", font=("TkFixedFont", 9))   # le righe lunghe vanno a capo
         sb = ttk.Scrollbar(self, command=self.log.yview)
         self.log.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y", pady=3)
