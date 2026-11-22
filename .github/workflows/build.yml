@@ -33,6 +33,7 @@ jobs:
         run: |
           python3 tests/app/test_timesync.py
           python3 tests/app/test_field.py
+          python3 tests/app/test_bluetooth.py
       - name: "Applicazione, interfaccia (schermo virtuale)"
         run: |
           sudo apt-get update -qq

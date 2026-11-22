@@ -251,5 +251,87 @@ app.t0_var.set(timesync.fmt_utc(int(app.clock.now()) + 2, ms=False).replace(" UT
 app.program_run()
 check(len(shown) == 1 and app.sched is None, "appuntamento fra meno di 5 s: rifiutato")
 root.destroy()
+
+# ---- GPS Bluetooth automatico, riconnessione, avvio automatico e calibrazione ----
+from volora_misure import bluetooth as btmod  # noqa: E402
+
+root = tk.Tk()
+app = gui.App(root, simulate=False)
+MAC = "00:11:22:33:44:55"
+app.gps_port.set(btmod.label(MAC, "Nokia LD-3W"))
+app.gps_retry_s = 0.5
+opened = []
+
+
+class DyingSerial(FakeGpsSerial):
+    def readline(self):
+        if self.k >= 24:
+            raise OSError("collegamento Bluetooth chiuso dal GPS")
+        return super().readline()
+
+
+def bt_opener(mac):
+    opened.append(mac)
+    return (DyingSerial() if len(opened) == 1 else FakeGpsSerial()), f"Bluetooth {mac} canale 1 (finto)"
+
+
+app.bt_opener = bt_opener
+app.toggle_gps()
+check(app.btn_gps.cget("text") == "Scollega GPS" and app.gps_want, "GPS Bluetooth: un clic, nessun terminale")
+for _ in range(40):
+    pump(root, 0.2)
+    if app.gps is not None and app.gps.fix:
+        break
+pump(root, 0.5)
+check(app.gps is not None and "FIX" in app.lbl_gps.cget("text") and opened == [MAC], "GPS Bluetooth: collegato in un thread, fix e posizione: " + app.lbl_gps.cget("text")[:60])
+for _ in range(60):
+    pump(root, 0.2)
+    if len(opened) >= 2 and app.gps is not None and not app.gps.error and app.gps.fix:
+        break
+check(len(opened) == 2, f"collegamento caduto: riconnessione automatica (aperture: {len(opened)})")
+check(app.gps is not None and app.gps.fix and "GPS" in app.lbl_gps.cget("text"), "dopo la riconnessione il GPS torna a dare il fix")
+# calibrazione
+app.ntp_func = lambda servers: (-0.013, 0.003, "finto")
+app.gps.samples.clear()
+app.gps.samples.extend([(-0.390, None)] * 14)
+app.gps.last_sample = time.time()
+app.calibrate_gps()
+pump(root, 0.8)
+check(abs(app.cfg["gps_delay_s"] - 0.377) < 1e-6 and app.gps.calibrated and "tarato" in app.lbl_cal.cget("text") and "377" in app.lbl_cal.cget("text"), "calibrazione dal pulsante: ritardo 377 ms salvato: " + app.lbl_cal.cget("text")[:80])
+app.gps.samples.clear()
+app.gps.samples.extend([(-0.390, None)] * 5)
+app.calibrate_gps()
+pump(root, 0.8)
+check("non riuscita" in app.lbl_cal.cget("text") and "almeno 10" in app.lbl_cal.cget("text"), "calibrazione con pochi dati: messaggio chiaro")
+# scollegamento volontario: niente piu' riconnessioni
+n = len(opened)
+app.toggle_gps()
+pump(root, 1.5)
+check(app.gps is None and not app.gps_want and len(opened) == n and app.btn_gps.cget("text") == "Collega GPS", "Scollega: il GPS resta scollegato e non si riconnette da solo")
+# GPS spento: errore chiaro e nuovi tentativi, finche' non si scollega
+tries = []
+
+
+def bt_down(mac):
+    tries.append(1)
+    raise OSError("GPS 00:11:22:33:44:55 non raggiungibile: Host is down (acceso, vicino, non gia' collegato a un altro apparecchio?)")
+
+
+app.bt_opener = bt_down
+app.toggle_gps()
+pump(root, 2.5)
+check(len(tries) >= 2 and "non raggiungibile" in app.lbl_gps.cget("text") and "riprovo" in app.lbl_gps.cget("text"), f"GPS spento: errore chiaro e tentativi ({len(tries)}): " + app.lbl_gps.cget("text")[:70])
+app.toggle_gps()
+m = len(tries)
+pump(root, 1.5)
+check(len(tries) == m and app.gps is None, "dopo Scollega si smette di riprovare")
+# avvio automatico
+app.bt_opener = lambda mac: (FakeGpsSerial(), "Bluetooth finto")
+app.gps_auto.set(True)
+app._auto_gps()
+pump(root, 1.5)
+check(app.gps is not None and app.gps_want, "avvio automatico: il GPS si collega da solo")
+app.toggle_gps()
+root.destroy()
 print("interfaccia: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

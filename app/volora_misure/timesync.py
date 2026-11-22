@@ -142,6 +142,8 @@ class GpsReader:
         self.pps_edges = collections.deque(maxlen=4)
         self.lines = 0
         self.bad = 0
+        self.delay_s = 0.0         # ritardo della frase NMEA rispetto al secondo che dichiara, misurato con NTP (calibrazione)
+        self.calibrated = False
         self.rollover = 0          # quante volte la data e' stata corretta (rollover della settimana GPS)
         self.rejected = 0          # ore GPS scartate perche' troppo lontane dal computer
         self.last_rejected = None
@@ -248,11 +250,41 @@ class GpsReader:
         spread = (max(vals) - min(vals)) / 2.0 if len(vals) > 1 else 0.0
         if use is pps:
             return off, max(0.005, spread + 0.003), True
+        if self.calibrated:
+            # con il ritardo tarato resta la dispersione fra le frasi e la deriva del ritardo nel tempo (non misurata): mai meno di 80 ms
+            return off + self.delay_s, max(0.08, spread + 0.05), False
         return off, max(0.4, spread + 0.3), False   # il ricevitore puo' ritardare la frase di 100-500 ms: incertezza onesta
+
+    def raw_offset(self):
+        """(scarto mediano delle sole frasi NMEA senza correzione del ritardo, dispersione, quanti campioni) o None."""
+        with self._lock:
+            vals = [s[0] for s in self.samples if s[1] is None]
+        if not vals:
+            return None
+        return statistics.median(vals), (max(vals) - min(vals)) / 2.0, len(vals)
 
     def position(self):
         with self._lock:
             return (self.lat, self.lon) if self.lat is not None and self.fix else None
+
+
+MAX_DELAY_S = 3.0          # un ritardo oltre questo non e' un ritardo di ricevitore: e' un errore (per esempio i secondi intercalari)
+
+
+def calibrate_gps_delay(gps, ntp_offset, ntp_uncertainty=0.0):
+    """Ritardo della frase NMEA = scarto NTP - scarto grezzo del GPS. Va usato con il GPS fermo e collegato da qualche decina di secondi.
+    Solleva ValueError con un messaggio comprensibile se i dati non sono credibili."""
+    raw = gps.raw_offset()
+    if raw is None or raw[2] < 10:
+        raise ValueError("servono almeno 10 frasi con il fix: aspetta qualche secondo")
+    if raw[1] > 0.3:
+        raise ValueError(f"le frasi arrivano troppo irregolari (dispersione {raw[1] * 1000:.0f} ms): il collegamento Bluetooth non e' stabile")
+    if ntp_uncertainty > 0.1:
+        raise ValueError(f"l'NTP non e' abbastanza preciso (incertezza {ntp_uncertainty * 1000:.0f} ms)")
+    delay = ntp_offset - raw[0]
+    if abs(delay) > MAX_DELAY_S:
+        raise ValueError(f"ritardo di {delay:.2f} s non credibile: un numero intero di secondi fa pensare ai secondi intercalari (vedi docs/gps-tempo.md)")
+    return delay, raw[1], raw[2]
 
 
 # -------------------------------------------------------------------------------------------------------------- Orologio

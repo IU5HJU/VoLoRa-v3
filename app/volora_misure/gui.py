@@ -7,7 +7,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, core, field, geo, runner, serialio, timesync
+from . import __version__, bluetooth, core, field, geo, runner, serialio, timesync
 
 SHORTCUTS = [
     ("F1", "INFO", "Chiede a entrambe le schede il chip e la versione (INFO)"),
@@ -134,6 +134,12 @@ class App:
         self.sched_stop = threading.Event()
         self.ntp_func = timesync.ntp_sync      # sostituibili dalle prove
         self.gps_opener = self._open_gps_serial
+        self.bt_opener = bluetooth.open_bt        # (indirizzo) -> (oggetto tipo seriale, descrizione): sostituibile dalle prove
+        self.gps_want = False                     # l'utente vuole il GPS collegato: se cade, si riconnette da solo
+        self.gps_connecting = False
+        self.gps_last_try = 0.0
+        self.gps_retry_s = 6.0
+        self.gps_note = ""
         self.ui = queue.Queue()   # funzioni da eseguire nel thread dell'interfaccia (i thread di lavoro non toccano Tk)
         root.title(f"VoLoRa V3 misure {__version__}" + (" (schede finte)" if simulate else ""))
         root.geometry("1280x800")
@@ -234,16 +240,28 @@ class App:
         self.lbl_ntp.pack(side="left", padx=8)
         r3 = ttk.Frame(c); r3.pack(fill="x", padx=4, pady=2)
         ttk.Label(r3, text="GPS (seriale o USB)").pack(side="left")
-        self.gps_port = ttk.Combobox(r3, width=16, values=serialio_ports())
+        self.gps_port = ttk.Combobox(r3, width=38, values=serialio_ports())
+        if self.cfg.get("gps_sel"):
+            self.gps_port.set(self.cfg["gps_sel"])
         self.gps_port.pack(side="left", padx=4)
-        ttk.Button(r3, text="Aggiorna", width=8, command=lambda: self.gps_port.configure(values=serialio_ports())).pack(side="left")
+        ttk.Button(r3, text="Aggiorna", width=8, command=self.refresh_gps_ports).pack(side="left")
         self.gps_baud = ttk.Combobox(r3, width=7, state="readonly", values=["4800", "9600", "19200", "38400", "57600", "115200"])
-        self.gps_baud.set("9600")
+        self.gps_baud.set(str(self.cfg.get("gps_baud", "9600")))
         self.gps_baud.pack(side="left", padx=4)
         self.gps_pps = tk.BooleanVar(value=False)
         ttk.Checkbutton(r3, text="PPS sul pin DCD", variable=self.gps_pps).pack(side="left", padx=4)
         self.btn_gps = ttk.Button(r3, text="Collega GPS", command=self.toggle_gps)
         self.btn_gps.pack(side="left", padx=4)
+        r3b = ttk.Frame(c); r3b.pack(fill="x", padx=4, pady=1)
+        self.gps_auto = tk.BooleanVar(value=bool(self.cfg.get("gps_auto", False)))
+        self.gps_reconnect = tk.BooleanVar(value=True)
+        self.gps_use_cal = tk.BooleanVar(value=True)
+        ttk.Checkbutton(r3b, text="Collega il GPS all'avvio", variable=self.gps_auto).pack(side="left", padx=4)
+        ttk.Checkbutton(r3b, text="Riconnetti da solo", variable=self.gps_reconnect).pack(side="left", padx=4)
+        ttk.Checkbutton(r3b, text="Usa il ritardo tarato", variable=self.gps_use_cal).pack(side="left", padx=4)
+        ttk.Button(r3b, text="Calibra il ritardo del GPS con NTP", command=self.calibrate_gps).pack(side="left", padx=8)
+        self.lbl_cal = ttk.Label(c, text=self._cal_text())
+        self.lbl_cal.pack(anchor="w", padx=6)
         self.lbl_gps = ttk.Label(c, text="GPS non collegato")
         self.lbl_gps.pack(anchor="w", padx=6, pady=(0, 3))
         # --- stazioni
@@ -310,6 +328,9 @@ class App:
             ttk.Label(e, text=k.capitalize()).pack(side="left")
             ttk.Entry(e, textvariable=self.f_extra[k], width=w).pack(side="left", padx=(2, 8))
         self.root.after(250, self._tick_field)
+        self.refresh_gps_ports()
+        if self.cfg.get("gps_auto") and self.cfg.get("gps_sel"):
+            self.root.after(1500, self._auto_gps)
 
     # ----- orologio, NTP, GPS
     def _open_gps_serial(self, port, baud):
@@ -331,28 +352,124 @@ class App:
             self.post(done)
         threading.Thread(target=job, daemon=True).start()
 
+    def refresh_gps_ports(self):
+        """Elenco: porte seriali e GPS Bluetooth accoppiati (letti da bluetoothctl, in un thread per non bloccare l'interfaccia)."""
+        base = serialio_ports()
+        self.gps_port.configure(values=base)
+        def job():
+            try:
+                bt = [bluetooth.label(m, n) for m, n in bluetooth.list_paired()]
+            except Exception:  # noqa
+                bt = []
+            self.post(lambda: self.gps_port.configure(values=base + bt))
+        threading.Thread(target=job, daemon=True).start()
+
+    def _cal_text(self):
+        d = self.cfg.get("gps_delay_s")
+        if d is None:
+            return "Ritardo del GPS non tarato: l'ora GPS ha un'incertezza di ±0,4 s. Con GPS e NTP collegati, premi \"Calibra\" (con il GPS fermo)."
+        return f"Ritardo del GPS tarato: {d * 1000:.0f} ms (il {self.cfg.get('gps_delay_date', '?')}); vale per questo GPS e questo collegamento."
+
     def toggle_gps(self):
-        if self.gps is not None:
-            self.gps.stop()
-            self.gps = None
-            self.clock.clear_source("gps")
-            self.clock.clear_source("gps-pps")
+        if self.gps is not None or self.gps_want or self.gps_connecting:
+            self.gps_want = False
+            self._gps_close()
             self.btn_gps.configure(text="Collega GPS")
             self.lbl_gps.configure(text="GPS non collegato")
             return
-        port, baud = self.gps_port.get().strip(), int(self.gps_baud.get())
-        if not port:
-            messagebox.showinfo("GPS", "Scegli la porta del GPS (seriale o USB, per esempio /dev/ttyACM0 o /dev/ttyUSB0).")
+        sel = self.gps_port.get().strip()
+        if not sel:
+            messagebox.showinfo("GPS", "Scegli il GPS: una porta seriale (per esempio /dev/ttyACM0) oppure un GPS Bluetooth accoppiato (premi Aggiorna).")
             return
-        try:
-            g = timesync.GpsReader(lambda: self.gps_opener(port, baud), baud=baud, pps=self.gps_pps.get())
-            g.start()
-        except Exception as e:  # noqa
-            messagebox.showerror("GPS", f"Non riesco ad aprire {port}: {e}")
-            return
-        self.gps = g
+        self.gps_want = True
         self.btn_gps.configure(text="Scollega GPS")
-        self.lbl_gps.configure(text=f"GPS collegato su {port} a {baud} baud: attendo le frasi NMEA…")
+        self._gps_connect()
+
+    def _gps_close(self):
+        if self.gps is not None:
+            self.gps.stop()
+            self.gps = None
+        self.clock.clear_source("gps")
+        self.clock.clear_source("gps-pps")
+
+    def _gps_connect(self):
+        """Apre il GPS (seriale o Bluetooth) in un thread: il Bluetooth puo' impiegare diversi secondi."""
+        if self.gps_connecting:
+            return
+        kind, ident = bluetooth.parse_choice(self.gps_port.get())
+        try:
+            baud = int(self.gps_baud.get())
+        except ValueError:
+            baud = 9600
+        pps = self.gps_pps.get()
+        self.gps_connecting = True
+        self.gps_last_try = time.time()
+        self.lbl_gps.configure(text="GPS Bluetooth: collego (puo' richiedere alcuni secondi)…" if kind == "bt" else f"GPS: apro {ident}…")
+        def job():
+            try:
+                if kind == "bt":
+                    ser, desc = self.bt_opener(ident)
+                    g = timesync.GpsReader(lambda: ser, baud=baud, pps=False)
+                else:
+                    ser, desc = None, f"{ident} a {baud} baud"
+                    g = timesync.GpsReader(lambda: self.gps_opener(ident, baud), baud=baud, pps=pps)
+                g.start()
+            except Exception as e:  # noqa
+                msg = str(e)
+                def fail():
+                    self.gps_connecting = False
+                    if self.gps_want:
+                        self.lbl_gps.configure(text=f"GPS: non collegato ({msg})" + (" - riprovo da solo" if self.gps_reconnect.get() else ""))
+                        if not self.gps_reconnect.get():
+                            self.gps_want = False
+                            self.btn_gps.configure(text="Collega GPS")
+                self.post(fail)
+                return
+            def ok():
+                self.gps_connecting = False
+                if not self.gps_want:           # l'utente ha premuto Scollega nel frattempo
+                    g.stop()
+                    return
+                if self.gps_use_cal.get() and self.cfg.get("gps_delay_s") is not None:
+                    g.delay_s, g.calibrated = float(self.cfg["gps_delay_s"]), True
+                self.gps = g
+                self.gps_note = desc
+                self.lbl_gps.configure(text=f"GPS collegato: {desc}: attendo le frasi NMEA…")
+            self.post(ok)
+        threading.Thread(target=job, daemon=True).start()
+
+    def _auto_gps(self):
+        if self.gps is None and not self.gps_want and not self.gps_connecting and self.gps_port.get().strip():
+            self.gps_want = True
+            self.btn_gps.configure(text="Scollega GPS")
+            self._gps_connect()
+
+    def calibrate_gps(self):
+        """Tara il ritardo della frase NMEA: scarto dell'NTP meno scarto grezzo del GPS (docs/gps-tempo.md)."""
+        if self.gps is None:
+            messagebox.showinfo("Calibrazione", "Collega prima il GPS e aspetta il fix.")
+            return
+        server = self.ntp_server.get().strip()
+        g = self.gps
+        self.lbl_cal.configure(text="Calibrazione: sincronizzo l'NTP…")
+        def job():
+            try:
+                off, unc, srv = self.ntp_func([server])
+                delay, spread, n = timesync.calibrate_gps_delay(g, off, unc)
+            except (OSError, ValueError) as e:
+                msg = str(e)
+                self.post(lambda: self.lbl_cal.configure(text=f"Calibrazione non riuscita: {msg}"))
+                return
+            def done():
+                self.clock.set_source("ntp", off, unc)
+                if self.gps is g:
+                    g.delay_s, g.calibrated = delay, True
+                self.cfg["gps_delay_s"] = delay
+                self.cfg["gps_delay_date"] = time.strftime("%Y-%m-%d %H:%M")
+                self.lbl_cal.configure(text=self._cal_text() + f" Dispersione ±{spread * 1000:.0f} ms su {n} frasi, NTP ±{unc * 1000:.0f} ms.")
+                self.set_status(f"Ritardo del GPS tarato: {delay * 1000:.0f} ms")
+            self.post(done)
+        threading.Thread(target=job, daemon=True).start()
 
     def my_position(self):
         """(lat, lon, origine) dal GPS se ha il fix, altrimenti dalla posizione scritta a mano; None se manca."""
@@ -377,6 +494,14 @@ class App:
             return None
 
     def _tick_field(self):
+        # riconnessione automatica del GPS
+        if self.gps_want and not self.gps_connecting and (self.gps is None or self.gps.error) and self.gps_reconnect.get():
+            if self.gps is not None and self.gps.error:
+                self.lbl_gps.configure(text=f"GPS: collegamento perso ({self.gps.error}): riconnessione automatica…")
+                self._gps_close()
+                self.gps_last_try = time.time()
+            elif time.time() - self.gps_last_try >= self.gps_retry_s:
+                self._gps_connect()
         # sorgenti dell'orologio dal GPS
         if self.gps is not None:
             o = self.gps.clock_offset()
@@ -395,7 +520,7 @@ class App:
                 if g.rejected:
                     note += f" | {g.rejected} ore GPS scartate (data non credibile: {timesync.fmt_utc(g.last_rejected, ms=False)})"
                 self.lbl_gps.configure(text=(f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, HDOP {g.hdop if g.hdop is not None else '—'}, "
-                                             f"{pos[0]:.5f}, {pos[1]:.5f} ({loc}), {g.lines} frasi, orologio da {'PPS' if o and o[2] else 'NMEA'}" if pos else
+                                             f"{pos[0]:.5f}, {pos[1]:.5f} ({loc}), {g.lines} frasi, orologio da {'PPS' if o and o[2] else ('NMEA con ritardo tarato' if g.calibrated else 'NMEA')}" if pos else
                                              f"GPS: {'FIX' if g.fix else 'nessun fix'}, {g.sats} satelliti, {g.lines} frasi ricevute") + note)
         info = self.clock.info()
         self.lbl_utc.configure(text=timesync.fmt_utc(info["utc"], ms=False))
@@ -959,6 +1084,7 @@ class App:
     def close(self):
         core.save_config({**self.cfg, "call": self.call.get(), "repo": self.gh_repo.get(), "board_a": self.gh_a.get(), "board_b": self.gh_b.get(),
                           "token": self.gh_token.get(), "ntp": self.ntp_server.get(), "man_pos": self.man_pos.get(),
+                          "gps_sel": self.gps_port.get(), "gps_auto": self.gps_auto.get(), "gps_baud": self.gps_baud.get(),
                           **{"f_" + k: v.get() for k, v in self.f_extra.items()}}, self.gh_remember.get())
         if self.gps is not None:
             self.gps.stop()

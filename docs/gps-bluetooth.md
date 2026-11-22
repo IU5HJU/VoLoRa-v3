@@ -1,5 +1,16 @@
 # GPS Bluetooth su Linux (provato con il Nokia LD-3W)
 
+## In breve: collegamento automatico dall'applicazione (23/11/2026)
+Dopo **l'accoppiamento una tantum** (punto 2 qui sotto) l'applicazione si collega da sola, **senza `rfcomm`, senza `sudo` e senza terminali**:
+1. Scheda **Prove sul campo**: premi **Aggiorna**; nel menu a tendina del GPS compare **`Bluetooth: Nokia LD-3W (indirizzo)`**.
+2. Sceglilo e premi **Collega GPS**. L'app apre il collegamento RFCOMM da sola (prova i canali 1-5) e mostra fix, satelliti e posizione.
+3. Spunta **"Collega il GPS all'avvio"**: alla prossima apertura l'app ricorda la scelta e si collega da sola. **"Riconnetti da solo"** (acceso di base) rifà il collegamento se cade o se il GPS si spegne.
+4. Con il GPS fermo e NTP raggiungibile premi **"Calibra il ritardo del GPS con NTP"**: l'app misura quanto ritarda la frase NMEA (nel tuo caso circa 377 ms) e lo ricorda; da allora l'ora GPS ha un'incertezza di circa ±0,1 s invece di ±0,4 s, anche senza Internet. Il ritardo vale per **questo GPS e questo tipo di collegamento**: ripeti la calibrazione se cambi apparecchio.
+
+**Come funziona.** Se il Python dell'app ha il supporto Bluetooth (`socket.AF_BLUETOOTH`: il Python di sistema di Ubuntu sì), usa un socket RFCOMM diretto. Altrimenti (per esempio con un Python di conda) lancia un piccolo **ponte** con il Python di sistema (`app/volora_misure/bt_bridge.py`). Se non esiste nessun Python con il Bluetooth, l'app lo dice: lancia l'applicazione con `/usr/bin/python3`. **Non provato col Bluetooth vero**: la logica ha prove con socket e processi finti.
+
+Il resto della pagina descrive la procedura **manuale** (utile per capire cosa succede e per diagnosticare).
+
 Procedura trovata il 22/11/2026 con un **Nokia LD-3W** (ricevitore SiRF del 2006, solo Bluetooth) su un portatile Ubuntu. Vale per qualunque GPS Bluetooth con servizio **Serial Port (SPP)**. Il collegamento passa da una seriale virtuale `/dev/rfcomm0` che l'applicazione legge come una normale porta seriale.
 
 ## 1. Controllo dell'adattatore
@@ -37,7 +48,7 @@ timeout 8 cat /dev/rfcomm0
 ```
 Devono scorrere righe `$GPGGA`, `$GPRMC`, `$GPGSV`.
 
-## 4. Nell'applicazione
+## 4. Nell'applicazione (procedura manuale)
 Scheda **Prove sul campo**, porta `/dev/rfcomm0`, velocità qualsiasi (il Bluetooth la ignora: va bene `9600`), niente PPS, poi **Collega GPS**. Prima chiudi eventuali `cat` aperti. Se compare `No module named 'serial'` l'app è partita fuori dall'ambiente con `pyserial` (vedi [applicazione.md](applicazione.md)).
 
 ## 5. Il fix e due difetti dei ricevitori vecchi

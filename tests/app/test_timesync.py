@@ -194,6 +194,40 @@ g4 = ts.GpsReader(lambda: None, baud=9600, now=lambda: 1e9)
 g4.feed(nmea("GPRMC,120000.00,A,4347.960,N,01052.817,E,0,0,010110,,,A"), 1795359595.0, nbytes=70)
 check(g4.rejected == 1 and g4.clock_offset() is None and g4.last_rejected is not None, "data impossibile (2010): scartata, nessuna sorgente dell'orologio")
 
+# ---- calibrazione del ritardo del GPS con NTP ----
+clkC = Fake(0.0)
+gC = ts.GpsReader(lambda: None, baud=9600, now=lambda: clkC.t)
+for k in range(12):
+    S = true_s + k
+    hms = datetime.datetime.fromtimestamp(S, datetime.timezone.utc).strftime("%H%M%S")
+    arrival = S + 2.0 + 0.35 + 0.073       # computer avanti di 2 s, ricevitore e Bluetooth ritardano la frase di 0,35 s (piu' 73 ms di trasmissione)
+    clkC.t = arrival
+    gC.feed(nmea(f"GPRMC,{hms}.00,A,4347.960,N,01052.817,E,0,0,221126,,,A"), arrival, nbytes=70)
+before = gC.clock_offset()
+D, spread, n = ts.calibrate_gps_delay(gC, ntp_offset=-2.0, ntp_uncertainty=0.01)
+check(abs(D - 0.35) < 0.005 and n == 12 and spread < 0.01, f"calibrazione: ritardo {D * 1000:.0f} ms (atteso 350), {n} campioni")
+gC.delay_s, gC.calibrated = D, True
+after = gC.clock_offset()
+check(abs(after[0] - (-2.0)) < 0.005 and after[1] < before[1] and after[1] >= 0.08 and not after[2], f"dopo la calibrazione lo scarto coincide con l'NTP ({after[0]:.3f} s) e l'incertezza scende da {before[1]:.2f} a {after[1]:.2f} s")
+for name, call, msg in (("pochi campioni", lambda: ts.calibrate_gps_delay(ts.GpsReader(lambda: None), -2.0), "almeno 10"),
+                        ("NTP impreciso", lambda: ts.calibrate_gps_delay(gC, -2.0, 0.5), "NTP"),
+                        ("secondi intercalari", lambda: ts.calibrate_gps_delay(gC, -2.0 + 18.0, 0.01), "intercalari")):
+    try:
+        call()
+        check(False, "calibrazione senza errore: " + name)
+    except ValueError as e:
+        check(msg in str(e), f"calibrazione rifiutata ({name}): {e}")
+gJ = ts.GpsReader(lambda: None, baud=9600, now=lambda: clkC.t)
+for k in range(12):
+    arrival = true_s + k + 2.0 + 0.35 + (1.0 if k % 2 else 0.0)       # frasi molto irregolari (dispersione di 500 ms)
+    clkC.t = arrival
+    gJ.feed(nmea(f"GPRMC,1200{k:02d}.00,A,4347.960,N,01052.817,E,0,0,221126,,,A"), arrival, nbytes=70)
+try:
+    ts.calibrate_gps_delay(gJ, -2.0, 0.01)
+    check(False, "frasi irregolari accettate")
+except ValueError as e:
+    check("irregolari" in str(e), "calibrazione rifiutata con frasi irregolari: " + str(e))
+
 # ---- orologio ----
 c = Fake(10000.0)
 clock = ts.Clock(now=lambda: c.t)
