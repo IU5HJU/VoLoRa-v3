@@ -6,6 +6,8 @@
 
 #include "board.h"
 #include "misura_core.h"
+#include "pmu.h"
+#include "status_display.h"
 
 using namespace misura;
 
@@ -23,6 +25,20 @@ static Params P;
 static char callsign[9] = "";
 static bool verbose = true;
 static bool modeReady = false;
+
+static StatusDisplay screen;
+static ScreenState scr;
+static void refresh(uint32_t minGapMs = 0) {
+  scr.p = &P;
+  scr.chip = CHIP;
+  scr.call = callsign;
+  scr.ready = modeReady;
+  screen.draw(scr, minGapMs);
+}
+static void idleScreen() {
+  scr.kind = ScreenState::Idle;
+  refresh();
+}
 
 static volatile bool isrFlag = false;
 static volatile uint32_t isrUs = 0;
@@ -112,6 +128,10 @@ static void cmdTx(int n, int intervalMs, uint32_t startSeq) {
   const uint32_t calc = expectedToaUs();
   uint32_t ok = 0;
   uint64_t sumToa = 0;
+  scr.kind = ScreenState::Tx;
+  scr.total = static_cast<uint32_t>(n);
+  scr.done = 0;
+  refresh();
   for (int i = 0; i < n; i++) {
     const uint32_t seq = startSeq + static_cast<uint32_t>(i);
     buildPacket(buf, P.payload, seq, callsign);
@@ -134,6 +154,8 @@ static void cmdTx(int n, int intervalMs, uint32_t startSeq) {
       sumToa += toa;
     }
     if (verbose) Serial.printf("TX seq=%u len=%d toa_us=%u calc_us=%u st=%d\n", seq, P.payload, toa, calc, done ? st : (st ? st : -999));
+    scr.done = ok;
+    refresh(300);   // fuori dalla misura del tempo in aria: il disegno non altera toa_us
     if (serialKey()) {
       Serial.println("STOP");
       break;
@@ -142,6 +164,7 @@ static void cmdTx(int n, int intervalMs, uint32_t startSeq) {
     if (spent < static_cast<uint32_t>(intervalMs)) delay(static_cast<uint32_t>(intervalMs) - spent);
   }
   Serial.printf("TXSUM sent=%u toa_mean_us=%u calc_us=%u\n", ok, ok ? static_cast<uint32_t>(sumToa / ok) : 0u, calc);
+  idleScreen();
 }
 
 static void cmdRx(int seconds) {
@@ -155,12 +178,26 @@ static void cmdRx(int seconds) {
     return;
   }
   const uint32_t end = millis() + static_cast<uint32_t>(seconds) * 1000UL;
+  scr.kind = ScreenState::Rx;
+  scr.done = scr.bad = 0;
+  scr.rssi = scr.snr = NAN;
+  scr.secondsLeft = seconds;
+  refresh();
+  uint32_t lastDraw = millis();
   while (static_cast<int32_t>(end - millis()) > 0) {
     if (serialKey()) {
       Serial.println("STOP");
       break;
     }
-    if (!isrFlag) continue;
+    if (!isrFlag) {
+      // il display si ridisegna solo a radio quieta, una volta al secondo (25 ms di disegno possono far perdere un pacchetto ravvicinato)
+      if (screen.enabled() && millis() - lastDraw >= 1000) {
+        lastDraw = millis();
+        scr.secondsLeft = static_cast<int>((end - millis()) / 1000UL);
+        refresh();
+      }
+      continue;
+    }
     isrFlag = false;
     const size_t len = radio.getPacketLength();
     const int rs = radio.readData(buf, len > sizeof(buf) ? sizeof(buf) : len);
@@ -173,6 +210,10 @@ static void cmdRx(int seconds) {
     }
     const Parsed p = parsePacket(buf, static_cast<int>(len));
     s.add(p, radioCrcErr, rssi, snr, fei);
+    scr.done = s.rxOk;
+    scr.bad = s.rxBad;
+    scr.rssi = rssi;
+    scr.snr = snr;
     if (verbose)
       Serial.printf("RX seq=%u len=%u rssi=%.1f snr=%.1f fei=%.0f rs=%d status=%d bit_err=%d\n", p.seq, static_cast<unsigned>(len), rssi, snr, fei,
                     rs, static_cast<int>(p.status), p.bitErrors);
@@ -182,6 +223,7 @@ static void cmdRx(int seconds) {
   char line[200];
   formatSummary(line, sizeof(line), s);
   Serial.println(line);
+  idleScreen();
 }
 
 // Portante per il misuratore di potenza: pacchetti FSK tutti 0xFF a 4,8 kbit/s (stesso metodo della v2 per il Morse), uno dopo l'altro.
@@ -208,6 +250,9 @@ static void cmdCw(int seconds) {
   static uint8_t buf[255];
   memset(buf, 0xFF, sizeof(buf));
   Serial.printf("CW start %d s su %.4f MHz, %d dBm\n", seconds, P.freqMhz, P.powerDbm);
+  scr.kind = ScreenState::Cw;
+  scr.secondsLeft = seconds;
+  refresh();
   const uint32_t end = millis() + static_cast<uint32_t>(seconds) * 1000UL;
   uint32_t n = 0;
   while (static_cast<int32_t>(end - millis()) > 0) {
@@ -222,12 +267,13 @@ static void cmdCw(int seconds) {
   Serial.printf("CW fine pacchetti=%u\n", n);
   P = saved;
   applyMode();
+  idleScreen();
 }
 
 static void printHelp() {
   Serial.println(
       "Comandi: INFO | SHOW | HELP | CALL <nominativo> | MODE LORA <bwKHz> <sf> <cr 5-8> | MODE FSK <kbps> <devKHz> <rxbwKHz> [shape 0|3|5|10]\n"
-      "         FREQ <MHz 430-440> | POWER <dBm> | PAYLOAD <26-255> | PREAMBLE <n> | VERBOSE 0|1\n"
+      "         FREQ <MHz 430-440> | POWER <dBm> | PAYLOAD <26-255> | PREAMBLE <n> | VERBOSE 0|1 | DISPLAY 0|1\n"
       "         TX <n> <intervallo ms> [seq iniziale] | RX <secondi> | CW <secondi 1-30> | un tasto qualsiasi ferma TX, RX e CW");
 }
 
@@ -292,6 +338,10 @@ static void handleLine(const char* line) {
   } else if (!strcmp(c, "PREAMBLE") && t.n == 2 && parseInt(t.tok[1], &a) && a >= 0 && a <= 255) {
     P.preamble = a;
     if (applyMode()) showParams();
+  } else if (!strcmp(c, "DISPLAY") && t.n == 2 && parseInt(t.tok[1], &a)) {
+    screen.enable(a != 0);
+    Serial.printf("OK display %s (%s)\n", a ? "acceso" : "spento", screen.present() ? "presente" : "non trovato");
+    if (a) idleScreen();
   } else if (!strcmp(c, "VERBOSE") && t.n == 2 && parseInt(t.tok[1], &a)) {
     verbose = a != 0;
     Serial.printf("OK verbose %d\n", verbose ? 1 : 0);
@@ -305,14 +355,20 @@ static void handleLine(const char* line) {
   } else {
     Serial.println("ERR comando non riconosciuto (HELP)");
   }
+  if (scr.kind == ScreenState::Idle) refresh();   // un comando puo' aver cambiato modo, frequenza, potenza o nominativo
 }
 
 void setup() {
   Serial.begin(921600);
   delay(300);
-  SPI.begin(pins::kRadioSclk, pins::kRadioMiso, pins::kRadioMosi, pins::kRadioCs);
   Serial.printf("\n%s %s\n", FW_VERSION, CHIP);
+  pmuBegin();    // solo T-Beam: alimenta la radio (ALDO2) prima di toccarla
+  SPI.begin(pins::kRadioSclk, pins::kRadioMiso, pins::kRadioMosi, pins::kRadioCs);
+  screen.begin();
+  scr.kind = ScreenState::Idle;
+  refresh();
   applyMode();
+  refresh();
   Serial.println("ATTENZIONE: antenna o carico da 50 ohm collegati PRIMA di trasmettere. HELP per i comandi.");
   showParams();
 }

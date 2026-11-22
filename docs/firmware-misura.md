@@ -7,6 +7,11 @@
 - Il firmware **passa il controllo di sintassi** contro le intestazioni vere di RadioLib (7.8.1, quelle del repository LilyGO) per T3/SX1278 e T-Beam/SX1262, con uno stub minimo di Arduino. **Non è stato compilato con PlatformIO** (da questa sessione il download della piattaforma ESP32 è bloccato) né caricato su una scheda: il primo `pio run` e la prima prova sulle schede possono rivelare errori. Il `platformio.ini` fissa RadioLib 7.5.0 e la piattaforma 6.10.0 della v2, per confrontare i risultati.
 - `tools/misura.py` è provato solo con `--simulate` (schede finte che seguono una curva attorno alla sensibilità stimata: prova la sequenza, non la fisica). Il collegamento seriale vero **non è provato**.
 
+## Display OLED e alimentazione della T-Beam (aggiunti il 22/11/2026)
+- **OLED:** sulla T3 il firmware mostra una schermata di stato: modo, frequenza e potenza, dimensione del pacchetto, nominativo e, in basso, l'azione in corso (`pronta`, `TX 12/20`, `RX ok15 bad1 40s` con RSSI e SNR, `PORTANTE`). Pin come nella v2: SDA 21, SCL 22, indirizzo 0x3C (si prova anche 0x3D). Se il display non c'è, tutto funziona uguale e all'avvio compare `display OLED non trovato`. **Non provato su una scheda.**
+- **Comando `DISPLAY 0|1`:** spegne e riaccende il disegno. Ridisegnare costa circa 25 ms: durante un `RX` con pacchetti molto ravvicinati (FSK ad alta velocità) si potrebbe perdere un pacchetto, quindi per le misure di sensibilità conviene `DISPLAY 0`. Durante `RX` lo schermo si ridisegna comunque solo a radio quieta e al massimo una volta al secondo; durante `TX` fuori dalla misura del tempo in aria.
+- **T-Beam V1.2 (AXP2101):** la radio è alimentata dal chip di gestione dell'alimentazione (canale ALDO2 a 3,3 V). **Mancava nella prima versione del firmware di misura**: senza questa sequenza la T-Beam non avrebbe mai acceso la radio. Ora il firmware la esegue all'avvio, come la v2 (`src/pmu.h`), e scrive `[pmu] AXP2101 ok, radio ALDO2 3300 mV acceso`. Se compare `AXP2101 non risponde` la radio non è alimentata. Sulla T-Beam l'OLED è un display esterno facoltativo.
+
 ## Schede e pin
 Pin delle radio ripresi dalla v2 (`src/board_pins_*.h`): SCK 5, MISO 19, MOSI 27, CS 18, DIO0 26, RST 23, DIO1 33, DIO2/BUSY 32. SX1262: TCXO sul DIO3 a 1,6 V come nella v2 (`-DMISURA_TCXO_V=0` se la radio non parte). La microSD e l'audio non sono usati.
 
@@ -29,7 +34,7 @@ Seriale a **921600 baud**, una riga per comando. La parola di sincronismo LoRa �
 | `TX <n> <intervallo ms> [seq iniziale]` | manda n pacchetti; per ognuno stampa `TX seq=.. toa_us=.. calc_us=..` (tempo misurato dall'avvio al fine trasmissione, contro la formula) e alla fine `TXSUM` |
 | `RX <secondi>` | ascolta; per ogni pacchetto `RX seq rssi snr fei status bit_err`; alla fine `RXSUM ok bad lost dup bit_err rssi snr fei_hz` |
 | `CW <secondi 1-30>` | portante per il misuratore di potenza: pacchetti FSK tutti 0xFF a 4,8 kbit/s uno dopo l'altro (metodo della v2 per il Morse), 99 % del tempo trasmessi; la portante sta alla frequenza più 1 kHz |
-| `VERBOSE 0\|1`, `SHOW`, `INFO`, `HELP` | |
+| `VERBOSE 0\|1`, `DISPLAY 0\|1`, `SHOW`, `INFO`, `HELP` | |
 | un tasto qualsiasi | ferma TX, RX o CW |
 
 Il pacchetto di prova: intestazione `V3M1`, numero di sequenza, lunghezza, nominativo, riempimento pseudocasuale deterministico (dal numero di sequenza) e CRC32. Il ricevitore conta così i pacchetti buoni, i **bit sbagliati** (anche dei pacchetti rovinati) e i persi dai buchi nella sequenza. Il `fei_hz` (errore di frequenza misurato dal chip, solo LoRa) serve alla misura della deriva del quarzo (M6) senza bisogno di sapere se la scheda ha il TCXO.

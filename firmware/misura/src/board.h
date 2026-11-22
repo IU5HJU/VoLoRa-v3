@@ -12,6 +12,8 @@ constexpr int kRadioRst = 23;
 constexpr int kRadioDio1 = 33;  // SX1262: interrupt (TxDone / RxDone)
 constexpr int kRadioDio2 = 32;
 constexpr int kRadioBusy = kRadioDio2;  // SX1262: BUSY (come nella v2)
+constexpr int kOledSda = 21;            // OLED SSD1306 (T3: a bordo; T-Beam: esterno facoltativo) e PMU AXP2101 della T-Beam
+constexpr int kOledScl = 22;
 }  // namespace pins
 
 // Tensione del TCXO sul DIO3 dell'SX1262 (come la v2: 1,6 V; se la radio non parte con un errore, provare 0 con -DMISURA_TCXO_V=0)
