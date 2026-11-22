@@ -73,6 +73,7 @@ class SerialBoard(BoardBase):
         import serial  # noqa: pyserial
         self.ser = serial.Serial(port, baud, timeout=0.1)
         self.connected = True
+        self._first_write = True
         self._stop = False
         self._thread = threading.Thread(target=self._read, daemon=True)
         self._thread.start()
@@ -96,6 +97,11 @@ class SerialBoard(BoardBase):
                     self._deliver(text)
 
     def _write(self, line):
+        if self._first_write:
+            # all'apertura la scheda si riavvia e sul filo possono arrivare byte spuri: una riga vuota li chiude, cosi' il primo comando arriva intero
+            self._first_write = False
+            self.ser.write(b"\n")
+            time.sleep(0.05)
         self.ser.write((line + "\n").encode())
 
     def close(self):

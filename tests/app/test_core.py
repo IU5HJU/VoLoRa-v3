@@ -117,6 +117,35 @@ check(len(core.make_test_png(200, 100)) > len(core.make_test_png(64, 48)) // 2, 
 rows_est = core.estimate_rows(5000)
 check(len(rows_est) == 15 and rows_est[0][0].startswith("R0"), "stime per gradino")
 
+# SerialBoard: la prima scrittura e' una riga vuota, poi il comando intero
+import types
+writes = []
+
+
+class _FakeSerial:
+    def __init__(self, port, baud, timeout=0):
+        pass
+
+    def read(self, n):
+        import time as _t
+        _t.sleep(0.02)
+        return b""
+
+    def write(self, b):
+        writes.append(b)
+
+    def close(self):
+        pass
+
+
+sys.modules["serial"] = types.SimpleNamespace(Serial=_FakeSerial)
+sb = serialio.SerialBoard("A", "/dev/ttyACM0")
+sb.send("INFO")
+sb.send("SHOW")
+sb.close()
+check(writes == [b"\n", b"INFO\n", b"SHOW\n"], f"seriale: riga vuota prima del primo comando, poi i comandi interi: {writes}")
+del sys.modules["serial"]
+
 # sequenza di misura con le schede finte
 link, a, bb = serialio.fake_pair(speed=200)
 link.att_db = 100

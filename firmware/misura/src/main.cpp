@@ -382,8 +382,8 @@ void loop() {
       line[n] = 0;
       if (n) handleLine(line);
       n = 0;
-    } else if (n < sizeof(line) - 1) {
-      line[n++] = ch;
+    } else if (n < sizeof(line) - 1 && ch >= 0x20 && ch < 0x7F) {
+      line[n++] = ch;      // solo caratteri stampabili: i byte spuri dell'apertura della porta non devono rovinare il primo comando
     }
   }
 }
