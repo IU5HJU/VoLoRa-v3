@@ -29,6 +29,8 @@ def run(prx=-100.0, size=5000, scenario="costante", seed=1, budget=3600.0, hook=
 sid = 0xBEEF
 f = sim.decode(sim.enc_hello(sid, "IU5HJU", "SX1262", 0x7FFF, 255, 100, reply=True))
 check(f and f["nome"] == "HELLO" and f["call"] == "IU5HJU" and f["chip"] == "SX1262" and f["reply"] and f["rung_mask"] == 0x7FFF and f["max_frame"] == 255 and f["mem_kb"] == 100, "HELLO")
+f = sim.decode(sim.enc_hello(sid, "IU5HJU", "SX1278", 0x7FFF, 255, 100, reply=True, rssi=-118.4, snr=-9.0))
+check(f["reply"] and f["rssi"] == -118 and f["snr"] == -9 and f["flags"] == 3, "HELLO di risposta con la misura (RSSI e SNR)")
 f = sim.decode(sim.enc_probe(sid, 5, 2, 8))
 check(f["nome"] == "PROBE" and f["rung"] == 5 and f["idx"] == 2 and f["count"] == 8 and f["len"] == sim.PROBE_BYTES, "PROBE (32 byte)")
 f = sim.decode(sim.enc_probe_report(sid, 5, 8, 7, -101.4, 12.0))
@@ -70,6 +72,12 @@ s2, r2 = run(-125.0, 20000, seed=4, budget=120.0)
 check(r2.ok and 1 <= r2.layers_delivered < 3 and r2.crc_ok and r2.bytes_delivered < 20000, f"budget stretto: consegnati {r2.layers_delivered} livelli su 3, CRC ok")
 s3, r3 = run(-134.0, 20000, seed=5, budget=10.0)
 check(not r3.ok and "primo livello" in r3.reason, "budget troppo piccolo per il primo livello: non parte (" + r3.reason + ")")
+# incontro: la misura nell'HELLO fa risparmiare tempo rispetto alla raffica di PROBE, con lo stesso risultato
+_, ra = run(-100.0, 5000, seed=11)
+ch_ = sim.Channel(-100.0, rng=random.Random(12))
+sb = sim.Simulator(5000, (1 / 3, 2 / 3, 1.0), ch_, "SX1278", "SX1278", 3600.0, 11, incontro="probe")
+rb = sb.run()
+check(ra.ok and rb.ok and ra.time_s < rb.time_s - 8.0, f"incontro con misura nell'HELLO: {ra.time_s:.0f} s contro {rb.time_s:.0f} s con 8 PROBE")
 # nessun collegamento: termina e non trasmette all'infinito
 s4, r4 = run(-150.0, 2000, seed=6)
 check(not r4.ok and "nessun incontro" in r4.reason and r4.time_s <= 700 and r4.frames.get("HELLO", 0) < 30, f"nessun incontro: rinuncia dopo {r4.time_s:.0f} s e {r4.frames.get('HELLO', 0)} HELLO")
@@ -115,11 +123,11 @@ s9, r9 = run(-100.0, 20000, seed=9)
 est = pi.estimate_seconds(20000, 2, "SX1278")
 check(r9.ok and 0.3 * est <= r9.transfer_s <= 3.0 * est, f"trasferimento di 20 kB a -100 dBm: simulato {r9.transfer_s:.0f} s, stima della tabella {est:.0f} s")
 
-# ricerca a calendario (dopo un lungo silenzio): scenario in cui R10 non si sente piu' (-144 dBm), 8 semi
+# ricerca a calendario (dopo un lungo silenzio): scenario in cui R10 non si sente piu' (da -136 a -147 dBm a 60 s), 8 semi
 ok_cal = ok_r10 = 0
 for seed in range(1, 9):
     for ric in ("calendario", "r10"):
-        ch = sim.Channel(-130.0, "gradino", extra_db=14.0, when_s=60.0, rng=random.Random(seed + 1))
+        ch = sim.Channel(-136.0, "gradino", extra_db=11.0, when_s=60.0, rng=random.Random(seed + 1))
         sm = sim.Simulator(1000, (1 / 3, 2 / 3, 1.0), ch, "SX1278", "SX1278", 7200.0, seed, ricerca=ric)
         r = sm.run()
         if r.ok:

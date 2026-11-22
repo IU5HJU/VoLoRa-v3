@@ -58,8 +58,13 @@ def _s8(v):
     return struct.pack("b", max(-128, min(127, int(round(v)))))
 
 
-def enc_hello(sess, call, chip, rung_mask, max_frame, mem_kb, reply=False):
-    return _hdr(T["HELLO"], sess, 1 if reply else 0) + _call(call) + bytes([1 if chip == "SX1262" else 0]) + struct.pack(">HBH", rung_mask, max_frame, mem_kb)
+def enc_hello(sess, call, chip, rung_mask, max_frame, mem_kb, reply=False, rssi=None, snr=None):
+    """Con `rssi` e `snr` la risposta (reply) porta anche la misura del HELLO appena sentito (flag 2): il mittente puo' scegliere il gradino senza raffica di PROBE."""
+    flags = (1 if reply else 0) | (2 if rssi is not None else 0)
+    b = _hdr(T["HELLO"], sess, flags) + _call(call) + bytes([1 if chip == "SX1262" else 0]) + struct.pack(">HBH", rung_mask, max_frame, mem_kb)
+    if rssi is not None:
+        b += _s8(rssi) + _s8(snr)
+    return b
 
 
 def enc_probe(sess, rung, idx, count, filler=PROBE_BYTES - 7):
@@ -115,6 +120,8 @@ def decode(b):
             n = body[0]
             d.update(call=body[1:1 + n].decode(), chip="SX1262" if body[1 + n] else "SX1278", reply=bool(d["flags"] & 1))
             d["rung_mask"], d["max_frame"], d["mem_kb"] = struct.unpack(">HBH", body[2 + n:7 + n])
+            if d["flags"] & 2:
+                d["rssi"], d["snr"] = struct.unpack("bb", body[7 + n:9 + n])
         elif tipo == T["PROBE"]:
             d.update(rung=body[0], idx=body[1], count=body[2])
         elif tipo == T["PROBE_REPORT"]:
@@ -215,7 +222,7 @@ class Node:
         return m
 
 
-SCAN_ORDER = (10, 11, 12, 13, 14)     # calendario della ricerca dopo un lungo silenzio: gradino di incontro e poi i gradini lenti
+SCAN_ORDER = (10, 11, 10, 12, 10, 13, 10, 14)   # calendario della ricerca: R10 a ogni secondo turno (il collegamento spesso torna), i gradini lenti a rotazione
 
 
 def scan_dwell_s(rid):
@@ -269,8 +276,13 @@ class Result:
 # -------------------------------------------------------------------------------------------------------------- simulatore
 class Simulator:
     def __init__(self, obj_size=20000, layers=(0.2, 0.5, 1.0), channel=None, chip_a="SX1278", chip_b="SX1278", budget_s=600.0, seed=1,
-                 call_a="IU5HJU", call_b="IK5XYZ", trace=False, window=WINDOW_FRAMES, max_time_s=4 * 3600.0, ricerca="calendario"):
+                 call_a="IU5HJU", call_b="IK5XYZ", trace=False, window=WINDOW_FRAMES, max_time_s=4 * 3600.0, ricerca="calendario",
+                 incontro="hello", probes_r10=PROBE_COUNT):
         self.ricerca = ricerca
+        self.incontro = incontro            # "hello": la risposta all'HELLO porta la misura; "probe": raffica di PROBE a R10 (vecchio)
+        self.probes_r10 = probes_r10
+        self.hello_metrics = None
+        self.rssi_est = None            # ultima stima della potenza ricevuta (misura dell'HELLO, report delle PROBE o STATUS)
         self.rng = random.Random(seed)
         self.ch = channel or Channel(-100.0, rng=random.Random(seed + 1))
         self.S, self.R = Node("S", chip_a), Node("R", chip_b)
@@ -380,6 +392,9 @@ class Simulator:
             self.s_caps = f
             if self.R.lost_since is not None:      # in ricerca: resta qui il tempo di 12 frame, poi riprende il calendario (che e' in funzione del tempo)
                 self.R.hold_until = self.t + max(60.0, 12.0 * pi.frame_airtime_s(self.R.rung, PROBE_BYTES))
+            if self.incontro == "hello":
+                return enc_hello(self.sess, self.call_b, self.R.chip, self.R.mask(), pi.max_frame(pi.RENDEZVOUS, self.R.chip), 100, reply=True,
+                                 rssi=self._last_rssi, snr=self._last_snr)
             return enc_hello(self.sess, self.call_b, self.R.chip, self.R.mask(), pi.max_frame(pi.RENDEZVOUS, self.R.chip), 100, reply=True)
         if t == T["PROBE"]:
             self.r_rssi.append(self._last_rssi)
@@ -466,6 +481,8 @@ class Simulator:
             r = self.exchange(enc_hello(self.sess, self.call_a, self.S.chip, self.S.mask(), pi.max_frame(10, self.S.chip), 100), T["HELLO"])
             if r is not None:
                 self.caps = r
+                if "rssi" in r:
+                    self.hello_metrics = (r["rssi"], r["snr"])
                 self.res.t_hello = self.t - t0
                 return
             self.advance(wait * (0.8 + 0.4 * self.rng.random()))
@@ -479,7 +496,7 @@ class Simulator:
 
     def probe(self, rid_check=None):
         """Raffica di PROBE al gradino attuale; ritorna (ricevuti, attesi, rssi, snr) dal report, o None."""
-        n = PROBE_COUNT if self.S.rung <= pi.RENDEZVOUS else 4
+        n = self.probes_r10 if self.S.rung <= pi.RENDEZVOUS else 4
         self.probe_heard = 0
         self.r_rssi, self.r_snr = [], []
         for i in range(n):
@@ -564,7 +581,12 @@ class Simulator:
             return
         fails = 0
         for attempt in range(8):
-            m = self.probe()
+            if self.hello_metrics is not None:           # la misura e' gia' arrivata con la risposta all'HELLO: niente raffica
+                rs, sn = self.hello_metrics
+                self.hello_metrics = None
+                m = (1, 1, rs, sn)
+            else:
+                m = self.probe()
             if m is None:
                 fails += 1
                 if fails >= 2:
@@ -574,6 +596,7 @@ class Simulator:
                     self.advance(5.0)
                 continue
             rec, exp, rssi, snr = m
+            self.rssi_est = rssi
             target = self.predicted_best(rssi, allowed, MARGIN_UP_DB)
             if target == self.S.rung:
                 return
@@ -622,7 +645,10 @@ class Simulator:
             raise Failure("OFFER senza ACCEPT")
         self.t_transfer0 = self.t
         # budget iniziale: il primo livello deve entrare, altrimenti non si parte
-        est0 = pi.estimate_seconds(self.layer_ends[0] * pi.PIECE, self.S.rung, self.S.chip)
+        # il primo livello deve entrare nel budget al gradino migliore che la misura lascia sperare (margine 3 dB): una sola misura e' rumorosa,
+        # e dopo le prime finestre il mittente puo' ancora salire di gradino
+        rid_best = min(self.S.rung, self.predicted_best(self.rssi_est, self.allowed(), 3.0)) if self.rssi_est is not None else self.S.rung
+        est0 = pi.estimate_seconds(self.layer_ends[0] * pi.PIECE, rid_best, self.S.chip)
         if est0 > self.budget:
             self.air(self.S, self.R, enc_abort(self.sess, 1))
             raise Failure(f"il primo livello non entra nel budget (stima {pi.fmt_time(est0)} contro {pi.fmt_time(self.budget)})")
@@ -709,6 +735,7 @@ class Simulator:
                 continue
             status_fail = 0
             # il mittente aggiorna cio' che sa dallo STATUS
+            self.rssi_est = st["rssi"]
             for pidx in range(min(st["base"], self.npieces)):
                 if not acked[pidx]:
                     acked[pidx] = True
@@ -792,7 +819,8 @@ class Simulator:
 def run_once(args, seed):
     ch = Channel(args.prx, args.scenario, args.extra, args.when, args.span, rng=random.Random(seed + 1))
     layers = tuple((i + 1) / args.layers for i in range(args.layers))
-    sim = Simulator(args.size, layers, ch, args.chip, args.chip, args.budget, seed, trace=args.trace, ricerca=args.ricerca)
+    sim = Simulator(args.size, layers, ch, args.chip, args.chip, args.budget, seed, trace=args.trace, ricerca=args.ricerca, incontro=getattr(args, "incontro", "hello"),
+                    probes_r10=getattr(args, "probes", PROBE_COUNT))
     return sim, sim.run()
 
 
@@ -830,6 +858,8 @@ def main():
     ap.add_argument("--budget", type=float, default=600.0, help="budget di tempo per oggetto, s")
     ap.add_argument("--chip", default="SX1278", choices=["SX1278", "SX1262"])
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--incontro", default="hello", choices=["hello", "probe"], help="misura del collegamento all'incontro: nella risposta all'HELLO (nuovo) o con una raffica di PROBE (vecchio)")
+    ap.add_argument("--probes", type=int, default=PROBE_COUNT, help="PROBE della raffica a R10 (solo con --incontro probe)")
     ap.add_argument("--ricerca", default="calendario", choices=["calendario", "r10"], help="cosa fanno le stazioni dopo un lungo silenzio: calendario dei gradini lenti (nuovo) o solo ritorno a R10 (vecchio)")
     ap.add_argument("--trace", action="store_true")
     ap.add_argument("--sweep", action="store_true")
