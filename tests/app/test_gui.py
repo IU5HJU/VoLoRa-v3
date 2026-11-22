@@ -223,6 +223,18 @@ with tempfile.TemporaryDirectory() as td:
     app.save_field_csv()
     rows = open(path, encoding="utf-8").read().strip().split("\n")
     check(len(rows) == 2 and rows[0].split(",") == field.RILIEVO_FIELDS and "IK5XYZ" in rows[1] and "in vista" in rows[1], "CSV di rilievo salvato con la riga della prova")
+def _all_text(w, acc):
+    for c in w.winfo_children():
+        try:
+            acc.append(str(c.cget("text")))
+        except Exception:  # noqa
+            pass
+        _all_text(c, acc)
+    return acc
+
+
+texts = _all_text(app.root, [])
+check("⟳" not in texts and texts.count("Aggiorna") >= 3, "i pulsanti dell'elenco porte si chiamano 'Aggiorna' (prima un quadratino illeggibile)")
 check(str(app.pa.log.cget("wrap")) == "word", "i monitor vanno a capo (le righe lunghe non si perdono)")
 app.pa.board.inbox.put(("rx", "MODE LORA bw 250.00 kHz sf 7 cr 4/5 | freq 433.4750 MHz power 2 dBm payload 255 preamble 8 call IU5HJU ready 1 " + "x" * 120))
 pump(root, 0.4)
