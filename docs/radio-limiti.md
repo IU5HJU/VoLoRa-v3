@@ -17,7 +17,7 @@ Le **schede** hanno filtri e antenna per i 433 MHz: il rendimento a 430 e 440 MH
 |---|---|---|
 | Bit rate | 0,5-300 kbit/s in RadioLib (datasheet: 1,2-300; la libreria annota che 0,512 funziona) | 0,6-300 kbit/s |
 | Deviazione di frequenza | fino a 200 kHz, con deviazione + bit rate/2 ≤ 250 kHz | 0,6-200 kHz |
-| Dimensione massima del pacchetto | **64 byte** in FSK: è il FIFO (RadioLib cita il datasheet Rev. 7, pagina 66) | 255 byte |
+| Dimensione massima del pacchetto | **64 byte** in FSK: è il FIFO (RadioLib cita il datasheet Rev. 7, pagina 66). **Confermato sulla T3 il 22/11/2026**: `ERR radio st=-4` con 255 byte | 255 byte |
 | Banda di ricezione (RxBw) | tabella da leggere nel datasheet | tabella da leggere nel datasheet |
 
 Conseguenze da valutare:

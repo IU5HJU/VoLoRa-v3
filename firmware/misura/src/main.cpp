@@ -25,6 +25,7 @@ static Params P;
 static char callsign[9] = "";
 static bool verbose = true;
 static bool modeReady = false;
+static int wantedPayload = 64;   // pacchetto richiesto con PAYLOAD; quello in uso (P.payload) puo' essere ridotto dal limite del chip in FSK
 
 static StatusDisplay screen;
 static ScreenState scr;
@@ -67,6 +68,14 @@ static bool callOk() {
 static bool applyMode() {
   modeReady = false;
   int st;
+#if defined(RADIO_SX1262)
+  const int maxPayload = kMaxPayload;
+#else
+  const int maxPayload = P.fsk ? 64 : kMaxPayload;   // SX1278 in FSK: RadioLib non accetta pacchetti oltre il FIFO da 64 byte (errore -4)
+#endif
+  P.payload = wantedPayload < maxPayload ? wantedPayload : maxPayload;
+  if (P.payload != wantedPayload)
+    Serial.printf("[nota] pacchetto ridotto a %d byte (richiesti %d): l'SX1278 in FSK non ne accetta di piu' (FIFO da 64 byte)\n", P.payload, wantedPayload);
   if (!P.fsk) {
 #if defined(RADIO_SX1262)
     st = radio.begin(P.freqMhz, P.bwKhz, P.sf, P.cr, MISURA_SYNC, P.powerDbm, P.preamble, MISURA_TCXO_V);
@@ -235,20 +244,23 @@ static void cmdCw(int seconds) {
     return;
   }
   const Params saved = P;
+  const int savedWanted = wantedPayload;
   P.fsk = true;
-  P.kbps = 4.8f;
+  P.kbps = 1.2f;       // lento: ogni pacchetto dura 0,43 s (SX1278, 64 byte) e le pause fra un pacchetto e l'altro restano sotto l'1-2 %
   P.devKhz = 1.0f;
   P.rxBwKhz = 12.5f;
   P.shape = 0;
   P.preamble = 0;
-  P.payload = 255;
+  wantedPayload = 255;   // sull'SX1278 applyMode lo riduce a 64
   if (!applyMode()) {
     P = saved;
+    wantedPayload = savedWanted;
     applyMode();
     return;
   }
   static uint8_t buf[255];
   memset(buf, 0xFF, sizeof(buf));
+  const size_t cwBytes = static_cast<size_t>(P.payload);
   Serial.printf("CW start %d s su %.4f MHz, %d dBm\n", seconds, P.freqMhz, P.powerDbm);
   scr.kind = ScreenState::Cw;
   scr.secondsLeft = seconds;
@@ -256,7 +268,7 @@ static void cmdCw(int seconds) {
   const uint32_t end = millis() + static_cast<uint32_t>(seconds) * 1000UL;
   uint32_t n = 0;
   while (static_cast<int32_t>(end - millis()) > 0) {
-    radio.transmit(buf, sizeof(buf));  // bloccante, circa 0,43 s
+    radio.transmit(buf, cwBytes);  // bloccante: 0,43 s con 64 byte a 1,2 kbit/s
     n++;
     if (serialKey()) {
       Serial.println("STOP");
@@ -266,6 +278,7 @@ static void cmdCw(int seconds) {
   radio.standby();
   Serial.printf("CW fine pacchetti=%u\n", n);
   P = saved;
+  wantedPayload = savedWanted;
   applyMode();
   idleScreen();
 }
@@ -333,7 +346,7 @@ static void handleLine(const char* line) {
     P.powerDbm = a;
     if (applyMode()) showParams();
   } else if (!strcmp(c, "PAYLOAD") && t.n == 2 && parseInt(t.tok[1], &a) && a >= kMinPayload && a <= kMaxPayload) {
-    P.payload = a;
+    wantedPayload = a;
     if (applyMode()) showParams();
   } else if (!strcmp(c, "PREAMBLE") && t.n == 2 && parseInt(t.tok[1], &a) && a >= 0 && a <= 255) {
     P.preamble = a;
