@@ -44,6 +44,8 @@ Scheda **Prove sul campo**, porta `/dev/rfcomm0`, velocità qualsiasi (il Blueto
 - **Fix.** Dopo anni di inattività il ricevitore parte "a freddo": all'aperto, con cielo libero, servono da uno a qualche minuto (a volte una decina). Prima del fix `GPGGA` ha qualità `0` e `GPRMC` ha `V`; la data interna può essere quella di fabbrica (nel nostro caso 29/10/2006).
 - **Rollover della settimana GPS.** I ricevitori costruiti prima del 2019 contano le settimane con 10 bit: ogni 1024 settimane (19,6 anni) la data ritorna indietro. Il Nokia LD-3W dava il 22/11/2026 come **08/04/2007**. L'ora del giorno è giusta, la data no. L'applicazione **corregge il rollover** usando l'anno del computer (aggiunge 1024 settimane o multipli, se la data cade entro due giorni da quel multiplo) e **scarta** ogni ora GPS che resta lontana più di due giorni dal computer. Nella riga di stato compare `data GPS corretta (rollover di 1024 settimane)`.
 
+Per capire il difetto della data (e dei secondi intercalari) a fondo: [gps-tempo.md](gps-tempo.md).
+
 ## 6. Limiti per le prove
 - La **posizione** è affidabile (nel test: 9 satelliti, HDOP 1,0).
 - L'**ora** da un GPS Bluetooth ha un ritardo variabile (qualche centinaio di millisecondi o più) e nessun PPS: l'app la considera con un'incertezza di ±0,4 s. Per l'orario di partenza delle prove conviene **NTP** (Internet, anche dal telefono in hotspot) o un GPS con PPS.

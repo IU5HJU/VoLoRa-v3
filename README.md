@@ -14,6 +14,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 
 - [docs/roadmap.md](docs/roadmap.md): fasi del lavoro.
 - [docs/architettura.md](docs/architettura.md): ruoli, firmware, vincoli.
+- [docs/gps-tempo.md](docs/gps-tempo.md): il tempo del GPS spiegato con numeri veri (settimane, rollover, secondi intercalari) e script di calcolo.
 - [docs/gps-bluetooth.md](docs/gps-bluetooth.md): GPS Bluetooth su Linux (provato con il Nokia LD-3W): accoppiamento, rfcomm, fix e rollover della data.
 - [docs/applicazione.md](docs/applicazione.md): applicazione con interfaccia grafica per le prove (monitor seriali, tasti rapidi, risultati, invio su GitHub, immagini di prova).
 - [docs/simulatore-immagini.md](docs/simulatore-immagini.md): simulatore del protocollo immagini (frame veri, canale con perdite, scenari) e cosa ha trovato.
