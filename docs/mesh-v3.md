@@ -166,10 +166,14 @@ I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo.
 | 23/11/2026 | Il primo contatto può essere il solo nominativo. | autore |
 | 23/11/2026 | Più ripetitori contemporanei, ricezione da più stazioni con identificazione dei pacchetti mancanti. | autore |
 | 23/11/2026 | I ripetitori a fontana devono comunicarsi **un protocollo comune**; **meno stazioni ma più veloci**: una stazione in scarsissima portata, che imporrebbe un gradino lento, è **esclusa**; il pacchetto contiene l'informazione per decidere. (Punto 8b.) | autore |
+| 23/11/2026 | **Densità attesa: circa 5 stazioni per zona.** | autore |
+| 23/11/2026 | **Il gruppo di ripetitori è coordinato dal mittente** (il destinatario può mettere il veto). | autore |
+| 23/11/2026 | Regola "pochi e veloci" di partenza: **almeno 2 membri, tolleranza di 1 gradino** (da tarare sul simulatore). | autore |
+| 23/11/2026 | Primo passo del piano: **simulatore mesh sul PC**. | autore |
 | 22/11/2026 | La precisione dell'orologio richiesta è bassa: NTP o GPS bastano (anche per gli slot). | autore, [applicazione.md](applicazione.md) |
 
 ## 11. Da decidere
-1. **Quante stazioni** per zona (10? 50? 100?): determina tutto il beacon.
+1. ~~**Quante stazioni** per zona~~ **Deciso: circa 5.** Con 5 stazioni il beacon a R14 collide poco (vedi il simulatore mesh).
 2. **Gradino di ascolto** (fisso R10 o R12, oppure adattivo con R14 dove i vicini sono pochi), dopo le misure dei gradini stretti fra schede vere.
 3. **Anti collisione:** CAD più ritardo casuale, oppure slot dal nominativo, oppure entrambi.
 4. **Intervallo del beacon** e se adattivo.
