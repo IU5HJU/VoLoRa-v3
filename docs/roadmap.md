@@ -24,7 +24,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 - Firmware di misura già scritto (non provato su schede): [firmware-misura.md](firmware-misura.md).
 - Strato radio unico LoRa/FSK, driver SX1278 e SX1262.
 - Build di più firmware (uno per ruolo e per scheda) dallo stesso codice.
-- Livello di compatibilità v2 per voce e testo, verificato con i test della v2.
+- Livello di compatibilità v2 per voce, messaggio vocale e testo, verificato con i test della v2; **la v2 non si modifica** ([compatibilita-v2.md](compatibilita-v2.md)).
 
 ## Fase 3: protocollo immagini
 - Logica mesh voluta (beacon, polling, ripetitori, ricezione da più stazioni): [mesh-v3.md](mesh-v3.md), bozza del 23/11/2026.

@@ -18,11 +18,13 @@ Quando i nodi si **sentono** fra loro (stessa frequenza e coperture sovrapposte 
 ## 2. Cosa c'è già nella v2 (letto in `third_party/VoLoRa-v2/docs/protocollo.md`)
 - **CAD prima del PTT:** se il canale è occupato il PTT è rifiutato.
 - **Sessione casuale per ogni PTT** (2 byte) e nominativo nel pacchetto: due copie della stessa trasmissione si riconoscono.
-- **Bit `RELAYED`** (bit 7 del primo byte): un ripetitore **non ripete mai** un pacchetto con quel bit. Evita i cicli.
+- **Bit `RELAYED`** (bit 7 del byte dei flag, byte 4): un ripetitore **non ripete mai** un pacchetto con quel bit. Evita i cicli.
 - **Prima trasmissione sentita:** il ricevitore adotta la prima sessione che sente e ignora le altre finché dura (poi 3 s di silenzio o `END`).
 - **Annuncio di ripetitore occupato** (modo 6), per i messaggi lunghi.
 
 **Non ho trovato nella v2 una regola per scegliere fra due nodi che sentono la stessa stazione.** Quello che c'è serve a riconoscere le copie e a non fare cicli; l'elezione è nuova.
+
+**Regola di compatibilità (23/11/2026):** l'infrastruttura v2 **non si modifica** ([compatibilita-v2.md](compatibilita-v2.md)). Il voto è quindi fra **nodi V3**; la mobile v2 non cambia di un byte; un ripetitore v2 non può votare.
 
 ## 3. Logica proposta
 

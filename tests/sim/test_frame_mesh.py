@@ -85,5 +85,10 @@ check(dt["relayed"] and dt["hops"] == 2 and dt["flags"] & 1 and dt["offset"] == 
 dt = sim.decode(sim.enc_data(3, 10, b"x" * 16, 1))
 check(not dt["relayed"] and dt["hops"] == 0, "DATA normale: non ripetuto, 0 salti")
 
+# compatibilita' con la v2: nessun frame V3 e' un pacchetto v2 e viceversa (la v2 scarta la versione diversa da 2)
+v2 = bytes([0x21]) + bytes(8)                       # byte 0: versione 2, modo 1 (Codec2 1200)
+check(fm.decode(v2) is None and sim.decode(v2) is None, "un pacchetto v2 non viene decodificato dai decoder V3")
+v3 = [fm.enc_beacon("IU5HJU"), fm.enc_poll("IU5HJU", "IK5XYZ"), fm.enc_vote("IU5HJU", 1, 3, 1), sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100), sim.enc_data(1, 0, b"x" * 16)]
+check(all((f[0] >> 4) == 3 for f in v3), "tutti i frame V3 hanno la versione 3 nel nibble alto: una stazione v2 li scarta")
 print("frame mesh: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

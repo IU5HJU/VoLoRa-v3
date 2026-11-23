@@ -12,7 +12,7 @@ Trasferire **immagini** fra due stazioni con le massime prestazioni della radio 
 5. **Voce e testo restano nel protocollo v2**; questo protocollo è separato e non li sostituisce.
 
 ## 2. Compatibilità con la v2
-La v2 apre ogni pacchetto con un byte il cui nibble alto è la **versione** (2) e il basso il **modo** (1-7, 15) (`docs/protocollo.md` della v2). Il ricevitore v2 scarta ogni pacchetto con versione diversa da 2 (`lib/voicecore/packet.cpp`, riga 108). **I frame V3 usano versione 3**: `byte0 = 0x30 | tipo`. Una stazione v2 non li decodifica e non ne è disturbata, a parte l'occupazione del canale (che si evita con un canale proprio e con il CAD prima di trasmettere, come nella v2). Nelle fasi di prova i frame di test `tipo 15` servono al firmware di misura.
+La v2 apre ogni pacchetto con un byte il cui nibble alto è la **versione** (2) e il basso il **modo** (1-7, 15) (`docs/protocollo.md` della v2). Il ricevitore v2 scarta ogni pacchetto con versione diversa da 2 (`lib/voicecore/packet.cpp`, riga 108). **I frame V3 usano versione 3**: `byte0 = 0x30 | tipo`. Una stazione v2 non li decodifica e non ne è disturbata, a parte l'occupazione del canale (che si evita con un canale proprio e con il CAD prima di trasmettere, come nella v2). **Regola dell'autore (23/11/2026):** l'infrastruttura v2 non si modifica e il V3 è retrocompatibile solo per voce, messaggio vocale e testo; vedi [compatibilita-v2.md](compatibilita-v2.md). Nelle fasi di prova i frame di test `tipo 15` servono al firmware di misura.
 
 ## 3. La scala dei gradini
 Quindici gradini, dal più veloce al più robusto (R0-R14). I modi sono quelli di [scala-modi.md](scala-modi.md); R3-R14 sono LoRa CR 4/5, R0-R2 FSK.

@@ -30,6 +30,7 @@ La T3 non ha PSRAM ma ha lo slot microSD. Nei ruoli senza audio (nodo immagini, 
 5. **Compatibilità v2**: voce e testo, dal submodule.
 
 ## Vincoli
+- **Compatibilità v2 (deciso il 23/11/2026):** l'**infrastruttura v2 esistente resta senza modifiche**; il V3 è retrocompatibile solo per voce, messaggio vocale e testo del protocollo v2. Dettagli in [compatibilita-v2.md](compatibilita-v2.md).
 - **Internet (deciso il 23/11/2026):** è solo uno strumento per agevolare la sperimentazione, **non** un mezzo di comunicazione affidabile. Nulla di essenziale al protocollo (annunci, voto, coordinamento fra nodi) deve dipendere da Internet; l'orologio è NTP se c'è Internet, GPS se non c'è.
 - **Frequenze (deciso il 21/11/2026, precisato il 23/11/2026):** libere fra **430 e 440 MHz**, la gamma attribuita al servizio di radioamatore, senza limiti di larghezza di banda né di band plan: lo studio non entra nella divisione in fette fra i servizi, che cambia da paese a paese. Le modalità si scelgono per prestazioni e robustezza. La banda però è **condivisa e non larga**: si lavora il più possibile in **isofrequenza** (vedi [voting-isofrequenza.md](voting-isofrequenza.md)).
 - Identificazione periodica del nominativo, nessuna cifratura dei contenuti.
