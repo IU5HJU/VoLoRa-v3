@@ -1,0 +1,146 @@
+"""Simulatore dell'elezione fra due nodi che ricevono insieme la stessa stazione (voting / isofrequenza), per docs/voting-isofrequenza.md.
+
+Situazione: due nodi sulla STESSA frequenza con coperture che si sovrappongono in una zona. Una stazione mobile, a riposo, comincia a trasmettere e la
+sentono tutti e due. Chi deve ritrasmetterla verso la rete e verso gli altri ripetitori? Mai tutti e due insieme.
+
+Politiche (come ogni nodo decide quando partire):
+  nessuna   : tutti quelli che hanno decodificato partono subito
+  casuale   : ritardo casuale e ascolto: chi sente partire un altro si ferma
+  qualita   : ritardo proporzionale alla qualita' misurata (meglio il segnale, prima si parte) e ascolto
+Canale con cui un nodo viene a sapere che l'altro e' partito (annuncio):
+  rf        : sente il preambolo dell'altro (solo se i due nodi si sentono, dopo la finestra di rilevamento)
+  rete      : annuncio via rete (Internet o collegamento dati fra i nodi), con una latenza
+  nessuno   : non lo viene a sapere
+Modello di studio, NON misure: collegamenti stimati e ombreggiamento casuale."""
+import argparse
+import math
+import os
+import random
+import statistics
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import protocollo_immagini as pi  # noqa: E402
+import sim_mesh as sm  # noqa: E402
+
+RUNG = 6               # gradino della voce (ipotesi: dipende dal profilo VoLoRa v2 scelto)
+VULN = 0.010           # s: finestra in cui due partenze non si sentono (circa due simboli)
+W = 0.200              # s: ritardo massimo di partenza
+SPAN_DB = 20.0         # dB che coprono il ritardo da 0 a W
+MEAS_SIGMA = 1.0       # dB: errore di misura dell'SNR in un nodo
+LAT_RETE = 0.050       # s: latenza dell'annuncio via rete
+
+
+def _prx(rng, d_km, extra, shadow=None, sigma=8.0):
+    return 10.0 - sm.fspl_db(d_km) - extra + (rng.gauss(0.0, sigma) if shadow is None else shadow)
+
+
+def ritardo(politica, snr, rng, rid=RUNG):
+    if politica == "nessuna":
+        return 0.0
+    if politica == "casuale":
+        return rng.uniform(0.0, W)
+    m = snr + rng.gauss(0.0, MEAS_SIGMA) - (pi.sensitivity_dbm(rid))     # margine misurato
+    q = min(1.0, max(0.0, m / SPAN_DB))
+    return W * (1.0 - q)
+
+
+def elezione(delays, sentono, canale):
+    """delays: ritardi di partenza dei nodi che hanno decodificato; sentono[i][j]: i sente j in RF. Ritorna l'elenco di chi trasmette davvero."""
+    n = len(delays)
+    order = sorted(range(n), key=lambda i: delays[i])
+    partiti = []
+    for i in order:
+        ferma = False
+        for j in partiti:
+            gap = delays[i] - delays[j]
+            if canale == "rf" and sentono[i][j] and gap >= VULN:
+                ferma = True
+            elif canale == "rete" and gap >= LAT_RETE:
+                ferma = True
+        if not ferma:
+            partiti.append(i)
+    return partiti
+
+
+def run_elezione(politica, canale, dist_km=20.0, scenari=3000, seed=1, extra=25.0, nodi_si_sentono=None):
+    """Due nodi a dist_km; la mobile in un punto casuale della zona fra i due. Conta solo quando entrambi la decodificano.
+    nodi_si_sentono: None = calcolato dal collegamento fra i nodi; True/False = forzato (per separare l'effetto)."""
+    rng = random.Random(seed)
+    sens = pi.sensitivity_dbm(RUNG)
+    n = doppi = migliore = 0
+    ritardi = []
+    for _ in range(scenari):
+        x, y = rng.uniform(0.0, dist_km), rng.uniform(-0.3 * dist_km, 0.3 * dist_km)
+        d1, d2 = math.hypot(x, y), math.hypot(dist_km - x, y)
+        p1, p2 = _prx(rng, d1, extra), _prx(rng, d2, extra)
+        if p1 < sens or p2 < sens:
+            continue
+        n += 1
+        hear = _prx(rng, dist_km, extra) >= sens if nodi_si_sentono is None else nodi_si_sentono
+        sentono = [[True, hear], [hear, True]]
+        dl = [ritardo(politica, p1, rng), ritardo(politica, p2, rng)]
+        tx = elezione(dl, sentono, canale)
+        if len(tx) > 1:
+            doppi += 1
+        else:
+            migliore += 1 if (p1 >= p2) == (tx[0] == 0) else 0
+            ritardi.append(dl[tx[0]])
+    ok = n - doppi
+    return {"casi": n, "doppio_accesso": doppi / n if n else float("nan"), "migliore_se_unico": migliore / ok if ok else float("nan"),
+            "ritardo_medio_s": statistics.mean(ritardi) if ritardi else float("nan")}
+
+
+def run_percorso(isteresi_db, passi=60, dist_km=20.0, seed=1, extra=25.0, fading_db=3.0, prove=300):
+    """Una stazione si muove da un nodo all'altro e trasmette ogni `passi`-esimo punto. Conta i cambi di nodo (ognuno e' un possibile doppio accesso o un taglio).
+    isteresi_db = 0: sempre il migliore del momento; altrimenti si resta col nodo di prima finche' l'altro non lo supera di tanti dB."""
+    rng = random.Random(seed)
+    cambi = []
+    for _ in range(prove):
+        sh1, sh2 = rng.gauss(0, 4.0), rng.gauss(0, 4.0)        # ombreggiamento lento, fisso per la prova
+        cur = None
+        n = 0
+        for k in range(passi):
+            x = dist_km * (0.1 + 0.8 * k / (passi - 1))
+            p1 = _prx(rng, max(x, 0.05), extra, sh1 + rng.gauss(0, fading_db))
+            p2 = _prx(rng, max(dist_km - x, 0.05), extra, sh2 + rng.gauss(0, fading_db))
+            best = 0 if p1 >= p2 else 1
+            if cur is None:
+                cur = best
+            elif best != cur and abs(p1 - p2) >= isteresi_db:
+                cur = best
+                n += 1
+        cambi.append(n)
+    return statistics.mean(cambi)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--distanza", type=float, default=20.0)
+    ap.add_argument("--scenari", type=int, default=3000)
+    ap.add_argument("--seed", type=int, default=1)
+    a = ap.parse_args()
+    print(f"Due nodi a {a.distanza:g} km sulla stessa frequenza, gradino della voce R{RUNG}; solo i casi in cui la mobile e' decodificata da entrambi.")
+    print("| politica | annuncio | nodi si sentono | doppio accesso | nodo migliore (se unico) | ritardo medio |")
+    print("|---|---|---|---|---|---|")
+    for pol, can, hear in (("nessuna", "nessuno", None), ("casuale", "rf", True), ("casuale", "rf", False), ("qualita", "rf", True), ("qualita", "rf", False),
+                           ("qualita", "rete", False)):
+        r = run_elezione(pol, can, a.distanza, a.scenari, a.seed, nodi_si_sentono=hear)
+        print(f"| {pol} | {can} | {'si' if hear else ('no' if hear is False else '-')} | {100 * r['doppio_accesso']:.1f} % | {100 * r['migliore_se_unico']:.0f} % | {1000 * r['ritardo_medio_s']:.0f} ms |")
+    global W
+    print("\nCompromesso: ritardo massimo di partenza W contro doppio accesso (qualita', nodi che non si sentono, annuncio via rete 50 ms; qualita', nodi che si sentono in RF):")
+    print("| W | doppio accesso via rete | doppio accesso in RF | ritardo medio via rete |")
+    print("|---|---|---|---|")
+    w0 = W
+    for W in (0.1, 0.2, 0.4, 0.8):
+        r1 = run_elezione("qualita", "rete", a.distanza, a.scenari, a.seed, nodi_si_sentono=False)
+        r2 = run_elezione("qualita", "rf", a.distanza, a.scenari, a.seed, nodi_si_sentono=True)
+        print(f"| {1000 * W:.0f} ms | {100 * r1['doppio_accesso']:.1f} % | {100 * r2['doppio_accesso']:.1f} % | {1000 * r1['ritardo_medio_s']:.0f} ms |")
+    W = w0
+    print("\nCambi di nodo lungo un percorso fra i due (media per prova):")
+    for h in (0.0, 3.0, 6.0):
+        print(f"  isteresi {h:g} dB: {run_percorso(h, dist_km=a.distanza, seed=a.seed):.1f}")
+
+
+if __name__ == "__main__":
+    main()

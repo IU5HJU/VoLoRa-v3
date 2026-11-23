@@ -10,5 +10,5 @@
 8. **Convivenza:** senza vincoli di band plan, scegliere comunque come non disturbare chi è già sulla stessa frequenza (ascolto prima di trasmettere, identificazione).
 9. **Datasheet Semtech:** [radio-limiti.md](radio-limiti.md) usa fonti secondarie (RadioLib e tabelle LilyGO). Da confermare sui datasheet originali prima di fissare l'architettura.
 10. **MicroSD della T3:** usarla (opzionale) nel nodo immagini; verificare caricamento del firmware con la scheda inserita, corrente, disturbi alla ricezione e comportamento senza scheda. Vedi [scheda-sd.md](scheda-sd.md).
-12. **Voting nella modalità VOCE** (probabilmente VoLoRa v2): scelta fra nodi a copertura parzialmente sovrapposta da parte della periferica; vedi [mesh-v3.md](mesh-v3.md), punto 10b.
+12. **Voting e isofrequenza nella modalità VOCE** (probabilmente VoLoRa v2): scelta fra nodi a copertura parzialmente sovrapposta e un solo nodo che ritrasmette; logica e simulatore in [voting-isofrequenza.md](voting-isofrequenza.md), requisito in [mesh-v3.md](mesh-v3.md), punto 10b. Da decidere il ritardo iniziale accettabile e il canale dell'annuncio fra nodi.
 11. **Strumenti e laboratorio:** [piano-misure.md](piano-misure.md) §2b e §8: strumenti disponibili assegnati alle misure; una sola visita breve in laboratorio per l'analizzatore di spettro, più avanti.
