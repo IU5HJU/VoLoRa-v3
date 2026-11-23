@@ -10,7 +10,7 @@
 4. **Polling verso il destinatario.** Quando l'operatore inserisce il nominativo del destinatario di un testo o di un'immagine, la periferica avvia un tentativo di polling con la stazione di quel nominativo, per capire se ci sono le condizioni per inviare il contenuto (regole da sviluppare a protocollo maturo).
 5. **Scambio completo quando serve.** Dopo che le due stazioni si sono ascoltate con il solo nominativo, si scambiano **nominativo, rapporto di segnale e posizione** (GPS assoluta o locatore).
 6. **Percorso diretto se le condizioni di portata sono accettabili.** La trasmissione ha luogo.
-7. **Altrimenti via stazione terza, in stile mesh.** Più stazioni possono ripetere **contemporaneamente**.
+7. **Altrimenti via stazione terza, in stile mesh.** Più stazioni possono ripetere **contemporaneamente**, cioè far parte dello stesso gruppo di ripetitori (a turni sullo stesso canale: vedi il punto 8b).
 8. **La ricevente ricostruisce da più fonti.** Riceve e identifica ogni singolo pacchetto che manca all'immagine e costruisce l'immagine con pacchetti che arrivano anche da stazioni diverse.
 
 ## 2. Livelli del collegamento
@@ -93,8 +93,61 @@ Per quando la portata diretta non basta. Più ripetitori insieme sono voluti. Pr
 Il [protocollo immagini](protocollo-immagini.md) indirizza i pezzi per posizione e il ricevitore tiene una mappa dei pezzi: **più sorgenti per lo stesso oggetto sono già nel disegno**, a patto di due cambi:
 1. **Identificativo di oggetto globale** al posto della sessione casuale a 16 bit fra due sole stazioni.
 2. **STATUS in broadcast:** il ricevitore comunica quali pezzi mancano a chiunque ascolti, e ogni stazione che li ha può rispondere. Con più ripetitori è utile evitare le risposte doppie (stesse regole di soppressione).
-- **Variante con codici a fontana.** Invece di chiedere i pezzi mancanti, ogni ripetitore trasmette pezzi **codificati** diversi e il ricevitore ricostruisce l'immagine appena ne ha poco più del necessario, **da chiunque arrivino**. Non serve coordinare chi manda cosa. Costo: codifica e decodifica più pesanti sull'ESP32 e un poco di sovrapposizione. Da valutare sul simulatore contro la ritrasmissione selettiva.
+- **Variante con codici a fontana.** Invece di chiedere i pezzi mancanti, ogni ripetitore trasmette pezzi **codificati** diversi e il ricevitore ricostruisce l'immagine appena ne ha poco più del necessario, **da chiunque arrivino**. Non serve coordinare **chi manda cosa**; il **quando** sì: i ripetitori trasmettono a turni (punto 8b). Costo: codifica e decodifica più pesanti sull'ESP32 e un poco di sovrapposizione. Da valutare sul simulatore contro la ritrasmissione selettiva.
 - **Integrità:** CRC32 dell'oggetto verificato in fondo, indipendente dalla fonte dei pezzi.
+
+## 8b. Gruppo di ripetitori a fontana: protocollo comune e regola "pochi e veloci"
+Appunto dell'autore del 23/11/2026: (1) le stazioni che trasmettono a fontana devono potersi comunicare **un protocollo comune**; (2) è preferibile **meno stazioni ma più veloci**: una stazione in scarsissima portata, che richiederebbe un protocollo molto lento, va **esclusa** per dare priorità a chi si ascolta meglio; (3) nel pacchetto deve esserci l'**informazione** che permette questa scelta.
+
+### Il vincolo fisico (e una correzione al ragionamento precedente)
+Su **una frequenza** trasmette una stazione per volta, e il ricevitore ascolta **un gradino per volta**. Quindi i ripetitori di un gruppo trasmettono **a turni** e **allo stesso gradino**. Ne seguono due cose:
+- **Più ripetitori non moltiplicano la velocità.** Danno **copertura** e **diversità** (percorsi diversi, un ripetitore che cade non ferma il trasferimento), non più velocità sullo stesso canale. La velocità è quella del **gradino comune**.
+- **Il gradino comune è quello del membro più debole.** Un solo ripetitore con collegamento scarso trascina tutti a un gradino lento. È esattamente la regola voluta dall'autore.
+
+Esempio calcolato: cinque candidati, ciascuno con il gradino più veloce a cui ha almeno 6 dB di margine verso il ricevitore (R4, R5, R6, R7 e R10). Velocità netta dell'unico canale (SX1278):
+
+| Stazioni nel gruppo | Gradino comune | Velocità | Rispetto alla migliore |
+|---|---|---|---|
+| 1 (A) | R4 | 19,99 kbit/s | 100 % |
+| 2 (A, B) | R5 | 9,99 kbit/s | 50 % |
+| 3 (A, B, C) | R6 | 5,68 kbit/s | 28 % |
+| 4 (A, B, C, D) | R7 | 3,18 kbit/s | 16 % |
+| 5 (A, B, C, D, E) | R10 | 0,17 kbit/s | **1 %** |
+
+La quinta stazione fa scendere la velocità di **18 volte**. Va esclusa. Anche la seconda e la terza costano molto: per questo la regola deve avere dei **parametri** (punto "Regola di selezione").
+
+### Come si stabilisce il protocollo comune
+Quattro passi, tutti con frame del livello 2 (vedi punto 2 del documento):
+
+1. **RICHIESTA-RIPETITORI** (dal mittente): "chi può aiutarmi a portare l'oggetto X al destinatario Y?" Contiene l'identificativo globale dell'oggetto, il destinatario, la dimensione.
+2. **OFFERTA** (da ogni candidato): nominativo, **posizione** (GPS o locatore: regola fissa), **gradino massimo** a cui sente il mittente con almeno 6 dB di margine, **gradino massimo** a cui è sentito dal destinatario (se noto), i due **margini in dB**, i **codici supportati** (maschera di bit: ritrasmissione selettiva, fontana, versioni), la memoria libera.
+3. **GRUPPO** (dal mittente): l'**elenco ordinato** dei membri ammessi e degli **esclusi** (che restano in riserva), il **gradino comune**, il **codice scelto** (il migliore supportato da tutti i membri, altrimenti la ritrasmissione selettiva), i **parametri del codice** (numero di simboli sorgente, dimensione del simbolo, seme), l'**assegnazione dei turni** e l'ora di inizio.
+4. **CONFERMA o VETO** (dal destinatario): "ti sento a quel gradino" oppure "non sento il membro X a quel gradino". Il destinatario misura davvero i ripetitori che sente, e il suo veto vale.
+
+Chi non è nell'elenco **tace** per quell'oggetto: la priorità è delle stazioni che si ascoltano meglio.
+
+### Regola di selezione (proposta)
+1. Ordina i candidati per **gradino massimo** verso il destinatario (il più veloce prima), usando come qualità di una stazione il peggiore fra i due margini (verso il mittente e verso il destinatario).
+2. Scegli il **gruppo più piccolo di almeno N_min stazioni** (di base 2, per avere ridondanza) il cui **gradino comune non è più lento di una tolleranza T gradini** rispetto al migliore (di base 1).
+3. Gli altri sono **esclusi** e restano in **riserva**: entrano se un membro cade.
+4. **Isteresi:** un membro escluso rientra solo se il suo margine supera di almeno 3 dB la soglia per due finestre di fila.
+
+I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo.
+
+### Informazione nel pacchetto
+- Nell'OFFERTA: **classe di qualità** = gradino massimo con 6 dB di margine (4 bit) e i **margini in dB** verso mittente e destinatario (1 byte ciascuno).
+- Nel GRUPPO: per ogni nominativo un campo **AMMESSO / ESCLUSO / RISERVA** e il turno assegnato.
+- Nello **STATUS** del destinatario (in broadcast): una **classifica** per stazione di quanti simboli utili sono arrivati, così il mittente può togliere o riammettere un membro durante il trasferimento.
+
+### I simboli a fontana e i turni
+- Ogni simbolo ha un identificativo **ESI** che, con il seme comune, definisce da quali pezzi è composto. Per non sovrapporsi, ogni stazione usa gli identificativi **ESI = contatore × M + posizione nel gruppo** (M = numero di membri): nessuna coordinazione sui contenuti.
+- Il **quando** si coordina con i turni: assegnati nel GRUPPO e legati all'**orologio** (basta un'ora esatta entro 1 secondo, già deciso).
+
+### Cose da decidere
+1. Valori di **N_min** e **T**.
+2. **Chi coordina**: il mittente (come proposto, ha il contenuto), oppure il destinatario (misura meglio le stazioni che sente).
+3. Quali **famiglie di codici** supportare nella prima versione (di partenza: ritrasmissione selettiva e un solo codice a fontana).
+4. Se i membri **si sentono fra loro**: se no, i turni devono bastare da soli per non collidere.
 
 ## 9. Cosa cambia nel protocollo immagini già scritto
 | Punto | Oggi | Con il mesh |
@@ -112,6 +165,7 @@ Il [protocollo immagini](protocollo-immagini.md) indirizza i pezzi per posizione
 | 23/11/2026 | **Nominativo, rapporto di segnale e posizione (locatore o GPS)** sono elementi fissi di ogni collegamento. Nessuna privacy. | autore, [regole-radioamatoriali.md](regole-radioamatoriali.md) |
 | 23/11/2026 | Il primo contatto può essere il solo nominativo. | autore |
 | 23/11/2026 | Più ripetitori contemporanei, ricezione da più stazioni con identificazione dei pacchetti mancanti. | autore |
+| 23/11/2026 | I ripetitori a fontana devono comunicarsi **un protocollo comune**; **meno stazioni ma più veloci**: una stazione in scarsissima portata, che imporrebbe un gradino lento, è **esclusa**; il pacchetto contiene l'informazione per decidere. (Punto 8b.) | autore |
 | 22/11/2026 | La precisione dell'orologio richiesta è bassa: NTP o GPS bastano (anche per gli slot). | autore, [applicazione.md](applicazione.md) |
 
 ## 11. Da decidere
