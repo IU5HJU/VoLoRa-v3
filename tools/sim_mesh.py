@@ -81,25 +81,28 @@ def beacon_slot_adattivo(n, t, period, cycles, rng, warmup=10):
     return ok / tot
 
 
-def beacon_ascolto(n, t, period, cycles, rng, vuln=None):
+def beacon_ascolto(n, t, period, cycles, rng, vuln=None, nascosti=0.0):
     """Ascolto prima di parlare: una stazione che trova il canale occupato aspetta la fine e un ritardo casuale; collide solo se due iniziano entro la
-    finestra di rilevamento `vuln` (di base 2 simboli LoRa: il preambolo non si sente subito)."""
+    finestra di rilevamento `vuln` (di base 2 simboli LoRa: il preambolo non si sente subito).
+    `nascosti` = probabilita' che due stazioni non si sentano fra loro (terminali nascosti): ognuna ascolta solo chi sente."""
     ok = tot = 0
     for _ in range(cycles):
-        want = sorted((rng.uniform(0, period - t), i) for i in range(n))
-        busy_until = -1.0
-        last_start = -1e9
+        sente = {}
+        for i in range(n):
+            for j in range(i + 1, n):
+                sente[(i, j)] = sente[(j, i)] = rng.random() >= nascosti
+        queue = sorted((rng.uniform(0, period - t), i) for i in range(n))
+        tx = []                                    # (inizio, fine, stazione)
         started = []
-        queue = list(want)
         while queue:
             queue.sort()
             s, i = queue.pop(0)
-            if s < busy_until and s - last_start >= (vuln or 0.0):
-                queue.append((busy_until + rng.uniform(0, 4 * t), i))     # canale occupato e rilevato: ritarda
+            sentiti = [(a, b, j) for (a, b, j) in tx if sente[(i, j)] and a <= s < b and s - a >= (vuln or 0.0)]
+            if sentiti:
+                queue.append((max(b for _, b, _ in sentiti) + rng.uniform(0, 4 * t), i))
                 continue
+            tx.append((s, s + t, i))
             started.append(s)
-            last_start = s
-            busy_until = max(busy_until, s + t)
         bad = _overlap(started, t)
         ok += n - sum(bad)
         tot += n
@@ -151,7 +154,7 @@ def candidates(sc):
 
 
 # ------------------------------------------------------------------------------------------------------------------ politiche
-EPS = 0.05    # sovrapposizione della fontana: servono K(1+eps) simboli
+EPS = 1.6 / 128    # sovrapposizione della fontana MISURATA con tools/fontana.py: ~1,6 simboli per generazione di 128 pezzi
 
 
 def time_group(size, members, fountain=True):

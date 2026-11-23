@@ -37,6 +37,11 @@ ad20, pu20 = sm.beacon_slot_adattivo(20, t, T, 200, rng), sm.beacon_puro(20, t, 
 check(ad20 > 0.95 and ad20 > pu20 + 0.4, f"slot adattivo con 20 stazioni: {ad20 * 100:.1f} % contro {pu20 * 100:.1f} % del puro")
 pu50, as50 = sm.beacon_puro(50, t, T, 1500, rng), sm.beacon_ascolto(50, t, T, 600, rng, vuln=2 * 2 ** sf / (bw * 1000))
 check(as50 > pu50 + 0.3, f"ascolto prima di parlare con 50 stazioni: {as50 * 100:.1f} % contro {pu50 * 100:.1f} % del puro")
+# terminali nascosti: piu' stazioni non si sentono, peggio l'ascolto
+v = 2 * 2 ** sf / (bw * 1000)
+h0, h2, h5 = (sm.beacon_ascolto(50, t, T, 300, random.Random(1), v, h) for h in (0.0, 0.2, 0.5))
+check(h0 > h2 > h5, f"terminali nascosti, 50 stazioni: {h0 * 100:.0f} % senza, {h2 * 100:.0f} % con 20 %, {h5 * 100:.0f} % con 50 % di coppie nascoste")
+check(sm.EPS < 0.02, f"sovrapposizione della fontana misurata: {sm.EPS * 100:.2f} % (non piu' l'ipotesi del 5 %)")
 # l'ordine dei metodi con 5 stazioni
 check(sm.beacon_puro(5, t, T, 3000, rng) < sm.beacon_slot(5, t, T, 3000, rng) < 1.0, "con 5 stazioni: slot meglio del puro")
 

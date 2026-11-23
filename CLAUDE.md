@@ -14,5 +14,5 @@ In questo progetto radioamatoriale nominativo, rapporto di segnale e posizione (
 ## Per il resto
 - Lingua dei documenti e dei messaggi: italiano.
 - Il progetto è uno **studio** (protocollo VoLoRa V3): dichiarare sempre cosa è provato su schede vere e cosa no.
-- Prove sul PC: `make -C firmware/misura test`, `python3 tests/app/test_core.py`, `python3 tests/sim/test_sim_immagini.py`, `python3 tests/sim/test_sim_mesh.py`, `python3 tests/app/test_timesync.py`, `python3 tests/app/test_field.py`, `python3 tests/app/test_bluetooth.py`; interfaccia con `xvfb-run -a python3 tests/app/test_gui.py`.
+- Prove sul PC: `make -C firmware/misura test`, `python3 tests/app/test_core.py`, `python3 tests/sim/test_sim_immagini.py`, `python3 tests/sim/test_sim_mesh.py`, `python3 tests/sim/test_fontana.py`, `python3 tests/app/test_timesync.py`, `python3 tests/app/test_field.py`, `python3 tests/app/test_bluetooth.py`; interfaccia con `xvfb-run -a python3 tests/app/test_gui.py`.
 - Le decisioni già prese stanno in `docs/punti-aperti.md` e `docs/roadmap.md`; la precisione dell'orologio richiesta è in `docs/applicazione.md` (basta NTP o GPS, nessuna ricerca di precisione estrema).

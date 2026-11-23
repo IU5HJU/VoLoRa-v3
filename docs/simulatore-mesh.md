@@ -5,8 +5,8 @@ Programma da riga di comando ([`tools/sim_mesh.py`](../tools/sim_mesh.py), prove
 > **Stato (23/11/2026): scritto e provato sul PC. Il modello è un'ipotesi, NON misure.** I collegamenti usano la perdita in spazio libero più una perdita extra media (ostacoli) con ombreggiamento casuale, e le sensibilità **stimate** di [scala-modi.md](scala-modi.md). Dice come si comporta la **logica**, non quanto va lontano la radio. Nessuna parte è provata su schede.
 
 ## Cosa simula
-1. **Beacon** (solo nominativo, 7 byte): ALOHA puro, **slot dal nominativo** (fissi), **slot adattivo** (chi collide sceglie uno slot libero), **ascolto prima di parlare** (con finestra di rilevamento di due simboli). Tutte le stazioni si sentono fra loro (nessun terminale nascosto).
-2. **Gruppo di ripetitori:** mittente a (0, 0), destinatario a distanza D, ripetitori sparsi a caso. Ogni collegamento usa il **gradino più veloce con almeno 6 dB di margine**. Un solo canale: **i membri trasmettono a turni al gradino comune, il più lento dei membri**. Fase 1: il mittente passa l'oggetto ai membri. Fase 2: i membri mandano al destinatario simboli a fontana (5 % di sovrapposizione). Ogni ripetitore può cadere con probabilità p (di base 15 %).
+1. **Beacon** (solo nominativo, 7 byte): ALOHA puro, **slot dal nominativo** (fissi), **slot adattivo** (chi collide sceglie uno slot libero), **ascolto prima di parlare** (con finestra di rilevamento di due simboli). Di base tutte le stazioni si sentono fra loro; il parametro `nascosti` è la probabilità che due stazioni non si sentano (terminali nascosti).
+2. **Gruppo di ripetitori:** mittente a (0, 0), destinatario a distanza D, ripetitori sparsi a caso. Ogni collegamento usa il **gradino più veloce con almeno 6 dB di margine**. Un solo canale: **i membri trasmettono a turni al gradino comune, il più lento dei membri**. Fase 1: il mittente passa l'oggetto ai membri. Fase 2: i membri mandano al destinatario simboli a fontana (sovrapposizione misurata con il codice vero: 1,6 simboli ogni 128 pezzi, circa 1,25 %). Ogni ripetitore può cadere con probabilità p (di base 15 %).
 3. **Politiche confrontate:** solo il **diretto**; il **miglior ripetitore singolo**; **tutti** i candidati; la **regola** (almeno N_min membri, gradino comune non più lento del migliore di oltre T gradini); **diretto o regola** (il più veloce dei due).
 
 ## Risultati: i beacon (gradino R14, un beacon ogni 10 minuti, 7 byte = 15,9 s)
@@ -17,7 +17,7 @@ Programma da riga di comando ([`tools/sim_mesh.py`](../tools/sim_mesh.py), prove
 | 50 | 7.1 % | 6.9 % | 26.0 % | 32.1 % | 59.0 % |
 
 - **Con circa 5 stazioni per zona (la decisione dell'autore) il beacon a R14 va bene**: il caso peggiore (nessun coordinamento) dà il 79,9 % di beacon senza collisione, lo **slot adattivo** il 100 %. Con 20 stazioni il puro scende al 35 %, ma slot adattivo e ascolto restano oltre il 94 %.
-- A **50 stazioni** a R14 non ci sono abbastanza slot (circa 37 nel periodo): lo slot adattivo non basta; l'**ascolto prima di parlare** tiene il 60-70 %, ma in questo modello non esistono i terminali nascosti, che nella realtà lo peggiorano. Con tante stazioni serve un gradino meno estremo (R12 o R10).
+- A **50 stazioni** a R14 non ci sono abbastanza slot (circa 37 nel periodo): lo slot adattivo non basta; l'**ascolto prima di parlare** tiene il 60-70 %, e **con i terminali nascosti lo peggiorano molto**: nella prova a 50 stazioni (R14) è circa 60 % se tutte si sentono, circa 28 % con il 20 % di coppie nascoste, circa 13 % con il 50 %. Con zone grandi non ci si può fidare dell'ascolto: servono gli slot dall'orologio. Con tante stazioni serve un gradino meno estremo (R12 o R10).
 - La **simulazione concorda con le formule** del documento (puro simulato 79,9 % contro 76,7 % di formula a 5 stazioni; 35,0 % contro 34,7 % a 20).
 
 ## Risultati: la regola "pochi e veloci"
@@ -103,10 +103,10 @@ Stessi scenari, 25 km, 3 e 8 ripetitori candidati:
 
 ## Limiti del modello
 - **Tutto stimato:** sensibilità, perdita extra e ombreggiamento. I numeri relativi (la regola contro tutti i candidati) sono più affidabili di quelli assoluti.
-- **Un canale e nessun terminale nascosto.** Nella realtà due stazioni lontane fra loro possono non sentirsi e collidere: i turni dall'orologio servono proprio a questo.
+- **Un canale.** I terminali nascosti sono simulati solo nei beacon, non nel gruppo di ripetitori. Nella realtà due stazioni lontane fra loro possono non sentirsi e collidere: i turni dall'orologio servono proprio a questo.
 - **Due fasi in sequenza** (mittente ai ripetitori, poi ai destinatari), senza sovrapposizione. Un'implementazione che passa i pezzi ai ripetitori mentre li rilancia sarebbe più veloce.
 - **Caduta dei ripetitori** indipendente e uguale per tutti.
-- **La fontana** è modellata solo come 5 % di simboli in più, non come codice vero.
+- **La fontana** nel Monte Carlo è ancora un costo di tempo (1,25 %), ma quel valore ora viene dal codice vero ([`tools/fontana.py`](../tools/fontana.py): combinazioni casuali su GF(2), decodifica con eliminazione di Gauss, ESI = contatore × M + indice, prova con tre membri e perdita 50 %). Non è provato su schede.
 
 ## Prossimi passi
-Aggiungere i terminali nascosti, una sovrapposizione fra le due fasi, il codice a fontana vero e la perdita dei pacchetti dentro le fasi; poi collegare la scelta del gruppo ai frame di [mesh-v3.md](mesh-v3.md) (RICHIESTA-RIPETITORI, OFFERTA, GRUPPO).
+Aggiungere i terminali nascosti al gruppo di ripetitori, una sovrapposizione fra le due fasi e la perdita dei pacchetti dentro le fasi; poi collegare la scelta del gruppo ai frame di [mesh-v3.md](mesh-v3.md) (RICHIESTA-RIPETITORI, OFFERTA, GRUPPO).
