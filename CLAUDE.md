@@ -5,6 +5,11 @@
 In questo progetto radioamatoriale nominativo, rapporto di segnale e posizione (locatore o GPS assoluta) sono elementi essenziali e fissi, da trasmettere sempre.
 **Non** proporre privacy, anonimizzazione, posizione spenta di base, avvertenze o campi per nascondere la posizione. Il responsabile del progetto (IU5HJU) ha chiarito la regola più volte: non va riaperta.
 
+## Appunti di progetto da rileggere
+- `docs/regole-radioamatoriali.md`: nominativo, rapporto e posizione sempre; nessuna privacy.
+- `docs/mesh-v3.md`: la logica mesh voluta dall'autore e il registro delle decisioni (sezione 10).
+- `docs/protocollo-immagini.md`, `docs/simulatore-immagini.md`, `docs/scala-modi.md`: protocollo e numeri dei gradini.
+
 ## Per il resto
 - Lingua dei documenti e dei messaggi: italiano.
 - Il progetto è uno **studio** (protocollo VoLoRa V3): dichiarare sempre cosa è provato su schede vere e cosa no.

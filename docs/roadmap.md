@@ -27,6 +27,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 - Livello di compatibilità v2 per voce e testo, verificato con i test della v2.
 
 ## Fase 3: protocollo immagini
+- Logica mesh voluta (beacon, polling, ripetitori, ricezione da più stazioni): [mesh-v3.md](mesh-v3.md), bozza del 23/11/2026.
 - Bozza v0.1: [protocollo-immagini.md](protocollo-immagini.md) (scritta il 21/11/2026, prima delle misure).
 - Simulatore sul PC: [simulatore-immagini.md](simulatore-immagini.md) (corregge la bozza in quattro punti, tre problemi aperti).
 - Codifica a livelli: prima una versione piccola e utile, poi i raffinamenti.
