@@ -59,7 +59,7 @@ Scheda **Prove sul campo**: ogni collega ha **una scheda** collegata al proprio 
 ## Invio dei risultati su GitHub
 - **2a, senza token (per tutti):** apre nel browser la pagina "nuova segnalazione" del repository già compilata con le note e la tabella; tu **allegi il CSV** e invii. Se il testo è troppo lungo per l'indirizzo viene accorciato (il CSV completo si allega).
 - **2b, con un token (per i collaboratori con permesso di scrittura):** crea un ramo `misure/NOMINATIVO-data`, carica CSV e note in `docs/misure/` e apre una **richiesta di modifica** (PR). Il token si crea in GitHub (Settings, Developer settings) con permesso di scrittura sul repository; **non viene salvato** se non spunti "Ricorda" (in quel caso sta in chiaro in `~/.config/volora-misure/config.json`, con permessi ristretti).
-- Le note e i nomi delle schede si scrivono nella stessa scheda. **Privacy:** niente coordinate precise di casa nelle note, solo il locatore a 6 caratteri.
+- Le note e i nomi delle schede si scrivono nella stessa scheda. Nelle note e nei dati si indicano nominativo, locatore e, se c'è, la posizione GPS ([regole-radioamatoriali.md](regole-radioamatoriali.md)).
 
 ## Immagini di prova
 La scheda **Immagini** prepara gli oggetti per le prove del [protocollo immagini](protocollo-immagini.md): un **blocco di byte pseudocasuali** di dimensione a scelta (con CRC32), uno **schema di prova PNG** a larghezza e altezza a scelta (gradiente, griglia, cerchio, barre) oppure un **JPEG progressivo** (serve Pillow). I file vanno in `~/volora-immagini/`. Per ogni oggetto mostra il **tempo stimato per ogni gradino** della scala (da `tools/protocollo_immagini.py`), per la coppia SX1278 o SX1262.

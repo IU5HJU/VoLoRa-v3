@@ -69,7 +69,7 @@ Per ogni misura servono: **data, scheda e versione del firmware** (`INFO`), **fi
 1. **Apri una segnalazione (Issue)** nel repository con il titolo "Misure - tuo nominativo - data" e allega i file.
 2. **Proponi una modifica (fork e pull request):** metti il CSV e una pagina di note in `docs/misure/` con il nome `AAAA-MM-GG-nominativo-scheda.csv` (e `.md`). Prima esegui `make test` in `firmware/misura`.
 
-**Privacy:** la posizione esatta di casa è un dato personale. Nelle prove sul campo basta il **locatore a 6 caratteri** (per esempio `JN53ab`) o la distanza fra le due stazioni; le coordinate precise le pubblichi solo se vuoi.
+**Posizione:** in ogni prova sul campo si indicano **nominativo, locatore e, se c'è, la posizione GPS** (regola del progetto: [regole-radioamatoriali.md](regole-radioamatoriali.md)).
 
 ## 7. Se qualcosa non va
 Apri una segnalazione con: scheda, firmware (`INFO`), comando dato, testo completo di ciò che compare sulla seriale e cosa ti aspettavi. Un errore chiaro vale più di mille ipotesi.
