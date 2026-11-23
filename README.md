@@ -6,7 +6,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 
 ## Rapporto con VoLoRa v2
 
-- Voce e testo restano in **protocollo VoLoRa v2** e devono funzionare fra una stazione V3 e una v2.
+- Voce, messaggio vocale e testo restano in **protocollo VoLoRa v2** e devono funzionare fra una stazione V3 e una v2. **L'infrastruttura v2 esistente non si modifica**: il V3 è retrocompatibile solo per questo traffico ([docs/compatibilita-v2.md](docs/compatibilita-v2.md)).
 - Il codice della v2 si riusa senza copiarlo: sta nel submodule `third_party/VoLoRa-v2`, **fissato al tag `v0.1.0-rc.1`** di VoLoRa (commit `0efa2a3`). Per aggiornarlo si sposta su un altro tag, mai su un ramo.
 - Dopo aver clonato: `git submodule update --init`.
 
@@ -21,7 +21,11 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 - [docs/protocollo-immagini.md](docs/protocollo-immagini.md): bozza del protocollo immagini V3 (gradini, frame, negoziazione, ridimensionamento).
 - [docs/scala-modi.md](docs/scala-modi.md): bozza della scala dei modi LoRa/FSK (calcolata, non misurata).
 - [docs/firmware-misura.md](docs/firmware-misura.md): firmware di misura (non è il V3) e pilota dal PC.
-- [docs/simulatore-mesh.md](docs/simulatore-mesh.md): simulatore mesh (collisioni dei beacon, scelta del gruppo di ripetitori, taratura della regola) con i risultati.
+- [docs/simulatore-mesh.md](docs/simulatore-mesh.md): simulatore mesh (collisioni dei beacon, scelta del gruppo di ripetitori, taratura della regola, terminali nascosti) con i risultati.
+- [docs/terminali-nascosti.md](docs/terminali-nascosti.md): cosa sono i terminali nascosti e perché il protocollo usa turni dall'orologio, voto e veto del destinatario.
+- [docs/voting-isofrequenza.md](docs/voting-isofrequenza.md): più nodi sulla stessa frequenza nella voce: elezione per qualità e voto via radio (Internet non è affidabile).
+- [docs/compatibilita-v2.md](docs/compatibilita-v2.md): la regola di compatibilità con la v2 (infrastruttura invariata).
+- [docs/prova-gradini-lenti.md](docs/prova-gradini-lenti.md): prova in laboratorio dei gradini R10-R14 fra le due T3, con la serie F10 dell'app.
 - [docs/mesh-v3.md](docs/mesh-v3.md): bozza della logica mesh V3 (beacon, polling, ripetizione, ricezione da più stazioni) con numeri calcolati e decisioni.
 - [docs/regole-radioamatoriali.md](docs/regole-radioamatoriali.md): regola di progetto: nominativo, rapporto di segnale e posizione (locatore o GPS) sempre; nessuna privacy.
 - [docs/metodo-di-prova.pdf](docs/metodo-di-prova.pdf): il metodo di prova spiegato in tre pagine, da condividere con i colleghi che vogliono partecipare.

@@ -11,7 +11,7 @@ Ogni dispositivo ha **un compito solo** e un firmware che fa soltanto quello. Da
 | Nodo immagini | invio e ricezione di immagini | LoRa e FSK, negoziazione del modo |
 | Ripetitore RX | ascolta e configura la TX | come oggi, firmware dedicato |
 | Ripetitore TX | trasmette | come oggi, firmware dedicato |
-| Nodo Internet | porta i pacchetti al reflector | gateway |
+| Nodo Internet | porta i pacchetti al reflector | gateway; **solo aiuto alla sperimentazione**, non fa parte del collegamento radio affidabile |
 
 Da decidere: se le immagini passano da ripetitore e reflector.
 

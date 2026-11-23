@@ -41,6 +41,8 @@ Scheda **Prove sul campo**: ogni collega ha **una scheda** collegata al proprio 
 
 **Cosa NON è provato:** NTP e GPS **veri** (la logica è provata con un server NTP finto in locale e con frasi NMEA finte, anche con PPS), la scheda con una seriale vera, e il comportamento su due computer. Il limite sull'orario di partenza è quello dell'orologio meno preciso fra i due, più il tempo che la scheda impiega a cominciare dopo il comando (millisecondi, trascurabili rispetto ai tempi in aria di LoRa).
 
+**Serie di modi nella scheda Prove sul campo:** il campo **Serie di modi** (per esempio `R11,R12,R13,R14`) programma più prove una dopo l'altra da un solo T0: il piano dipende solo da T0, dai modi e dai parametri, quindi i due colleghi lo ricavano uguale. A fine serie **Copia tutte** e **Incolla i dati del collega…** (anche più righe insieme, abbinate per modo e T0). Provato con le schede finte; guida in [prova-gradini-lenti.md](prova-gradini-lenti.md).
+
 ## Tasti rapidi
 | Tasto | Azione |
 |---|---|

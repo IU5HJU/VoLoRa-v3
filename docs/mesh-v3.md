@@ -67,7 +67,7 @@ Beacon solo nominativo (7 byte), un beacon ogni 10 minuti: probabilita' di arriv
 4. **Scelta da fare dopo le misure:** gradino di ascolto fisso (R12 o R10, più veloce e con meno collisioni) oppure R14 solo dove i vicini sono pochi (gradino adattivo, annunciato nel beacon).
 
 ## 5. Anti collisione: strumenti disponibili
-Da scegliere e confrontare sul simulatore (nessuna è ancora decisa):
+Da scegliere e confrontare sul simulatore. **Esito del 23/11/2026:** l'ascolto prima di parlare da solo non basta con i **terminali nascosti** ([terminali-nascosti.md](terminali-nascosti.md)): per beacon e turni si usano gli **slot dall'orologio**. Gli strumenti:
 - **Ascolto prima di parlare** (il CAD del chip: rileva un preambolo LoRa in corso) e **ritardo casuale** prima di trasmettere.
 - **Slot dall'orologio:** ogni stazione sceglie lo slot dal proprio nominativo (funzione di hash). Serve un'ora esatta entro 1-2 secondi (NTP o GPS: già disponibile nell'applicazione).
 - **Intervallo del beacon adattivo** (più lungo con più vicini).
@@ -177,11 +177,11 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 19, OFFERTA 23, GRU
 ## 9. Cosa cambia nel protocollo immagini già scritto
 | Punto | Oggi | Con il mesh |
 |---|---|---|
-| Identificativo di sessione | 16 bit casuali, due stazioni | identificativo di oggetto globale (origine + contatore) e contatore di salti |
-| HELLO / OFFER | nominativo, capacità | + **posizione** (locatore o GPS) e rapporto di segnale (regola fissa) |
+| Identificativo di sessione | 16 bit casuali, due stazioni | identificativo di oggetto globale (CRC16 di origine + contatore) e salti nel flag del DATA — **fatto in `tools/frame_mesh.py` (punto 8c), provato sul PC** |
+| HELLO / OFFER | nominativo, capacità | + **posizione** (locatore o GPS) e rapporto di segnale (regola fissa) — **fatto nel codec del simulatore (flag 16), provato sul PC** |
 | STATUS | risposta al mittente | anche in broadcast, con soppressione dei duplicati |
 | Rendezvous | R10 fisso | gradino di ascolto da decidere (punto 4) |
-| Flag dei frame | LAST, RETX... | + RELAYED (come nella v2) e salti |
+| Flag dei frame | LAST, RETX... | + RELAYED (flag 16, solo per i frame V3; non è il bit `RELAYED` della v2) e salti (bit 5-7) — **fatto** |
 
 ## 10. Registro delle decisioni
 | Data | Decisione | Fonte |
@@ -199,31 +199,31 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 19, OFFERTA 23, GRU
 | 23/11/2026 | **Internet non è un mezzo affidabile** in un progetto radioamatoriale: è solo un aiuto per la sperimentazione. Nessun annuncio o coordinamento fra i nodi passa da Internet: va via radio (stessa ragione per cui l'orologio è NTP **o** GPS). Il voto fra due nodi in isofrequenza avviene via radio sul canale di servizio (frame VOTO); ritardo massimo di partenza 200 ms (compensato dal loop del microfono della v2). | autore |
 | 23/11/2026 | La banda di riferimento resta **430-440 MHz** (gamma del servizio di radioamatore; la divisione in fette fra i servizi non interessa allo studio, e cambia nei paesi vicini). Non è larga e non è libera da altri servizi: si lavora il più possibile in **isofrequenza**. Nella voce, due nodi che sentono insieme la mobile non devono trasmettere tutti e due; chi instrada per primo si decide con un'elezione per qualità. Il voting vero non è obbligatorio. (Vedi [voting-isofrequenza.md](voting-isofrequenza.md).) | autore |
 | 23/11/2026 | I **terminali nascosti** vanno gestiti con turni dall'orologio e veto del destinatario, non con il solo ascolto: simulato nei beacon e nel gruppo di ripetitori. Spiegazione in [terminali-nascosti.md](terminali-nascosti.md). | autore, simulatore |
-| 23/11/2026 | Va studiata una **tecnologia di voting** per la modalità VOCE (probabilmente VoLoRa v2): la periferica sceglie fra nodi a copertura parzialmente sovrapposta; due nodi con la stessa frequenza e copertura sovrapposta non sono possibili (lo gestiscono i radioamatori). (Punto 10b.) | autore |
+| 23/11/2026 | Va studiata una **tecnologia di voting** per la modalità VOCE (probabilmente VoLoRa v2): due nodi a copertura **parzialmente** sovrapposta; una sovrapposizione ampia e stabile sulla stessa frequenza non è possibile (lo gestiscono i radioamatori). Logica proposta: [voting-isofrequenza.md](voting-isofrequenza.md). (Punto 10b.) | autore |
 | 22/11/2026 | La precisione dell'orologio richiesta è bassa: NTP o GPS bastano (anche per gli slot). | autore, [applicazione.md](applicazione.md) |
 
 ## 10b. Voting nella modalità VOCE (da studiare)
 Requisito dell'autore (23/11/2026): quando le stazioni usano la modalità **VOCE** (da individuare, probabilmente quella del **VoLoRa v2**), il protocollo V3 dovrà prevedere una **tecnologia di voting**.
 
 - **Perché.** La larghezza di banda di LoRa è grande: è più corretto **non occupare più frequenze per lo stesso servizio**. Più nodi dello stesso servizio possono avere una **copertura parzialmente sovrapposta**, e la periferica deve poter **scegliere** quale usare.
-- **Cosa deve poter fare la periferica radio in modalità normale:** scegliere fra **due nodi a copertura parzialmente sovrapposta** quello migliore (per esempio per rapporto di segnale), e cambiare quando le condizioni cambiano (con isteresi, per non rimbalzare).
+- **Cosa deve poter fare la periferica radio in modalità normale:** collegarsi al nodo migliore fra **due nodi a copertura parzialmente sovrapposta** e cambiare quando le condizioni cambiano, con isteresi per non rimbalzare. **Con la regola di compatibilità v2** ([compatibilita-v2.md](compatibilita-v2.md)) la periferica v2 non cambia: la scelta è **lato nodo** (elezione per qualità, memoria del vincitore, voto via radio); la periferica sceglie davvero solo se i nodi hanno frequenze diverse.
 - **Vincolo noto (regola dei radioamatori):** **due nodi con copertura radio ampiamente e stabilmente sovrapposta sulla stessa frequenza non sono possibili**: si disturberebbero. Una sovrapposizione **limitata** (una zona dove la mobile passa) invece è il caso voluto: vedi l'aggiornamento qui sotto. La gestione è affidata ai radioamatori che installano i nodi, come si fa con i ripetitori. Il protocollo non deve cercare di risolvere la sovrapposizione sulla stessa frequenza, ma deve rendere possibile la scelta quando le frequenze (o i turni) sono diversi.
-- **Da studiare:** come il nodo si annuncia (beacon con frequenza, profilo e carico), la metrica di scelta (RSSI, SNR, margine, perdita recente), l'isteresi del cambio, il cambio **durante** un turno di parola, e il comportamento con un nodo che si ascolta male. Collegamento con i beacon e il rapporto di segnale già previsti dal mesh.
+- **Ancora da studiare:** la frequenza del canale di servizio fra i nodi, quante ripetizioni del VOTO, il cambio **durante** un turno di parola (di base no), il nominativo perso se manca il pacchetto START della v2, e il comportamento con un nodo che si ascolta male. La metrica (margine in dB), l'isteresi (3 dB) e il ritardo (200 ms) sono nella proposta.
 - **Aggiornamento del 23/11/2026 (secondo requisito dell'autore).** La banda di riferimento è **430-440 MHz** (la gamma del servizio di radioamatore; la divisione in fette fra i servizi non interessa allo studio). È condivisa con altri servizi e non larga: i canali larghi non si possono moltiplicare, quindi si lavora il più possibile in **isofrequenza**. Quando la stazione mobile è quieta e comincia a trasmettere, può essere ricevuta da **due nodi insieme**: **non devono trasmettere tutti e due** (doppio accesso), la stazione deve poter sapere a quale nodo si collega e i nodi devono sapere **chi dei due instrada per primo**. Il voting vero non è obbligatorio; basta questo. Logica proposta (elezione per qualità con ritardo, annuncio fra nodi, memoria del vincitore con isteresi), simulatore e risultati: [voting-isofrequenza.md](voting-isofrequenza.md).
 - **Stato:** logica proposta e simulata sul PC (due nodi, una mobile). Non provata su schede.
 
 ## 11. Da decidere
 1. ~~**Quante stazioni** per zona~~ **Deciso: circa 5.** Con 5 stazioni il beacon a R14 collide poco: nel [simulatore mesh](simulatore-mesh.md) il beacon senza coordinamento arriva nell'80 % dei casi e con slot adattivo nel 100 %.
 2. **Gradino di ascolto** (fisso R10 o R12, oppure adattivo con R14 dove i vicini sono pochi), dopo le misure dei gradini stretti fra schede vere.
-3. **Anti collisione:** CAD più ritardo casuale, oppure slot dal nominativo, oppure entrambi.
+3. **Anti collisione:** ~~CAD più ritardo casuale~~ Il solo ascolto non basta (terminali nascosti, [terminali-nascosti.md](terminali-nascosti.md)): **slot dall'orologio**, con ascolto come aiuto. Da confermare con le prove.
 4. **Intervallo del beacon** e se adattivo.
 5. **Ripetizione:** scelta geografica o per rapporto di segnale; numero massimo di salti.
-6. **Codici a fontana** oppure ritrasmissione selettiva dei pacchetti mancanti.
+6. **Codici a fontana** oppure ritrasmissione selettiva dei pacchetti mancanti. Il codice a fontana è in `tools/fontana.py` (circa 1,6 simboli in più per generazione di 128 pezzi): la scelta resta aperta fino alle prove su schede.
 7. **Ruolo del firmware:** il nodo mesh fa beacon, polling, ripetizione e invio insieme. Va riconciliato con il principio "ogni firmware fa una cosa sola" o definito come ruolo a sé.
-8. **Convivenza con la voce v2** sullo stesso canale (frequenza propria per il mesh?).
+8. **Convivenza con la voce v2** sullo stesso canale: **canale proprio per il V3** (e CAD), vedi [compatibilita-v2.md](compatibilita-v2.md); la coesistenza con le stazioni v2 va misurata sul campo.
 
 ## 12. Piano
-1. **Misura** in laboratorio dei gradini lenti (R11-R14) fra le due T3: fin dove si sentono senza correzione di frequenza.
-2. **Simulatore mesh** (sul PC): carico del beacon con 10-100 stazioni, anti collisione, scelta dei ripetitori, ricostruzione da più sorgenti, fontana contro ritrasmissione.
-3. **Frame**: aggiungere posizione e rapporto a HELLO e OFFER, identificativo globale dell'oggetto, salti, RELAYED.
+1. **Misura** in laboratorio dei gradini lenti (R11-R14) fra le due T3: fin dove si sentono senza correzione di frequenza. *Strumenti pronti nell'app (F10, serie programmata), guida in [prova-gradini-lenti.md](prova-gradini-lenti.md); **misure ancora da fare**.*
+2. **Simulatore mesh** (sul PC): *fatto* — beacon con terminali nascosti, gruppo di ripetitori, fontana vera, voto fra due nodi ([simulatore-mesh.md](simulatore-mesh.md), [voting-isofrequenza.md](voting-isofrequenza.md)). Restano le risposte OFFERTA con terminali nascosti e l'errore dell'orologio nei turni.
+3. **Frame**: *fatto sul PC* (punto 8c, `tools/frame_mesh.py`): posizione, rapporto, identificativo globale, salti, BEACON, POLL, POLL-REPLY, RICHIESTA, OFFERTA, GRUPPO, CONFERMA/VETO, VOTO. Non provati su schede.
 4. **Firmware di prova** del beacon e del polling su due-tre schede.

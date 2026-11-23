@@ -4,6 +4,7 @@ Benvenuto. Questo documento dice come provare il firmware di misura, come esegui
 
 > **Regole ferme:**
 > - **Antenna o carico da 50 Ω collegati prima di alimentare o di caricare il firmware.** Mai trasmettere senza.
+> - Per la prova dei gradini lenti con più modi di seguito vedi [prova-gradini-lenti.md](prova-gradini-lenti.md).
 > - Trasmetti **solo con il tuo nominativo** e con le potenze e le frequenze consentite dalla tua licenza. Il progetto lavora fra 430 e 440 MHz, ma **il limite della tua licenza resta tuo**.
 > - Il nominativo viaggia in chiaro nei pacchetti e i contenuti non sono cifrati.
 > - Togli la **microSD** dalla T3 quando carichi il firmware.

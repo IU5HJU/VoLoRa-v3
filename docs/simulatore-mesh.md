@@ -1,6 +1,6 @@
 # Simulatore mesh V3 (bozza)
 
-Programma da riga di comando ([`tools/sim_mesh.py`](../tools/sim_mesh.py), prove in [`tests/sim/test_sim_mesh.py`](../tests/sim/test_sim_mesh.py)) per provare sul PC due pezzi della logica di [mesh-v3.md](mesh-v3.md): i **beacon con le collisioni** e la **scelta del gruppo di ripetitori** con la regola "pochi e veloci".
+Programma da riga di comando ([`tools/sim_mesh.py`](../tools/sim_mesh.py), prove in [`tests/sim/test_sim_mesh.py`](../tests/sim/test_sim_mesh.py)) per provare sul PC due pezzi della logica di [mesh-v3.md](mesh-v3.md): i **beacon con le collisioni** (anche con i **terminali nascosti**) e la **scelta del gruppo di ripetitori** con la regola "pochi e veloci" (anche con i terminali nascosti fra i membri). Il codice a fontana è in [`tools/fontana.py`](../tools/fontana.py); l'elezione fra due nodi in isofrequenza ha un simulatore a parte ([voting-isofrequenza.md](voting-isofrequenza.md)).
 
 > **Stato (23/11/2026): scritto e provato sul PC. Il modello è un'ipotesi, NON misure.** I collegamenti usano la perdita in spazio libero più una perdita extra media (ostacoli) con ombreggiamento casuale, e le sensibilità **stimate** di [scala-modi.md](scala-modi.md). Dice come si comporta la **logica**, non quanto va lontano la radio. Nessuna parte è provata su schede.
 

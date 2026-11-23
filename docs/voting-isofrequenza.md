@@ -50,7 +50,7 @@ Due nodi distanti **non si sentono sulla frequenza della mobile**: sono **termin
 **Vincolo di progetto:** due nodi in isofrequenza con una zona in comune devono **sentirsi sul canale di servizio** a un gradino abbastanza veloce da far entrare il voto nei 200 ms (punto 4). Se non si sentono, la zona di sovrapposizione **non è ammessa**: lo sa chi installa i nodi, che è la regola dei radioamatori.
 
 ### 3.3 Il nodo "ricorda" la stazione (la seconda trasmissione)
-Per rispondere a "alla seconda trasmissione, quale dei due usare?": ogni nodo tiene per qualche minuto, **per nominativo**, **chi ha vinto l'ultima volta** e con quale qualità. Alla trasmissione successiva il vincitore precedente **resta** il vincitore, finché l'altro nodo non lo supera di una **isteresi** (di base 3 dB). Il nominativo è già nel pacchetto v2: **alla mobile non serve nessun campo nuovo.**
+Per rispondere a "alla seconda trasmissione, quale dei due usare?": ogni nodo tiene per qualche minuto, **per nominativo**, **chi ha vinto l'ultima volta** e con quale qualità. Alla trasmissione successiva il vincitore precedente **resta** il vincitore, finché l'altro nodo non lo supera di una **isteresi** (di base 3 dB). Il nominativo è già nel pacchetto v2 (nel pacchetto START): **alla mobile non serve nessun campo nuovo.**
 
 ### 3.4 Che cosa sa la mobile
 La mobile **vede quale nodo risponde**: la ritrasmissione porta `RELAYED` e il nominativo del nodo (il beacon o l'identificazione periodica del nodo, come nella v2). Se un giorno i nodi hanno **frequenze diverse**, la mobile può invece **scegliere** dal beacon (qualità del segnale, carico) con la stessa isteresi: è il vero voting lato periferica, con i beacon in **slot dall'orologio** così che non si sovrappongano.
@@ -96,7 +96,7 @@ Il doppio accesso residuo (circa 1-4 %) è soprattutto la **perdita del VOTO del
 
 **Ritardo massimo W:** **200 ms vanno bene** (decisione dell'autore, 23/11/2026): nella v2 il ritardo è compensato da un **loop continuo del microfono prima della trasmissione**, quindi non si sente.
 
-Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio accesso. Il ritardo si paga una sola volta, alla **prima trasmissione a riposo**; durante la frase e nelle trasmissioni successive vale la memoria del vincitore (punto 3.3). **Da decidere**: quanto ritardo iniziale è accettabile per la voce.
+Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio accesso. Il ritardo si paga una sola volta, alla **prima trasmissione a riposo**; durante la frase e nelle trasmissioni successive vale la memoria del vincitore (punto 3.3). **Deciso:** il ritardo iniziale di 200 ms è accettabile.
 
 **Percorso:** una stazione che si muove da un nodo all'altro, scegliendo ogni volta il nodo migliore, **cambia nodo in media 9 volte**; con l'**isteresi di 3 dB 3,7 volte**, con 6 dB 1,3. L'isteresi serve (la scelta non deve rimbalzare con il fading), ma non va esagerata: oltre una certa soglia si resta troppo a lungo con il nodo peggiore.
 

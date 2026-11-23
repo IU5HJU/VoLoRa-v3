@@ -28,6 +28,8 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 
 ## Fase 3: protocollo immagini
 - Logica mesh voluta (beacon, polling, ripetitori, ricezione da più stazioni): [mesh-v3.md](mesh-v3.md), bozza del 23/11/2026.
+- Fatto sul PC (23/11/2026, non provato su schede): simulatore mesh con terminali nascosti, codice a fontana ([`tools/fontana.py`](../tools/fontana.py)), frame mesh e posizione ([`tools/frame_mesh.py`](../tools/frame_mesh.py)), elezione e voto fra due nodi in isofrequenza ([voting-isofrequenza.md](voting-isofrequenza.md)), spiegazione dei [terminali nascosti](terminali-nascosti.md).
+- Regola: l'infrastruttura v2 non si modifica; il V3 è retrocompatibile solo per voce, messaggio vocale e testo ([compatibilita-v2.md](compatibilita-v2.md)); Internet non è un mezzo affidabile, annunci e voti vanno via radio.
 - Bozza v0.1: [protocollo-immagini.md](protocollo-immagini.md) (scritta il 21/11/2026, prima delle misure).
 - Simulatore sul PC: [simulatore-immagini.md](simulatore-immagini.md) (corregge la bozza in quattro punti, tre problemi aperti).
 - Codifica a livelli: prima una versione piccola e utile, poi i raffinamenti.

@@ -53,6 +53,7 @@ Succede lo stesso con i ripetitori radioamatoriali: due stazioni che chiamano il
 | Più ripetitori trasmettono al destinatario | **Turni assegnati dal mittente nel frame GRUPPO** e agganciati all'**orologio** (NTP o GPS, basta un secondo). I membri non devono sentirsi. |
 | Un membro che il destinatario non sente | Il **destinatario decide**: manda **VETO** con il nominativo del membro che non sente al gradino scelto. È l'unico che sa chi arriva davvero. |
 | Le risposte alla RICHIESTA-RIPETITORI si sovrappongono | I candidati rispondono nel **proprio slot** (ricavato dal nominativo), non a caso. *Non ancora simulato.* |
+| Due nodi sentono insieme la stessa mobile | **Voto via radio** su un canale di servizio fra i nodi (frame VOTO, vince il margine migliore): [voting-isofrequenza.md](voting-isofrequenza.md) |
 | Beacon di molte stazioni | **Slot dall'orologio** e slot adattivo: l'ascolto da solo non basta. |
 | Resta qualche collisione | **Fontana:** ogni simbolo ha un ESI diverso (contatore × M + posizione), quindi un simbolo perso non fa mancare un pezzo preciso: ne basta un altro. |
 
