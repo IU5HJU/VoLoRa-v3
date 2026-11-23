@@ -149,6 +149,9 @@ I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo. *
 3. Quali **famiglie di codici** supportare nella prima versione (di partenza: ritrasmissione selettiva e un solo codice a fontana).
 4. Se i membri **si sentono fra loro**: se no, i turni devono bastare da soli per non collidere.
 
+## 8b2. Terminali nascosti
+Due stazioni che non si sentono fra loro ma sono sentite dallo stesso ricevitore si sovrappongono anche se ciascuna ascolta prima di parlare. Per questo il protocollo non si affida all'ascolto: **turni dall'orologio** assegnati nel GRUPPO, **VETO** del destinatario, **slot** per beacon e risposte. Spiegazione completa, risultati del simulatore ed esercizi: [terminali-nascosti.md](terminali-nascosti.md).
+
 ## 8c. Formato dei frame del mesh (23/11/2026)
 Codificati e decodificati in [`tools/frame_mesh.py`](../tools/frame_mesh.py), provati in `tests/sim/test_frame_mesh.py` (andata e ritorno, frame troncati scartati). **Non provati su schede.** Tutti i numeri sono big endian, il byte 0 è `0x30 | tipo`.
 
@@ -192,6 +195,7 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 19, OFFERTA 23, GRU
 | 23/11/2026 | **Il gruppo di ripetitori è coordinato dal mittente** (il destinatario può mettere il veto). | autore |
 | 23/11/2026 | Regola "pochi e veloci" di partenza: **almeno 2 membri, tolleranza di 1 gradino** (da tarare sul simulatore). | autore |
 | 23/11/2026 | Primo passo del piano: **simulatore mesh sul PC**. | autore |
+| 23/11/2026 | I **terminali nascosti** vanno gestiti con turni dall'orologio e veto del destinatario, non con il solo ascolto: simulato nei beacon e nel gruppo di ripetitori. Spiegazione in [terminali-nascosti.md](terminali-nascosti.md). | autore, simulatore |
 | 23/11/2026 | Va studiata una **tecnologia di voting** per la modalità VOCE (probabilmente VoLoRa v2): la periferica sceglie fra nodi a copertura parzialmente sovrapposta; due nodi con la stessa frequenza e copertura sovrapposta non sono possibili (lo gestiscono i radioamatori). (Punto 10b.) | autore |
 | 22/11/2026 | La precisione dell'orologio richiesta è bassa: NTP o GPS bastano (anche per gli slot). | autore, [applicazione.md](applicazione.md) |
 

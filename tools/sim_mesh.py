@@ -133,14 +133,21 @@ class Scenario:
         self._shadow = {}
         self.relays = [k for k in self.pos if k.startswith("R")]
 
-    def rung(self, a, b):
+    def prx(self, a, b):
+        """Potenza ricevuta in dBm fra due stazioni (uguale nei due sensi)."""
         key = tuple(sorted((a, b)))
         if key not in self._shadow:
             self._shadow[key] = self.rng.gauss(0.0, self.sigma)
         (x1, y1), (x2, y2) = self.pos[a], self.pos[b]
         d = math.hypot(x1 - x2, y1 - y2)
-        prx = self.ptx - fspl_db(d) - self.extra + self._shadow[key]
-        return best_rung(prx)
+        return self.ptx - fspl_db(d) - self.extra + self._shadow[key]
+
+    def rung(self, a, b):
+        return best_rung(self.prx(a, b))
+
+    def hears(self, a, b, rid):
+        """True se a e b si sentono al gradino rid (basta rilevare il segnale: sopra la sensibilita', senza margine). Altrimenti sono terminali nascosti."""
+        return self.prx(a, b) - pi.sensitivity_dbm(rid) >= 0.0
 
 
 def candidates(sc):
@@ -157,12 +164,76 @@ def candidates(sc):
 EPS = 1.6 / 128    # sovrapposizione della fontana MISURATA con tools/fontana.py: ~1,6 simboli per generazione di 128 pezzi
 
 
-def time_group(size, members, fountain=True):
+CAPTURE_DB = 6.0     # LoRa: se un segnale supera l'altro di almeno 6 dB al ricevitore, il piu' forte si decodifica lo stesso
+
+
+def efficienza_canale(sc, members, accesso, rng, slots=400):
+    """Frazione del tempo di fase 2 che produce simboli utili al destinatario.
+    'turni': un solo membro per volta, dai turni assegnati nel GRUPPO con l'orologio: 1.0.
+    'ascolto': ogni membro ha sempre simboli da mandare e prima di parlare ascolta. Parla se non sente nessuno di quelli che hanno gia' cominciato.
+    Due membri che non si sentono (terminali nascosti) parlano insieme: al destinatario si sovrappongono e si perdono, salvo la cattura (segnale piu' forte di 6 dB)."""
+    if accesso == "turni" or len(members) < 2:
+        return 1.0
+    rid = max(m[2] for m in members)
+    names = [m[0] for m in members]
+    utili = 0
+    for _ in range(slots):
+        order = names[:]
+        rng.shuffle(order)
+        tx = []
+        for n in order:
+            if not any(sc.hears(n, o, rid) for o in tx):
+                tx.append(n)
+        if len(tx) == 1:
+            utili += 1
+        else:
+            p = sorted((sc.prx(n, "D") for n in tx), reverse=True)
+            utili += 1 if p[0] - p[1] >= CAPTURE_DB else 0
+    return utili / slots
+
+
+def coppie_nascoste(sc, members):
+    """Numero di coppie di membri che non si sentono fra loro al gradino comune."""
+    rid = max(m[2] for m in members)
+    names = [m[0] for m in members]
+    return sum(1 for i in range(len(names)) for j in range(i + 1, len(names)) if not sc.hears(names[i], names[j], rid))
+
+
+def run_nascosti(n_relays, dist_km, size=20000, scenarios=1000, p_fail=0.15, seed=1, extra_db=25.0, n_min=2, tol=1):
+    """La regola (n_min, tol) con i membri che si accordano con i turni dall'orologio, contro membri che parlano dopo aver ascoltato: stessi scenari."""
+    rng = random.Random(seed)
+    slot_rng = random.Random(seed + 1)
+    acc = {a: {"t": [], "p": [], "eff": []} for a in ("turni", "ascolto")}
+    eff_nasc = []
+    n = nasc = 0
+    for _ in range(scenarios):
+        sc = Scenario(rng, n_relays, dist_km, extra_db=extra_db)
+        members = policy_rule(candidates(sc), n_min, tol)
+        if not members:
+            continue
+        n += 1
+        hid = coppie_nascoste(sc, members) > 0
+        nasc += 1 if hid else 0
+        for a in acc:
+            eff = efficienza_canale(sc, members, a, slot_rng)
+            if hid and a == "ascolto":
+                eff_nasc.append(eff)
+            acc[a]["eff"].append(eff)
+            acc[a]["t"].append(time_group(size, members, eff2=eff))
+            acc[a]["p"].append((1.0 - p_fail ** len(members)) if eff > 0.02 else 0.0)
+    out = {"scenari": n, "con_coppia_nascosta": nasc / n if n else float("nan"),
+           "efficienza_con_coppia": statistics.mean(eff_nasc) if eff_nasc else float("nan")}
+    for a, v in acc.items():
+        out[a] = {"tempo_mediano": statistics.median(v["t"]), "completamento": statistics.mean(v["p"]), "efficienza": statistics.mean(v["eff"])}
+    return out
+
+
+def time_group(size, members, fountain=True, eff2=1.0):
     """Fase 1: il mittente trasmette l'oggetto a tutti i membri al gradino del piu' lento dei suoi collegamenti. Fase 2: i membri trasmettono a turni
     verso il destinatario al gradino comune (il piu' lento dei loro collegamenti). Un solo canale: la velocita' e' quella del gradino comune."""
     r1 = max(m[1] for m in members)
     r2 = max(m[2] for m in members)
-    return pi.estimate_seconds(size, r1) + pi.estimate_seconds(int(size * ((1 + EPS) if fountain and len(members) > 1 else 1)), r2)
+    return pi.estimate_seconds(size, r1) + pi.estimate_seconds(int(size * ((1 + EPS) if fountain and len(members) > 1 else 1)), r2) / max(eff2, 0.02)
 
 
 def policy_rule(cands, n_min=2, tol=1):
@@ -256,7 +327,23 @@ def main():
     g.add_argument("--guasto", type=float, default=0.15, help="probabilita' che un ripetitore cada durante il trasferimento")
     g.add_argument("--extra", type=float, default=25.0, help="perdita extra media (ostacoli), dB")
     g.add_argument("--seed", type=int, default=1)
+    h = sub.add_parser("nascosti", help="gruppo di ripetitori: turni dall'orologio contro ascolto prima di parlare, con i terminali nascosti")
+    h.add_argument("--ripetitori", type=int, default=4)
+    h.add_argument("--distanza", type=float, default=25.0)
+    h.add_argument("--extra", type=float, default=25.0)
+    h.add_argument("--scenari", type=int, default=1000)
+    h.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
+    if a.cmd == "nascosti":
+        r = run_nascosti(a.ripetitori, a.distanza, scenarios=a.scenari, seed=a.seed, extra_db=a.extra)
+        print(f"{a.ripetitori} ripetitori, {a.distanza:g} km, perdita extra {a.extra:g} dB, regola 2/1, {r['scenari']} scenari con un gruppo; "
+              f"gruppi con almeno una coppia nascosta: {100 * r['con_coppia_nascosta']:.0f} % (in questi l'ascolto rende il {100 * r['efficienza_con_coppia']:.0f} %)")
+        print("| accesso dei membri | efficienza del canale | tempo mediano | completa |")
+        print("|---|---|---|---|")
+        for k in ("turni", "ascolto"):
+            v = r[k]
+            print(f"| {k} | {100 * v['efficienza']:.0f} % | {pi.fmt_time(v['tempo_mediano'])} | {100 * v['completamento']:.1f} % |")
+        return
     if a.cmd == "beacon":
         bw, sf = mb.GRADINI[a.gradino]
         t = mb.tempo_aria(sf, bw, mb.BYTE_SOLO_NOMINATIVO)[0]

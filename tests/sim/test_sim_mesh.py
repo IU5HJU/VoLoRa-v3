@@ -75,5 +75,30 @@ check(r1["diretto o regola"]["tempo_mediano"] <= r1["regola"]["tempo_mediano"] a
 tar = sm.run_tara(3, 25.0, [(1, 0), (2, 1), (3, 4)], scenarios=400, seed=2)
 check(tar[(2, 1)][1] > tar[(1, 0)][1] and tar[(3, 4)][0] > 3 * tar[(2, 1)][0], "taratura: 2/1 piu' affidabile di 1/0; tolleranza 4 molto piu' lenta")
 
+
+# ---- terminali nascosti nel gruppo di ripetitori ----
+def _sc(dx1, dx2):
+    sc = sm.Scenario(random.Random(5), 0, 25.0, extra_db=15.0, shadow_sigma=0.0)
+    sc.pos["R0"], sc.pos["R1"] = (12.0, dx1), (12.0, dx2)
+    sc.relays = ["R0", "R1"]
+    sc._shadow[("R0", "R1")] = -60.0          # i due ripetitori non si sentono (terminali nascosti)
+    return sc
+
+
+mem = [("R0", 4, 4, 4), ("R1", 4, 4, 4)]
+sym = _sc(2.0, -2.0)
+check(sm.coppie_nascoste(sym, mem) == 1 and not sym.hears("R0", "R1", 4), "scenario costruito: due ripetitori che non si sentono")
+check(sm.efficienza_canale(sym, mem, "turni", random.Random(1)) == 1.0, "turni dall'orologio: il canale rende il 100 % anche con i terminali nascosti")
+check(sm.efficienza_canale(sym, mem, "ascolto", random.Random(1)) == 0.0, "ascolto con due nascosti ugualmente forti: parlano insieme e si perdono sempre")
+asym = _sc(0.2, 30.0)
+e_cap = sm.efficienza_canale(asym, mem, "ascolto", random.Random(1))
+check(e_cap > 0.9, f"se uno e' piu' forte di 6 dB la cattura salva il canale: {e_cap * 100:.0f} %")
+vis = _sc(2.0, -2.0)
+vis._shadow[("R0", "R1")] = 0.0
+check(sm.efficienza_canale(vis, mem, "ascolto", random.Random(1)) == 1.0, "se i due si sentono l'ascolto basta: 100 %")
+nr1, nr2 = sm.run_nascosti(4, 25.0, scenarios=300, seed=4), sm.run_nascosti(4, 25.0, scenarios=300, seed=4)
+check(nr1 == nr2, "stessa semente, stesso risultato")
+check(nr1["turni"]["efficienza"] == 1.0 and nr1["ascolto"]["efficienza"] < 1.0 and nr1["ascolto"]["completamento"] < nr1["turni"]["completamento"],
+      f"con i nascosti l'ascolto rende {nr1['ascolto']['efficienza'] * 100:.0f} % e completa {nr1['ascolto']['completamento'] * 100:.1f} % contro {nr1['turni']['completamento'] * 100:.1f} % dei turni")
 print("simulatore mesh: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

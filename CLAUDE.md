@@ -9,6 +9,7 @@ In questo progetto radioamatoriale nominativo, rapporto di segnale e posizione (
 - `docs/regole-radioamatoriali.md`: nominativo, rapporto e posizione sempre; nessuna privacy.
 - `docs/mesh-v3.md`: la logica mesh voluta dall'autore e il registro delle decisioni (sezione 10).
 - `docs/simulatore-mesh.md`: simulatore mesh e risultati sulla regola del gruppo di ripetitori.
+- `docs/terminali-nascosti.md`: terminali nascosti e perché il protocollo usa turni dall'orologio e veto del destinatario.
 - `docs/protocollo-immagini.md`, `docs/simulatore-immagini.md`, `docs/scala-modi.md`: protocollo e numeri dei gradini.
 
 ## Per il resto

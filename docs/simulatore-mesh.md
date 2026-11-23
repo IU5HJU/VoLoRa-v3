@@ -101,12 +101,23 @@ Stessi scenari, 25 km, 3 e 8 ripetitori candidati:
 - **Una tolleranza grande è un errore**: con N_min = 3 e T = 4 il tempo con 3 ripetitori sale a **34 minuti**, perché il gruppo accetta un membro lentissimo. Conferma la regola: più membri non devono costare molto.
 - N_min = 2 con T = 2 migliora ancora l'affidabilità (94-96 %), a un costo di tempo che da 4 minuti sale a 7 (3 ripetitori).
 
+## Risultati: i terminali nascosti nel gruppo di ripetitori
+Spiegazione per chi non li conosce: [terminali-nascosti.md](terminali-nascosti.md). Il simulatore (`python3 tools/sim_mesh.py nascosti`) confronta, sugli stessi scenari, i membri che si dividono il canale con i **turni dall'orologio** (scelta del protocollo) e membri che **ascoltano prima di parlare**. Due membri che non si sentono parlano insieme e si perdono al destinatario, salvo la cattura (6 dB).
+
+| 4 candidati, 25 km, regola 2/1, 1500 scenari | Efficienza | Tempo mediano | Completa |
+|---|---|---|---|
+| turni dall'orologio | 100 % | 3 min | 92,2 % |
+| ascolto prima di parlare | 92 % | 4 min | 84,8 % |
+
+- Solo circa l'**11 % dei gruppi scelti** ha una coppia che non si sente (la regola sceglie i ripetitori migliori, in genere vicini), ma **in quei casi l'ascolto rende il 34 %**.
+- I turni dall'orologio rendono il 100 % in ogni caso: è il motivo per cui il GRUPPO assegna i turni e il VETO lascia al destinatario l'ultima parola.
+
 ## Limiti del modello
 - **Tutto stimato:** sensibilità, perdita extra e ombreggiamento. I numeri relativi (la regola contro tutti i candidati) sono più affidabili di quelli assoluti.
-- **Un canale.** I terminali nascosti sono simulati solo nei beacon, non nel gruppo di ripetitori. Nella realtà due stazioni lontane fra loro possono non sentirsi e collidere: i turni dall'orologio servono proprio a questo.
+- **Un canale.** I terminali nascosti sono simulati nei beacon e nella fase 2 del gruppo (tra i membri), **non** nelle risposte OFFERTA e non nella fase 1. I turni sono considerati perfetti (errore di orologio nullo).
 - **Due fasi in sequenza** (mittente ai ripetitori, poi ai destinatari), senza sovrapposizione. Un'implementazione che passa i pezzi ai ripetitori mentre li rilancia sarebbe più veloce.
 - **Caduta dei ripetitori** indipendente e uguale per tutti.
 - **La fontana** nel Monte Carlo è ancora un costo di tempo (1,25 %), ma quel valore ora viene dal codice vero ([`tools/fontana.py`](../tools/fontana.py): combinazioni casuali su GF(2), decodifica con eliminazione di Gauss, ESI = contatore × M + indice, prova con tre membri e perdita 50 %). Non è provato su schede.
 
 ## Prossimi passi
-Aggiungere i terminali nascosti al gruppo di ripetitori, una sovrapposizione fra le due fasi e la perdita dei pacchetti dentro le fasi; poi collegare la scelta del gruppo ai frame di [mesh-v3.md](mesh-v3.md) (RICHIESTA-RIPETITORI, OFFERTA, GRUPPO).
+Simulare i terminali nascosti nelle risposte OFFERTA, un errore dell'orologio nei turni, una sovrapposizione fra le due fasi e la perdita dei pacchetti dentro le fasi; poi collegare la scelta del gruppo ai frame di [mesh-v3.md](mesh-v3.md) (RICHIESTA-RIPETITORI, OFFERTA, GRUPPO).
