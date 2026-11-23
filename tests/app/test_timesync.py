@@ -249,6 +249,9 @@ today = datetime.datetime.now(datetime.timezone.utc).date()
 check(ts.parse_utc("10:30") == datetime.datetime.combine(today, datetime.time(10, 30), tzinfo=datetime.timezone.utc).timestamp(), "parse dell'ora senza data (oggi)")
 
 # ---- appuntamento ----
+st = ts.plan_series(1000.0, ["L4", "L5"], 10, 26, lambda c, n: 500, lead_rx=5, tail=10, gap=20)
+st2 = ts.plan_series(1000.0, ["L4", "L5"], 10, 26, lambda c, n: 500, lead_rx=5, tail=10, gap=20)
+check(st == st2 and st[0]["plan"]["tx_start"] == 1000.0 and abs(st[1]["plan"]["tx_start"] - (1000.0 + 5.0 + 10 + 5 + 20)) < 1e-9, "piano di una serie: uguale per i due colleghi, il secondo modo parte dopo il primo con coda e pausa")
 p = ts.plan_run(1000.0, 200, 300, lead_rx=5, tail=10)
 check(p["tx_start"] == 1000.0 and p["rx_start"] == 995.0 and p["rx_window_s"] == 75 and abs(p["tx_duration_s"] - 60.0) < 1e-9, "piano: chi riceve parte 5 s prima, ascolta 75 s")
 c2 = Fake(2000.0)

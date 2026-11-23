@@ -43,6 +43,37 @@ def mode_command(code, chip="SX1278"):
     return f"MODE FSK {br:g} {dev:g} {rxbw:g}"
 
 
+# gradini del protocollo immagini -> modi della scala (docs/scala-modi.md): R10 = L9 (125 kHz SF12), R11 = L10 (62,5), R12 = L11 (31,25), R13 = L12 (15,6), R14 = L13 (7,8)
+GRADINI_LENTI = {"R10": "L9", "R11": "L10", "R12": "L11", "R13": "L12", "R14": "L13"}
+
+
+def parse_series(text):
+    """'R11, L12 ,F4' -> ['L10', 'L12', 'F4'] (i nomi Rxx si traducono nei modi Lxx). ValueError se un nome non esiste."""
+    names = [c for c, _ in mode_names()]
+    out = []
+    for tok in text.replace(";", ",").replace(" ", ",").split(","):
+        tok = tok.strip().upper()
+        if not tok:
+            continue
+        tok = GRADINI_LENTI.get(tok, tok)
+        if tok not in names:
+            raise ValueError(f"modo sconosciuto: {tok}")
+        out.append(tok)
+    if not out:
+        raise ValueError("serie vuota")
+    return out
+
+
+def interval_ms(code, payload, margin=1.3, minimo=300):
+    """Intervallo fra i pacchetti di una serie: il tempo in aria calcolato per un pacchetto di `payload` byte, piu' un margine (LoRa); 300 ms per FSK."""
+    code = code.strip().upper()
+    if code.startswith("L"):
+        bw, sf = sm.LORA[int(code[1:]) - 1]
+        toa = sm.lora_toa(sf, bw, payload=payload)
+        return max(minimo, int(toa * 1000 * margin) + 200)
+    return minimo
+
+
 def sens_estimate(code):
     code = code.strip().upper()
     if code.startswith("L"):

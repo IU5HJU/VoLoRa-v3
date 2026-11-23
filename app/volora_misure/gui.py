@@ -17,6 +17,7 @@ SHORTCUTS = [
     ("F5", "TX", "Solo trasmette: la scheda scelta manda N pacchetti"),
     ("F6", "RX 60 s", "Solo ascolta, per 60 secondi, sulla scheda che non trasmette"),
     ("F7", "CW 10 s", "Portante per il misuratore di potenza (10 secondi)"),
+    ("F10", "Serie", "Serie di modi (per esempio i gradini lenti R11-R14) fra le due schede, con il pacchetto piccolo e l'intervallo adatto al tempo in aria"),
     ("Esc", "STOP", "Ferma subito TX, RX e CW"),
     ("F8", "Salva CSV", "Salva i risultati in un file CSV"),
     ("F9", "GitHub", "Va alla scheda GitHub per inviare i risultati"),
@@ -126,6 +127,8 @@ class App:
         self.rows = []
         self.cfg = core.load_config()
         self.busy = threading.Event()
+        self.series_stop = threading.Event()
+        self.series_tail, self.series_gap = 10.0, 20.0     # coda di ascolto e pausa fra i modi di una serie programmata (secondi)
         self.fake_link = None
         self.clock = timesync.Clock()
         self.gps = None
@@ -196,6 +199,17 @@ class App:
         ttk.Radiobutton(r2, text="A", variable=self.txsel, value="A").pack(side="left")
         ttk.Radiobutton(r2, text="B", variable=self.txsel, value="B").pack(side="left", padx=(0, 10))
         ttk.Checkbutton(r2, text="Segui il monitor", variable=self.autoscroll).pack(side="right")
+        r2b = ttk.Frame(par); r2b.pack(fill="x", padx=4, pady=2)
+        ttk.Label(r2b, text="Serie (F10): modi").pack(side="left")
+        self.series_modes = tk.StringVar(value="R11,R12,R13,R14")
+        ttk.Entry(r2b, textvariable=self.series_modes, width=24).pack(side="left", padx=(2, 8))
+        ttk.Label(r2b, text="Pacchetti per modo").pack(side="left")
+        self.series_count = tk.StringVar(value="10")
+        ttk.Entry(r2b, textvariable=self.series_count, width=4).pack(side="left", padx=(2, 8))
+        ttk.Label(r2b, text="Byte").pack(side="left")
+        self.series_payload = tk.StringVar(value="26")
+        ttk.Entry(r2b, textvariable=self.series_payload, width=4).pack(side="left", padx=(2, 8))
+        ttk.Label(r2b, text="(R10-R14 o L1-L13, F1-F6; l'intervallo si calcola dal tempo in aria)").pack(side="left")
         r3 = ttk.Frame(par); r3.pack(fill="x", padx=4, pady=(2, 4))
         for key, label, hint in SHORTCUTS:
             ttk.Button(r3, text=f"{key} {label}", width=11, command=lambda k=key: self.action(k)).pack(side="left", padx=1)
@@ -300,6 +314,11 @@ class App:
         ttk.Label(r2, text="Attenuatore in serie (dB)").pack(side="left")
         self.field_att = tk.StringVar(value="0")
         ttk.Entry(r2, textvariable=self.field_att, width=5).pack(side="left", padx=(3, 12))
+        self.field_series = tk.StringVar(value="")
+        r2s = ttk.Frame(a); r2s.pack(fill="x", padx=4, pady=2)
+        ttk.Label(r2s, text="Serie di modi (vuoto = solo il modo della scheda Misure; per esempio R11,R12,R13,R14)").pack(side="left")
+        ttk.Entry(r2s, textvariable=self.field_series, width=24).pack(side="left", padx=4)
+        ttk.Label(r2s, text="usa i pacchetti per modo e i byte della serie (scheda Misure, F10); l'intervallo e' calcolato").pack(side="left")
         self.btn_prog = ttk.Button(r2, text="Programma la prova", command=self.program_run)
         self.btn_prog.pack(side="left", padx=4)
         ttk.Button(r2, text="Annulla", command=self.cancel_run).pack(side="left")
@@ -320,6 +339,7 @@ class App:
         self.ftree.pack(fill="x", padx=4, pady=3)
         b = ttk.Frame(rr); b.pack(fill="x", padx=4, pady=2)
         ttk.Button(b, text="Copia i miei dati", command=self.copy_mine).pack(side="left", padx=2)
+        ttk.Button(b, text="Copia tutte", command=self.copy_all_mine).pack(side="left", padx=2)
         ttk.Button(b, text="Incolla i dati del collega…", command=self.paste_remote).pack(side="left", padx=2)
         ttk.Button(b, text="Salva CSV di rilievo", command=self.save_field_csv).pack(side="left", padx=2)
         self.f_extra = {k: tk.StringVar(value=self.cfg.get("f_" + k, "")) for k in ("percorso", "meteo", "scheda", "antenna", "note")}
@@ -560,6 +580,9 @@ class App:
         p = self._params()
         if not p:
             return ""
+        if self.field_series.get().strip():
+            return (f"PROVA VoLoRa SERIE: T0 {self.t0_var.get().strip()} UTC, modi {self.field_series.get().strip().upper()}, {p['freq']} MHz, {p['power']} dBm, "
+                    f"pacchetto {self.series_payload.get()} B, {self.series_count.get()} pacchetti per modo, intervallo dal tempo in aria. Chi riceve parte {self.lead_rx.get()} s prima.")
         return (f"PROVA VoLoRa: T0 {self.t0_var.get().strip()} UTC, modo {p['code']}, {p['freq']} MHz, {p['power']} dBm, pacchetto {p['payload']} B, "
                 f"{p['count']} pacchetti ogni {p['interval']} ms. Chi riceve parte {self.lead_rx.get()} s prima.")
 
@@ -589,49 +612,67 @@ class App:
             messagebox.showwarning("Appuntamento", "Controlla T0 (UTC, per esempio 2026-11-22 10:30:00 oppure 10:30:00), l'anticipo e l'attenuatore.")
             return
         role = self.role.get()
-        plan = timesync.plan_run(t0, p["count"], p["interval"], lead_rx=lead)
-        start = plan["rx_start"] if role == "RX" else plan["tx_start"]
+        series = self.field_series.get().strip()
+        try:
+            if series:
+                codes = core.parse_series(series)
+                cnt, pay = int(self.series_count.get()), int(self.series_payload.get())
+                steps = [dict(code=s["code"], count=cnt, payload=pay, interval=s["interval_ms"], plan=s["plan"])
+                         for s in timesync.plan_series(t0, codes, cnt, pay, core.interval_ms, lead_rx=lead, tail=self.series_tail, gap=self.series_gap)]
+            else:
+                steps = [dict(code=p["code"], count=p["count"], payload=p["payload"], interval=p["interval"],
+                              plan=timesync.plan_run(t0, p["count"], p["interval"], lead_rx=lead))]
+        except ValueError as e:
+            messagebox.showwarning("Serie", f"Controlla la serie: {e}")
+            return
+        key = "rx_start" if role == "RX" else "tx_start"
+        start = steps[0]["plan"][key]
         if start - self.clock.now() < 5:
             messagebox.showwarning("Appuntamento", "L'orario e' troppo vicino o gia' passato: servono almeno 5 secondi per configurare la scheda.")
             return
         self.sched_stop.clear()
         self.sched = {"state": "attesa", "role": role, "t0": t0, "start": start}
         pos = self.my_position()
-        info0 = self.clock.info()
-        self.set_status(f"Prova programmata: {'ricezione' if role == 'RX' else 'trasmissione'} alle {timesync.fmt_utc(start, ms=False)}.")
+        self.set_status(f"Prova programmata: {'ricezione' if role == 'RX' else 'trasmissione'} alle {timesync.fmt_utc(start, ms=False)}"
+                        + (f", {len(steps)} modi." if len(steps) > 1 else "."))
         def job():
             try:
-                runner.configure([board], p["code"], p["power"], p["freq"], p["payload"], c)
-                if role == "RX":
-                    cmd, prefix, timeout = f"RX {plan['rx_window_s']}", "RXSUM", plan["rx_window_s"] + 30
-                else:
-                    cmd, prefix, timeout = f"TX {p['count']} {p['interval']}", "TXSUM", p["count"] * p["interval"] / 1000.0 + 30
-                waiter = board.expect(prefix, timeout)
-                err = timesync.wait_until(self.clock, start, stop=self.sched_stop)
-                if err is None:
-                    waiter.cancel()
-                    self.post(lambda: self._sched_end("Appuntamento annullato."))
-                    return
-                inf = self.clock.info()
-                board.send(cmd)
-                self.sched["state"] = "in corso"
-                line = waiter.wait()
-                if line is None or line.startswith("ERR"):
-                    self.post(lambda: self._sched_end(f"Prova non riuscita: {line or 'nessuna risposta della scheda'}"))
-                    return
-                kind, d = core.parse_line(line)
-                run = {"t0": t0, "role": role, "mode": p["code"], "freq_mhz": p["freq"], "power_dbm": p["power"], "att_db": att, "my_call": c,
-                       "clock_src": inf["sorgente"], "clock_unc_s": inf["incertezza_s"], "start_err_ms": err * 1000.0}
-                if pos:
-                    run.update(my_lat=pos[0], my_lon=pos[1], my_loc=geo.maidenhead(pos[0], pos[1]))
-                if self.gps is not None and self.gps.alt is not None:
-                    run["my_alt"] = self.gps.alt
-                if role == "TX":
-                    run["sent"] = int(d.get("sent", 0))
-                    run["toa_mean_us"], run["toa_calc_us"] = d.get("toa_mean_us"), d.get("calc_us")
-                else:
-                    run.update(rx_ok=int(d.get("ok", 0)), rx_bad=int(d.get("bad", 0)), rssi=d.get("rssi"), snr=d.get("snr"), fei_hz=d.get("fei_hz"))
-                self.post(lambda: (self.add_field_run(run), self._sched_end("Prova conclusa.")))
+                for n, st in enumerate(steps):
+                    plan = st["plan"]
+                    start = plan[key]
+                    self.sched.update(state="attesa", t0=plan["t0"], start=start)
+                    runner.configure([board], st["code"], p["power"], p["freq"], st["payload"], c)
+                    if role == "RX":
+                        cmd, prefix, timeout = f"RX {plan['rx_window_s']}", "RXSUM", plan["rx_window_s"] + 30
+                    else:
+                        cmd, prefix, timeout = f"TX {st['count']} {st['interval']}", "TXSUM", st["count"] * st["interval"] / 1000.0 + 30
+                    waiter = board.expect(prefix, timeout)
+                    err = timesync.wait_until(self.clock, start, stop=self.sched_stop)
+                    if err is None:
+                        waiter.cancel()
+                        self.post(lambda: self._sched_end("Appuntamento annullato."))
+                        return
+                    inf = self.clock.info()
+                    board.send(cmd)
+                    self.sched["state"] = "in corso"
+                    line = waiter.wait()
+                    if line is None or line.startswith("ERR"):
+                        self.post(lambda: self._sched_end(f"Prova non riuscita: {line or 'nessuna risposta della scheda'}"))
+                        return
+                    kind, d = core.parse_line(line)
+                    run = {"t0": plan["t0"], "role": role, "mode": st["code"], "freq_mhz": p["freq"], "power_dbm": p["power"], "att_db": att, "my_call": c,
+                           "clock_src": inf["sorgente"], "clock_unc_s": inf["incertezza_s"], "start_err_ms": err * 1000.0}
+                    if pos:
+                        run.update(my_lat=pos[0], my_lon=pos[1], my_loc=geo.maidenhead(pos[0], pos[1]))
+                    if self.gps is not None and self.gps.alt is not None:
+                        run["my_alt"] = self.gps.alt
+                    if role == "TX":
+                        run["sent"] = int(d.get("sent", 0))
+                        run["toa_mean_us"], run["toa_calc_us"] = d.get("toa_mean_us"), d.get("calc_us")
+                    else:
+                        run.update(rx_ok=int(d.get("ok", 0)), rx_bad=int(d.get("bad", 0)), rssi=d.get("rssi"), snr=d.get("snr"), fei_hz=d.get("fei_hz"))
+                    last = n == len(steps) - 1
+                    self.post(lambda run=run, last=last: (self.add_field_run(run), self._sched_end("Prova conclusa.") if last else None))
             except runner.RunError as e:
                 self.post(lambda: self._sched_end(f"Errore: {e}"))
         threading.Thread(target=job, daemon=True).start()
@@ -674,6 +715,30 @@ class App:
         self.root.clipboard_clear(); self.root.clipboard_append(txt)
         self.set_status("Copiato: " + txt)
 
+    def copy_all_mine(self):
+        if not self.field_runs:
+            self.set_status("Non c'e' ancora nessuna prova.")
+            return
+        txt = "\n".join(field.export_line(r) for r in self.field_runs)
+        self.root.clipboard_clear(); self.root.clipboard_append(txt)
+        self.set_status(f"Copiate {len(self.field_runs)} righe.")
+
+    def merge_many(self, text):
+        """Unisce piu' righe del collega, ognuna alla prova con lo stesso modo e T0. Ritorna (unite, non_trovate)."""
+        done = lost = 0
+        for rem in field.import_lines(text):
+            i = field.find_match(self.field_runs, rem)
+            if i is None:
+                lost += 1
+                continue
+            merged, _ = field.merge(self.field_runs[i], rem)
+            self.field_runs[i] = merged
+            self.ftree.item(str(i), values=self._field_values(merged))
+            self.rem_call.set(rem["call"])
+            done += 1
+        self.set_status(f"Unite {done} righe del collega" + (f", {lost} senza prova corrispondente." if lost else "."))
+        return done, lost
+
     def paste_remote(self):
         i = self._selected_run()
         if i is None:
@@ -689,7 +754,11 @@ class App:
         except tk.TclError:
             pass
         def ok():
-            self.merge_remote_text(box.get("1.0", "end"), i)
+            txt = box.get("1.0", "end")
+            if txt.count(field.MAGIC) > 1:
+                self.merge_many(txt)
+            else:
+                self.merge_remote_text(txt, i)
             win.destroy()
         ttk.Button(win, text="Unisci", command=ok).pack(pady=6)
 
@@ -800,14 +869,14 @@ class App:
     # ----- tasti -----
     def _bind_keys(self):
         r = self.root
-        for i, key in enumerate(("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"), 1):
+        for i, key in enumerate(("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10"), 1):
             r.bind(f"<{key}>", lambda e, k=key: self.action(k))
         r.bind("<Escape>", lambda e: self.action("Esc"))
         r.bind("<Control-l>", lambda e: self.action("Ctrl+L"))
 
     def action(self, key):
         {"F1": self.a_info, "F2": self.a_call, "F3": self.a_apply, "F4": self.a_measure, "F5": self.a_tx, "F6": self.a_rx, "F7": self.a_cw,
-         "Esc": self.a_stop, "F8": self.save_csv, "F9": lambda: self.nb.select(self.tab_github), "Ctrl+L": self.a_clear}[key]()
+         "Esc": self.a_stop, "F8": self.save_csv, "F9": lambda: self.nb.select(self.tab_github), "F10": self.a_series, "Ctrl+L": self.a_clear}[key]()
 
     # ----- schede -----
     def boards(self):
@@ -947,6 +1016,32 @@ class App:
             self.post(lambda: self.add_row(row))
         self._threaded(job)
 
+    def a_series(self):
+        b = self._need(2)
+        c = self.call.get().strip().upper()
+        if not b or not c:
+            if b:
+                self.set_status("Scrivi il nominativo.")
+            return
+        try:
+            codes = core.parse_series(self.series_modes.get())
+            count, payload = int(self.series_count.get()), int(self.series_payload.get())
+            power, freq, att = int(self.vars["power"].get()), float(self.vars["freq"].get()), float(self.vars["att"].get())
+        except ValueError as e:
+            messagebox.showwarning("Serie", f"Controlla i campi della serie: {e}")
+            return
+        tx, rx = (self.pa.board, self.pb.board) if self.txsel.get() == "A" else (self.pb.board, self.pa.board)
+        self.series_stop.clear()
+        tot = sum(count * core.interval_ms(x, payload) for x in codes) / 1000.0
+        def job():
+            def prog(i, n, code):
+                self.post(lambda: self.set_status(f"Serie: modo {code} ({i + 1} di {n}), circa {tot / 60:.0f} minuti in tutto. Esc per fermare."))
+                if self.fake_link is not None:
+                    self.fake_link.att_db = att
+            rows = runner.run_series(tx, rx, codes, count, power, att, freq, payload, c, self.series_stop, prog, on_row=lambda r: self.post(lambda: self.add_row(r)))
+            self.post(lambda: self.set_status(f"Serie finita: {len(rows)} modi su {len(codes)}." + (" Fermata." if self.series_stop.is_set() else "")))
+        self._threaded(job)
+
     def add_row(self, row):
         self.rows.append(row)
         self.tree.insert("", "end", values=(row["mode"], f"{row['att_db']:g}", f"{row['p_rx_dbm']:g}", row["sent"], row["rx_ok"], f"{row['loss_pct']:g}",
@@ -985,6 +1080,7 @@ class App:
             tx.send("CW 10")
 
     def a_stop(self):
+        self.series_stop.set()
         for b in self.boards():
             b.send("STOP")
         self.set_status("STOP mandato.")

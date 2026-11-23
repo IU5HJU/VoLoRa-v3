@@ -346,6 +346,20 @@ def plan_run(t0, count, interval_ms, lead_rx=5.0, tail=10.0):
     return {"t0": t0, "tx_start": t0, "rx_start": t0 - lead_rx, "rx_window_s": int(dur + lead_rx + tail + 0.999), "tx_duration_s": dur}
 
 
+def plan_series(t0, codes, count, payload, interval_of, lead_rx=5.0, tail=10.0, gap=20.0):
+    """Piano di una serie di modi uno dopo l'altro. Dipende solo da T0, dall'elenco dei modi e dai parametri: i due colleghi lo ricavano uguale.
+    `interval_of(code, payload)` da' l'intervallo in ms. Ogni passo: {'code', 'interval_ms', 'plan'} con plan come plan_run. Fra un passo e l'altro
+    restano anticipo, coda e `gap` secondi per riconfigurare le schede."""
+    steps = []
+    t = t0
+    for code in codes:
+        iv = interval_of(code, payload)
+        plan = plan_run(t, count, iv, lead_rx=lead_rx, tail=tail)
+        steps.append({"code": code, "interval_ms": iv, "plan": plan})
+        t = t + plan["tx_duration_s"] + tail + lead_rx + gap
+    return steps
+
+
 def wait_until(clock, target_utc, stop=None, sleep=time.sleep, spin_s=0.05):
     """Aspetta l'ora UTC `target_utc` (secondi Unix). Ritorna l'errore in secondi (ora vera - bersaglio al momento dell'uscita), o None se interrotta."""
     while True:

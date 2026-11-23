@@ -68,6 +68,33 @@ def import_line(text):
     return out
 
 
+def import_lines(text):
+    """Piu' righe VOLORA-PROVA incollate insieme -> lista di dizionari (le righe non valide sono ignorate)."""
+    out = []
+    for ln in text.replace(MAGIC, "\n" + MAGIC).splitlines():
+        if MAGIC in ln:
+            try:
+                out.append(import_line(ln))
+            except ValueError:
+                pass
+    return out
+
+
+def find_match(runs, remote, tol_s=5.0):
+    """Indice della mia prova a cui appartiene la riga del collega: stesso modo, T0 entro `tol_s`, ruolo opposto e non ancora unita; None se non c'e'."""
+    for i, r in enumerate(runs):
+        if r.get("remote_call"):
+            continue
+        if r.get("role") == remote["role"]:
+            continue
+        if remote.get("mode") and r.get("mode") != remote["mode"]:
+            continue
+        if "t0" in remote and abs(remote["t0"] - r["t0"]) > tol_s:
+            continue
+        return i
+    return None
+
+
 def my_position(run_or_pos):
     return run_or_pos.get("my_lat"), run_or_pos.get("my_lon")
 

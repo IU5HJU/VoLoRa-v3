@@ -29,6 +29,23 @@ def configure(boards, code, power, freq, payload, call):
         command(b, f"PAYLOAD {payload}")
 
 
+def run_series(tx, rx, codes, count, power, att, freq, payload, call, stop=None, progress=None, on_row=None):
+    """Serie di modi fra due schede, per esempio i gradini lenti R11-R14: per ogni modo configura le due schede e manda `count` pacchetti con un intervallo
+    adatto al tempo in aria. Ritorna le righe di risultato. `stop` e' un threading.Event; `progress(i, n, codice)` e' chiamata prima di ogni modo, `on_row(riga)` dopo."""
+    rows = []
+    for i, code in enumerate(codes):
+        if stop is not None and stop.is_set():
+            break
+        if progress:
+            progress(i, len(codes), code)
+        configure([tx, rx], code, power, freq, payload, call)
+        row = run_point(tx, rx, code, count, core.interval_ms(code, payload), power, att, freq)
+        rows.append(row)
+        if on_row:
+            on_row(row)
+    return rows
+
+
 def run_point(tx, rx, code, count, interval_ms, power, att, freq, stop=None):
     """Una misura: la scheda rx ascolta, la tx manda `count` pacchetti. Ritorna la riga di risultato (dizionario di core.FIELDS)."""
     window = int(count * interval_ms / 1000.0) + 15

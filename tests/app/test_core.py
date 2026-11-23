@@ -155,6 +155,21 @@ check(row["sent"] == 20 and row["rx_ok"] == 20 and row["loss_pct"] == 0.0, "misu
 link.att_db = 140
 row = runner.run_point(a, bb, "L4", 20, 300, 2, 140.0, 433.475)
 check(row["rx_ok"] <= 1 and row["loss_pct"] >= 90.0, "misura finta con segnale sotto la sensibilita'")
+# serie di modi
+check(core.parse_series("R11, R12;R13 R14") == ["L10", "L11", "L12", "L13"], "serie: R11-R14 diventano L10-L13")
+try:
+    core.parse_series("R99")
+    check(False, "serie con modo sconosciuto deve dare errore")
+except ValueError:
+    check(True, "serie con modo sconosciuto: errore")
+check(core.interval_ms("L13", 26) > 30000 and core.interval_ms("L4", 26) == 300, f"intervallo dal tempo in aria: L13 {core.interval_ms('L13', 26)} ms, L4 {core.interval_ms('L4', 26)} ms")
+link.att_db = 100
+got = []
+rows = runner.run_series(a, bb, ["L4", "L5"], 5, 2, 100.0, 433.475, 26, "IU5HJU", on_row=got.append)
+check([r["mode"] for r in rows] == ["L4", "L5"] and len(got) == 2 and all(r["rx_ok"] == 5 for r in rows), "serie finta L4, L5: due righe, 5/5")
+import threading
+ev = threading.Event(); ev.set()
+check(runner.run_series(a, bb, ["L4"], 5, 2, 100.0, 433.475, 26, "IU5HJU", stop=ev) == [], "serie gia' fermata: nessuna misura")
 try:
     runner.command(a, "FREQ", "MODE", timeout=1)
     check(False, "FREQ senza argomento deve dare errore")

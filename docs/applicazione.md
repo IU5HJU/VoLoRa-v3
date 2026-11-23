@@ -54,6 +54,7 @@ Scheda **Prove sul campo**: ogni collega ha **una scheda** collegata al proprio 
 | Esc | **STOP** immediato |
 | F8 | salva il CSV |
 | F9 | scheda GitHub |
+| F10 | serie di modi fra le due schede (per esempio R11-R14), intervallo calcolato dal tempo in aria; vedi [prova-gradini-lenti.md](prova-gradini-lenti.md) |
 | Ctrl+L | pulisce i monitor |
 
 ## Invio dei risultati su GitHub

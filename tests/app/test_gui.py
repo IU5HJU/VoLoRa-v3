@@ -72,6 +72,14 @@ for _ in range(100):
     if len(app.rows) == 2:
         break
 check(len(app.rows) == 2 and app.rows[1]["loss_pct"] >= 90, "seconda misura sotto la sensibilita'")
+# serie con F10
+app.series_modes.set("L4,L5"); app.series_count.set("5"); app.vars["att"].set("100")
+app.action("F10")
+for _ in range(150):
+    pump(root, 0.2)
+    if len(app.rows) == 4:
+        break
+check(len(app.rows) == 4 and [r["mode"] for r in app.rows[2:]] == ["L4", "L5"], "F10: la serie aggiunge una riga per modo")
 # riga dei comandi con cronologia
 app.pa.entry.insert(0, "SHOW"); app.pa.send()
 pump(root, 0.3)
@@ -208,6 +216,38 @@ check(len(app.field_runs) == 1 and app.field_runs[0]["sent"] == 5 and app.field_
 r = app.field_runs[0]
 check(abs(r["start_err_ms"]) < 60 and r["clock_src"] == "ntp" and r["t0"] == t0, f"errore di partenza {r['start_err_ms']:.1f} ms con orologio {r['clock_src']}")
 check(r.get("my_loc", "").startswith("JN53") and r.get("my_alt") == 95.0, "posizione e quota dal GPS nella prova")
+# serie programmata di due modi (coda e pausa ridotte per la prova)
+app.field_runs.clear()
+for ch in app.ftree.get_children():
+    app.ftree.delete(ch)
+app.series_tail, app.series_gap = 1.0, 0.0
+app.lead_rx.set("1")
+app.field_series.set("L4,L5"); app.series_count.set("3"); app.series_payload.set("26")
+ts0 = int(app.clock.now()) + 7
+app.t0_var.set(timesync.fmt_utc(ts0, ms=False).replace(" UTC", ""))
+app.program_run()
+for _ in range(200):
+    pump(root, 0.2)
+    if len(app.field_runs) == 2:
+        break
+check(len(app.field_runs) == 2 and [x["mode"] for x in app.field_runs] == ["L4", "L5"] and app.field_runs[1]["t0"] > ts0, "serie programmata: due prove consecutive L4 e L5")
+check("SERIE" in app.plan_text() and "L4,L5" in app.plan_text(), "condizioni della serie per il collega: " + app.plan_text()[:80])
+remote = "\n".join(field.export_line(dict(role="RX", t0=x["t0"], my_call="IK5XYZ", mode=x["mode"], freq_mhz=x["freq_mhz"], rx_ok=3, rx_bad=0, rssi=-100.0, snr=5.0, fei_hz=0.0)) for x in app.field_runs)
+check(app.merge_many(remote) == (2, 0) and all(x.get("remote_call") == "IK5XYZ" for x in app.field_runs), "unione automatica di due righe del collega")
+app.field_series.set("")
+app.field_runs.clear()
+for ch in app.ftree.get_children():
+    app.ftree.delete(ch)
+app.vars["count"].set("5"); app.vars["interval"].set("100"); app.vars["payload"].set("64")
+app.lead_rx.set("5"); app.series_tail, app.series_gap = 10.0, 20.0
+t0 = int(app.clock.now()) + 7
+app.t0_var.set(timesync.fmt_utc(t0, ms=False).replace(" UTC", ""))
+app.program_run()
+for _ in range(120):
+    pump(root, 0.2)
+    if app.field_runs:
+        break
+r = app.field_runs[0]
 # unione con il collega
 rem = field.export_line(dict(role="RX", t0=t0, my_call="IK5XYZ", my_lat=44.0, my_lon=11.9, mode=r["mode"], freq_mhz=r["freq_mhz"], rx_ok=5, rx_bad=0, rssi=-100.0, snr=7.0, fei_hz=10.0))
 res = app.merge_remote_text("Dati: " + rem)

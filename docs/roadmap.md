@@ -17,7 +17,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 - **Esito:** tabella modo, velocità, soglia SNR, portata stimata.
 
 ## Fase 1b: prove a distanza reale, con i colleghi radioamatori
-- Materiale da condividere: [materiale.md](materiale.md). Guida per chi collabora: [guida-colleghi.md](guida-colleghi.md). Protocollo e scheda di rilievo: [prove-sul-campo.md](prove-sul-campo.md).
+- Materiale da condividere: [materiale.md](materiale.md). Guida per chi collabora: [guida-colleghi.md](guida-colleghi.md). Protocollo e scheda di rilievo: [prove-sul-campo.md](prove-sul-campo.md). Prova dei gradini lenti in laboratorio: [prova-gradini-lenti.md](prova-gradini-lenti.md).
 - Primo passo: un volontario prova il firmware di misura a banco, prima di distribuirlo.
 
 ## Fase 2: base comune dei firmware

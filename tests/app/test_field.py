@@ -72,5 +72,12 @@ buf = io.StringIO()
 w = csv.DictWriter(buf, field.RILIEVO_FIELDS)
 w.writeheader(); w.writerow(row)
 check(buf.getvalue().count("\n") == 2, "CSV scrivibile")
+# piu' righe del collega e abbinamento per modo e T0
+mine = [dict(role="TX", t0=1000.0, mode="L10"), dict(role="TX", t0=1100.0, mode="L11")]
+rem_txt = field.export_line(dict(role="RX", t0=1100.2, my_call="IK5XYZ", mode="L11", freq_mhz=433.475, rx_ok=4)) + "\n" + field.export_line(dict(role="RX", t0=1000.0, my_call="IK5XYZ", mode="L10", rx_ok=9))
+lines = field.import_lines("ciao " + rem_txt + " fine")
+check(len(lines) == 2 and field.find_match(mine, lines[0]) == 1 and field.find_match(mine, lines[1]) == 0, "piu' righe: ognuna trova la prova con lo stesso modo e T0")
+mine[1]["remote_call"] = "IK5XYZ"
+check(field.find_match(mine, lines[0]) is None, "una prova gia' unita non viene riabbinata")
 print("prove sul campo: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)
