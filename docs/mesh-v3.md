@@ -170,7 +170,17 @@ I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo. *
 | 23/11/2026 | **Il gruppo di ripetitori è coordinato dal mittente** (il destinatario può mettere il veto). | autore |
 | 23/11/2026 | Regola "pochi e veloci" di partenza: **almeno 2 membri, tolleranza di 1 gradino** (da tarare sul simulatore). | autore |
 | 23/11/2026 | Primo passo del piano: **simulatore mesh sul PC**. | autore |
+| 23/11/2026 | Va studiata una **tecnologia di voting** per la modalità VOCE (probabilmente VoLoRa v2): la periferica sceglie fra nodi a copertura parzialmente sovrapposta; due nodi con la stessa frequenza e copertura sovrapposta non sono possibili (lo gestiscono i radioamatori). (Punto 10b.) | autore |
 | 22/11/2026 | La precisione dell'orologio richiesta è bassa: NTP o GPS bastano (anche per gli slot). | autore, [applicazione.md](applicazione.md) |
+
+## 10b. Voting nella modalità VOCE (da studiare)
+Requisito dell'autore (23/11/2026): quando le stazioni usano la modalità **VOCE** (da individuare, probabilmente quella del **VoLoRa v2**), il protocollo V3 dovrà prevedere una **tecnologia di voting**.
+
+- **Perché.** La larghezza di banda di LoRa è grande: è più corretto **non occupare più frequenze per lo stesso servizio**. Più nodi dello stesso servizio possono avere una **copertura parzialmente sovrapposta**, e la periferica deve poter **scegliere** quale usare.
+- **Cosa deve poter fare la periferica radio in modalità normale:** scegliere fra **due nodi a copertura parzialmente sovrapposta** quello migliore (per esempio per rapporto di segnale), e cambiare quando le condizioni cambiano (con isteresi, per non rimbalzare).
+- **Vincolo noto (regola dei radioamatori):** **due nodi con copertura radio sovrapposta e la stessa frequenza non sono possibili**: si disturberebbero. La gestione è affidata ai radioamatori che installano i nodi, come si fa con i ripetitori. Il protocollo non deve cercare di risolvere la sovrapposizione sulla stessa frequenza, ma deve rendere possibile la scelta quando le frequenze (o i turni) sono diversi.
+- **Da studiare:** come il nodo si annuncia (beacon con frequenza, profilo e carico), la metrica di scelta (RSSI, SNR, margine, perdita recente), l'isteresi del cambio, il cambio **durante** un turno di parola, e il comportamento con un nodo che si ascolta male. Collegamento con i beacon e il rapporto di segnale già previsti dal mesh.
+- **Stato:** solo appuntato. Non progettato, non simulato, non provato.
 
 ## 11. Da decidere
 1. ~~**Quante stazioni** per zona~~ **Deciso: circa 5.** Con 5 stazioni il beacon a R14 collide poco: nel [simulatore mesh](simulatore-mesh.md) il beacon senza coordinamento arriva nell'80 % dei casi e con slot adattivo nel 100 %.
