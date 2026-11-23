@@ -30,6 +30,6 @@ La T3 non ha PSRAM ma ha lo slot microSD. Nei ruoli senza audio (nodo immagini, 
 5. **Compatibilità v2**: voce e testo, dal submodule.
 
 ## Vincoli
-- **Frequenze (deciso il 21/11/2026):** libere fra **430 e 440 MHz**, senza limiti di larghezza di banda né di band plan. Le modalità si scelgono per prestazioni e robustezza.
+- **Frequenze (deciso il 21/11/2026, precisato il 23/11/2026):** libere fra **430 e 440 MHz**, la gamma attribuita al servizio di radioamatore, senza limiti di larghezza di banda né di band plan: lo studio non entra nella divisione in fette fra i servizi, che cambia da paese a paese. Le modalità si scelgono per prestazioni e robustezza. La banda però è **condivisa e non larga**: si lavora il più possibile in **isofrequenza** (vedi [voting-isofrequenza.md](voting-isofrequenza.md)).
 - Identificazione periodica del nominativo, nessuna cifratura dei contenuti.
 - Tempo in aria massimo per immagine (budget da fissare).

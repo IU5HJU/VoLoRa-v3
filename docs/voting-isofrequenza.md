@@ -3,7 +3,9 @@
 > **Stato (23/11/2026): requisito dell'autore, logica proposta e provata solo con un simulatore sul PC. Nessuna parte è provata su schede.** I numeri sono di un modello (collegamenti stimati, ombreggiamento casuale), non misure. Questa è una **bozza da discutere**, non una decisione.
 
 ## 1. Perché serve
-La banda dei 430 MHz è **stretta e condivisa con altri servizi**: i canali larghi (fino a 250 kHz per i gradini più ampi) non si possono moltiplicare senza scontrarsi con quelli esistenti. Per questo bisogna **lavorare il più possibile in isofrequenza**: più nodi sulla **stessa frequenza**, con coperture che si sovrappongono solo in parte. (Nota: l'estremo di banda detto a voce il 23/11/2026, "da 4,30 a 4,37 MHz", va confermato; sembra una banda di pochi MHz attorno a 430 MHz. Non cambia la logica, cambia solo quanti canali ci stanno.)
+La banda dei 430 MHz è **stretta e condivisa con altri servizi**: i canali larghi (fino a 250 kHz per i gradini più ampi) non si possono moltiplicare senza scontrarsi con quelli esistenti. Per questo bisogna **lavorare il più possibile in isofrequenza**: più nodi sulla **stessa frequenza**, con coperture che si sovrappongono solo in parte.
+
+**Banda di riferimento dello studio (precisata il 23/11/2026):** **430-440 MHz**, la gamma attribuita al servizio di radioamatore. Come dentro la banda sono divise le fette fra i vari servizi **non interessa allo studio**: interessa restare dentro le frequenze del servizio di radioamatore. Lo studio è in italiano ma deve poter servire anche nei paesi vicini, dove la norma è un po' diversa (per questo non si fissa un band plan nazionale). Il limite della propria licenza resta di chi trasmette.
 
 Il caso da risolvere è la **modalità voce** (probabilmente il protocollo VoLoRa v2) con una stazione mobile che si sposta:
 

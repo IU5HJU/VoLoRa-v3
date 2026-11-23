@@ -1,7 +1,7 @@
 # Punti aperti
 
 1. **Hardware:** solo le schede attuali (SX1278, SX1262) o anche altre radio, per esempio SX1280 a 2,4 GHz per le alte velocità?
-2. ~~**Banda e norme**~~ **Deciso il 21/11/2026:** nessun limite di larghezza di banda e nessun vincolo di band plan dentro **430-440 MHz**. Le modalità si scelgono solo per prestazioni e robustezza. Restano da verificare le radio e le schede (punto 7).
+2. ~~**Banda e norme**~~ **Deciso il 21/11/2026:** nessun limite di larghezza di banda e nessun vincolo di band plan dentro **430-440 MHz**. Le modalità si scelgono solo per prestazioni e robustezza. **Precisato il 23/11/2026:** 430-440 MHz è la gamma attribuita al servizio di radioamatore; come è divisa fra i servizi non interessa allo studio (e cambia nei paesi vicini). Restano da verificare le radio e le schede (punto 7).
 3. **Immagini via ripetitore e reflector:** sì o no?
 4. **Correzione d'errore o conferme selettive**, o entrambe: si decide dopo le misure della fase 1.
 5. **Formato dell'immagine:** quale codifica a livelli gira sull'ESP32.
