@@ -27,6 +27,8 @@ jobs:
         run: make -C firmware/misura test
       - name: Simulatore del protocollo immagini
         run: python3 tests/sim/test_sim_immagini.py
+      - name: Simulatore mesh
+        run: python3 tests/sim/test_sim_mesh.py
       - name: "Applicazione, logica"
         run: python3 tests/app/test_core.py
       - name: "Applicazione, orologio, GPS e prove sul campo"

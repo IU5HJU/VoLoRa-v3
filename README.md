@@ -21,6 +21,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 - [docs/protocollo-immagini.md](docs/protocollo-immagini.md): bozza del protocollo immagini V3 (gradini, frame, negoziazione, ridimensionamento).
 - [docs/scala-modi.md](docs/scala-modi.md): bozza della scala dei modi LoRa/FSK (calcolata, non misurata).
 - [docs/firmware-misura.md](docs/firmware-misura.md): firmware di misura (non è il V3) e pilota dal PC.
+- [docs/simulatore-mesh.md](docs/simulatore-mesh.md): simulatore mesh (collisioni dei beacon, scelta del gruppo di ripetitori, taratura della regola) con i risultati.
 - [docs/mesh-v3.md](docs/mesh-v3.md): bozza della logica mesh V3 (beacon, polling, ripetizione, ricezione da più stazioni) con numeri calcolati e decisioni.
 - [docs/regole-radioamatoriali.md](docs/regole-radioamatoriali.md): regola di progetto: nominativo, rapporto di segnale e posizione (locatore o GPS) sempre; nessuna privacy.
 - [docs/metodo-di-prova.pdf](docs/metodo-di-prova.pdf): il metodo di prova spiegato in tre pagine, da condividere con i colleghi che vogliono partecipare.

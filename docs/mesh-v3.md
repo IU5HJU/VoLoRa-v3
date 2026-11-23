@@ -132,7 +132,7 @@ Chi non è nell'elenco **tace** per quell'oggetto: la priorità è delle stazion
 3. Gli altri sono **esclusi** e restano in **riserva**: entrano se un membro cade.
 4. **Isteresi:** un membro escluso rientra solo se il suo margine supera di almeno 3 dB la soglia per due finestre di fila.
 
-I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo.
+I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo. **Prima taratura sul [simulatore mesh](simulatore-mesh.md) (23/11/2026):** usare tutti i candidati è la scelta peggiore (circa 64 minuti contro 4 a 25 km); N_min = 2 con T = 1 alza la probabilità di completare da 85 % a 91-93 % con un costo di tempo contenuto; una tolleranza grande (T = 4) è un errore (34 minuti). Modello stimato, non misure.
 
 ### Informazione nel pacchetto
 - Nell'OFFERTA: **classe di qualità** = gradino massimo con 6 dB di margine (4 bit) e i **margini in dB** verso mittente e destinatario (1 byte ciascuno).
@@ -173,7 +173,7 @@ I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo.
 | 22/11/2026 | La precisione dell'orologio richiesta è bassa: NTP o GPS bastano (anche per gli slot). | autore, [applicazione.md](applicazione.md) |
 
 ## 11. Da decidere
-1. ~~**Quante stazioni** per zona~~ **Deciso: circa 5.** Con 5 stazioni il beacon a R14 collide poco (vedi il simulatore mesh).
+1. ~~**Quante stazioni** per zona~~ **Deciso: circa 5.** Con 5 stazioni il beacon a R14 collide poco: nel [simulatore mesh](simulatore-mesh.md) il beacon senza coordinamento arriva nell'80 % dei casi e con slot adattivo nel 100 %.
 2. **Gradino di ascolto** (fisso R10 o R12, oppure adattivo con R14 dove i vicini sono pochi), dopo le misure dei gradini stretti fra schede vere.
 3. **Anti collisione:** CAD più ritardo casuale, oppure slot dal nominativo, oppure entrambi.
 4. **Intervallo del beacon** e se adattivo.
