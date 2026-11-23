@@ -165,7 +165,7 @@ Codificati e decodificati in [`tools/frame_mesh.py`](../tools/frame_mesh.py), pr
 | POLL-REPLY (livello 2) | 14/2 | 22 | nominativo (6), **posizione (7)**, **RSSI e SNR** del POLL (2), maschera dei gradini (2), codici (1), memoria (2) |
 | RICHIESTA-RIPETITORI | 14/3 | 19 | id oggetto (2), nominativo di origine (6), destinatario (6), dimensione (3) |
 | OFFERTA | 14/4 | 23 | id oggetto (2), nominativo (6), **posizione (7)**, gradino massimo verso mittente e verso destinatario (4+4 bit), **i due margini in dB** (2), codici supportati (1), memoria (2) |
-| GRUPPO | 14/5 | 17 + 7 per membro | id oggetto (2), codice (1), gradino comune (1), simboli sorgente K (2), dimensione del simbolo (1), seme (2), **ora di inizio UTC** (4), numero di membri (1); per ogni membro nominativo (6) e **stato** (ammesso, escluso, riserva) con **turno** (1) |
+| GRUPPO | 14/5 | 16 + 7 per membro | id oggetto (2), codice (1), gradino comune (1), simboli sorgente K (2), dimensione del simbolo (1), seme (2), **ora di inizio UTC** (4), numero di membri (1); per ogni membro nominativo (6) e **stato** (ammesso, escluso, riserva) con **turno** (1) |
 | CONFERMA | 14/6 | 6 | id oggetto (2), esito 0 (1), gradino (1) |
 | VETO | 14/6 | 12 | come CONFERMA con esito 1 e il nominativo del membro che il destinatario non sente al gradino scelto |
 
