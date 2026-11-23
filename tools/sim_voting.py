@@ -91,6 +91,52 @@ def run_elezione(politica, canale, dist_km=20.0, scenari=3000, seed=1, extra=25.
             "ritardo_medio_s": statistics.mean(ritardi) if ritardi else float("nan")}
 
 
+GUARD_VOTO = 0.010     # s fra uno slot di voto e il successivo
+VOTE_BYTES = 12        # frame_mesh.enc_vote
+
+
+def rung_collegamento(dist_km, extra_nodi, rng, sigma=4.0):
+    """Gradino piu' veloce con 6 dB di margine fra i due nodi (antenne in alto: perdita extra piccola); None se non si sentono."""
+    return sm.best_rung(_prx(rng, dist_km, extra_nodi, sigma=sigma))
+
+
+def run_voto_radio(dist_nodi_km, extra_mobile=25.0, extra_nodi=10.0, p_loss=0.03, repeat=1, scenari=3000, seed=1):
+    """Voto sul canale di servizio fra i nodi, via radio (Internet non e' affidabile). Dopo la fine del primo pacchetto della mobile ogni nodo che l'ha
+    decodificata manda un VOTO nel proprio slot (ordine per identificativo); vince il margine migliore, a parita' l'identificativo piu' basso.
+    Un VOTO perso (probabilita' p_loss per tentativo, `repeat` tentativi) fa partire anche il perdente: doppio accesso. Se i nodi non si sentono a nessun gradino
+    il voto non e' possibile (doppio accesso). Il perdente deve comunque aver sentito il VOTO del vincitore: conta solo la perdita di quel frame."""
+    rng = random.Random(seed)
+    sens = pi.sensitivity_dbm(RUNG)
+    n = doppi = migliore = senza_link = 0
+    durate = []
+    rungs = []
+    for _ in range(scenari):
+        x, y = rng.uniform(0.0, dist_nodi_km), rng.uniform(-0.3 * dist_nodi_km, 0.3 * dist_nodi_km)
+        d1, d2 = math.hypot(x, y), math.hypot(dist_nodi_km - x, y)
+        p1, p2 = _prx(rng, d1, extra_mobile), _prx(rng, d2, extra_mobile)
+        if p1 < sens or p2 < sens:
+            continue
+        n += 1
+        rl = rung_collegamento(dist_nodi_km, extra_nodi, rng)
+        if rl is None:
+            senza_link += 1
+            doppi += 1
+            continue
+        rungs.append(rl)
+        slot = pi.frame_airtime_s(rl, VOTE_BYTES) + GUARD_VOTO
+        durate.append(2 * slot * repeat)
+        m = [p1 - sens + rng.gauss(0, MEAS_SIGMA), p2 - sens + rng.gauss(0, MEAS_SIGMA)]
+        win = 0 if m[0] >= m[1] else 1
+        if all(rng.random() < p_loss for _ in range(repeat)):       # il perdente non ha sentito il VOTO del vincitore
+            doppi += 1
+        else:
+            migliore += 1 if (p1 >= p2) == (win == 0) else 0
+    ok = n - doppi
+    return {"casi": n, "doppio_accesso": doppi / n if n else float("nan"), "senza_collegamento": senza_link / n if n else float("nan"),
+            "migliore_se_unico": migliore / ok if ok else float("nan"), "durata_voto_s": statistics.median(durate) if durate else float("nan"),
+            "gradino_mediano": statistics.median(rungs) if rungs else None}
+
+
 def run_percorso(isteresi_db, passi=60, dist_km=20.0, seed=1, extra=25.0, fading_db=3.0, prove=300):
     """Una stazione si muove da un nodo all'altro e trasmette ogni `passi`-esimo punto. Conta i cambi di nodo (ognuno e' un possibile doppio accesso o un taglio).
     isteresi_db = 0: sempre il migliore del momento; altrimenti si resta col nodo di prima finche' l'altro non lo supera di tanti dB."""
@@ -137,6 +183,14 @@ def main():
         r2 = run_elezione("qualita", "rf", a.distanza, a.scenari, a.seed, nodi_si_sentono=True)
         print(f"| {1000 * W:.0f} ms | {100 * r1['doppio_accesso']:.1f} % | {100 * r2['doppio_accesso']:.1f} % | {1000 * r1['ritardo_medio_s']:.0f} ms |")
     W = w0
+    print("\nVoto via radio sul canale di servizio fra i nodi (antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo):")
+    print("| distanza fra i nodi | nodi si sentono | gradino del voto | durata del voto (2 slot) | entra in 200 ms | doppio accesso | nodo migliore |")
+    print("|---|---|---|---|---|---|---|")
+    for dk in (10.0, 20.0, 30.0, 50.0):
+        r = run_voto_radio(dk, scenari=a.scenari, seed=a.seed)
+        durata = r["durata_voto_s"]
+        gr = "-" if r["gradino_mediano"] is None else f"R{int(r['gradino_mediano'])}"
+        print(f"| {dk:g} km | {100 * (1 - r['senza_collegamento']):.0f} % | {gr} | {1000 * durata:.0f} ms | {'si' if durata <= W else 'NO'} | {100 * r['doppio_accesso']:.1f} % | {100 * r['migliore_se_unico']:.0f} % |")
     print("\nCambi di nodo lungo un percorso fra i due (media per prova):")
     for h in (0.0, 3.0, 6.0):
         print(f"  isteresi {h:g} dB: {run_percorso(h, dist_km=a.distanza, seed=a.seed):.1f}")

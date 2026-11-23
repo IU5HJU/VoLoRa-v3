@@ -67,6 +67,9 @@ check(d["veto"] and d["veto_call"] == "IW5BBB", "VETO con il membro che non si s
 check(fm.decode(b"\x3e\x63" + bytes(10)) is None and fm.decode(b"\x2e\x01" + bytes(12)) is None and fm.decode(fm.enc_group(oid, 1, 1, 1, 1, 1, 1, mem)[:-3]) is None,
       "frame sconosciuti o troncati: scartati")
 
+d = fm.decode(fm.enc_vote("IU5HJU", 0xBEEF, 14, 3))
+check(len(fm.enc_vote("IU5HJU", 1, 0, 1)) == 12 and d["nome"] == "VOTE" and d["call"] == "IU5HJU" and d["session"] == 0xBEEF and d["margin"] == 14 and d["node"] == 3, "VOTO: 12 byte, nominativo, sessione, margine, nodo")
+check(fm.vote_winner([(10, 2), (14, 5)]) == 5 and fm.vote_winner([(12, 4), (12, 2)]) == 2, "vince il margine piu' alto; a parita' l'identificativo piu' basso")
 # i frame V3 gia' esistenti con i campi nuovi
 h = sim.decode(sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100, reply=True, rssi=-110, snr=-4, pos={"loc": "JN53ab"}))
 check(h["call"] == "IU5HJU" and h["rssi"] == -110 and h["pos"] == {"loc": "JN53ab"} and h["len"] == sim.decode(sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100, reply=True, rssi=-110, snr=-4))["len"] + 7,

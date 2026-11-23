@@ -36,7 +36,16 @@ Ogni nodo che **decodifica la prima trasmissione** di una stazione, a riposo:
 La decisione vale per **tutta la sessione** (tutto il PTT): non si cambia nodo a metà frase.
 
 ### 3.2 Annuncio fra nodi (quando non si sentono in RF)
-Due nodi distanti **non si sentono**: sono **terminali nascosti** ([terminali-nascosti.md](terminali-nascosti.md)) e l'ascolto da solo non basta. Servono un **annuncio** su un altro percorso, per esempio la **rete** (Internet o un collegamento dati fra i nodi): un messaggio brevissimo `CLAIM` con nominativo della mobile, sessione, **qualità misurata** e identificativo del nodo. Il nodo con la qualità minore che lo riceve **prima di partire** si ferma. A parità di qualità vince l'**identificativo del nodo più basso** (spareggio deterministico, senza caso).
+Due nodi distanti **non si sentono sulla frequenza della mobile**: sono **terminali nascosti** ([terminali-nascosti.md](terminali-nascosti.md)) e l'ascolto da solo non basta. L'annuncio **non può passare da Internet**: in un progetto radioamatoriale Internet è solo un aiuto per la sperimentazione, non un mezzo di comunicazione affidabile (stessa ragione per cui l'orologio si prende da NTP se c'è Internet e dal GPS se non c'è). **L'annuncio va via radio.**
+
+**Il voto via radio** (decisione dell'autore, 23/11/2026):
+1. Il nodo parla su un **canale di servizio fra i nodi**, **non** sulla frequenza della mobile: mentre la mobile trasmette, un nodo che trasmettesse sulla stessa frequenza la coprirebbe. Il canale di servizio è una frequenza in più dentro 430-440 MHz, **una per tutta la zona**, con antenne in alto o direzionali.
+2. Alla fine del primo pacchetto della mobile (istante comune a tutti i nodi che l'hanno sentita) ogni nodo manda un **VOTO** da 12 byte nel **proprio slot** (ordine per identificativo), con **nominativo della mobile, sessione, margine in dB e identificativo del nodo**.
+3. **Vince il margine più alto; a parità l'identificativo più basso** (spareggio fisso, senza caso). Chi perde non ritrasmette; chi vince ritrasmette con `RELAYED`.
+4. **Se un nodo non sente il voto dell'altro, ritrasmette comunque**: meglio un doppio accesso occasionale che perdere l'audio. Il voto si può **ripetere** per ridurre il caso.
+5. La scheda che ritrasmette (quella di trasmissione del nodo, a riposo fino a quel momento) può fare da radio di servizio senza una terza scheda: *ipotesi da verificare sul ripetitore v2 a due schede*.
+
+**Vincolo di progetto:** due nodi in isofrequenza con una zona in comune devono **sentirsi sul canale di servizio** a un gradino abbastanza veloce da far entrare il voto nei 200 ms (punto 4). Se non si sentono, la zona di sovrapposizione **non è ammessa**: lo sa chi installa i nodi, che è la regola dei radioamatori.
 
 ### 3.3 Il nodo "ricorda" la stazione (la seconda trasmissione)
 Per rispondere a "alla seconda trasmissione, quale dei due usare?": ogni nodo tiene per qualche minuto, **per nominativo**, **chi ha vinto l'ultima volta** e con quale qualità. Alla trasmissione successiva il vincitore precedente **resta** il vincitore, finché l'altro nodo non lo supera di una **isteresi** (di base 3 dB). Il nominativo è già nel pacchetto v2: **alla mobile non serve nessun campo nuovo.**
@@ -57,13 +66,13 @@ Programma: [`tools/sim_voting.py`](../tools/sim_voting.py), prove in [`tests/sim
 | ritardo casuale | RF | no | **100 %** | – | – |
 | **per qualità** | RF | sì | 9,3 % | **98 %** | 73 ms |
 | per qualità | RF | **no** | **100 %** | – | – |
-| **per qualità** | **rete (50 ms)** | no | 39 % | **100 %** | 54 ms |
+| per qualità | rete (50 ms) *(solo per esperimenti)* | no | 39 % | 100 % | 54 ms |
 
 Lettura:
 - **Senza regola il doppio accesso è sicuro.** Con l'ascolto basta pochissimo se i nodi si sentono.
 - **Il ritardo per qualità non evita il doppio accesso meglio del caso, ma sceglie il nodo giusto** (98 % contro 47 %): questo è il vantaggio.
-- **Se i nodi non si sentono e non hanno un altro canale, il doppio accesso è inevitabile.** Un percorso di rete fra i nodi (anche lento) **è necessario** per la zona di sovrapposizione.
-- Quello che resta (circa 9 % in RF, 39 % via rete con W = 200 ms) sono i casi in cui la qualità dei due è **quasi uguale**: i due ritardi cadono nella stessa finestra. Si riduce **allungando W**:
+- **Se i nodi non si sentono e non hanno un altro canale, il doppio accesso è inevitabile.** Serve un **percorso radio fra i nodi** (il canale di servizio): Internet non vale, perché non è affidabile.
+- Quello che resta con il solo ritardo (circa 9 % in RF, 39 % con un annuncio a 50 ms con W = 200 ms) sono i casi in cui la qualità dei due è **quasi uguale**: i due ritardi cadono nella stessa finestra. Si riduce **allungando W**:
 
 | W (ritardo massimo) | Doppio accesso via rete | Doppio accesso in RF | Ritardo medio via rete |
 |---|---|---|---|
@@ -72,22 +81,35 @@ Lettura:
 | 400 ms | 22 % | 5 % | 131 ms |
 | 800 ms | 11 % | 2 % | 289 ms |
 
-È un **compromesso** fra ritardo e doppio accesso. Il ritardo si paga una sola volta, alla **prima trasmissione a riposo**; durante la frase e nelle trasmissioni successive vale la memoria del vincitore (punto 3.3). **Da decidere**: quanto ritardo iniziale è accettabile per la voce.
+**Il voto via radio** (canale di servizio, VOTO da 12 byte, un voto su 33 perso, antenne in alto con 10 dB di perdita extra, un solo tentativo; stesso modello):
+
+| Distanza fra i nodi | Gradino del voto | Durata del voto (2 slot) | Entra in 200 ms | Doppio accesso | Nodo migliore |
+|---|---|---|---|---|---|
+| 10 km | R3 | 32 ms | sì | 3,0 % | 97 % |
+| 20 km | R4 | 41 ms | sì | 2,4 % | 95 % |
+| 30 km | R5 | 61 ms | sì | 3,9 % | 95 % |
+| 50 km | R7 | 164 ms | sì | 1,2 % | 95 % |
+
+Il doppio accesso residuo (circa 1-4 %) è soprattutto la **perdita del VOTO del vincitore** (3 % nel modello): si abbassa **ripetendo il voto**, a spese della durata. **È il metodo scelto:** vota il margine, non il caso, e non dipende da Internet. Il voto lungo il percorso a 50 km quasi riempie i 200 ms: oltre, serve un gradino più veloce (antenne migliori) o la zona di sovrapposizione non è ammessa.
+
+**Ritardo massimo W:** **200 ms vanno bene** (decisione dell'autore, 23/11/2026): nella v2 il ritardo è compensato da un **loop continuo del microfono prima della trasmissione**, quindi non si sente.
+
+Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio accesso. Il ritardo si paga una sola volta, alla **prima trasmissione a riposo**; durante la frase e nelle trasmissioni successive vale la memoria del vincitore (punto 3.3). **Da decidere**: quanto ritardo iniziale è accettabile per la voce.
 
 **Percorso:** una stazione che si muove da un nodo all'altro, scegliendo ogni volta il nodo migliore, **cambia nodo in media 9 volte**; con l'**isteresi di 3 dB 3,7 volte**, con 6 dB 1,3. L'isteresi serve (la scelta non deve rimbalzare con il fading), ma non va esagerata: oltre una certa soglia si resta troppo a lungo con il nodo peggiore.
 
 ## 5. Cose da decidere o studiare
-1. Ritardo massimo W e scala in dB. Il modello usa 200 ms su 20 dB; con la voce a pacchetti il ritardo iniziale pesa.
-2. Il **canale per l'annuncio** fra nodi: Internet (reflector, come nella v2), collegamento dati LoRa lento, o nessuno (e allora le zone di sovrapposizione non sono ammesse).
-3. Come ci si comporta con un nodo che parte e **poi riceve** il CLAIM: troncare la trasmissione subito (non modellato).
-4. Formato del `CLAIM` e dell'identificazione del nodo, e l'aggancio ai frame MESH ([mesh-v3.md](mesh-v3.md), punto 8c).
+1. ~~Ritardo massimo~~ **Deciso il 23/11/2026: 200 ms** (compensati dal loop del microfono della v2). Resta la scala in dB (20 dB nel modello).
+2. ~~Canale per l'annuncio~~ **Deciso il 23/11/2026: via radio**, mai da Internet. Da scegliere la **frequenza del canale di servizio** fra i nodi, il gradino e l'antenna, e se la scheda di trasmissione del nodo può fare da radio di servizio (da verificare).
+3. Quante **ripetizioni** del VOTO (una riduce il caso, ma allunga il voto) e il **tempo di guardia** fra gli slot (10 ms nel modello).
+4. Il formato del VOTO è in [`tools/frame_mesh.py`](../tools/frame_mesh.py) (`enc_vote`, sottotipo 7 del frame MESH, 12 byte); da integrare in [mesh-v3.md](mesh-v3.md), punto 8c.
 5. Quanto tempo il nodo ricorda il vincitore e la soglia dell'isteresi (di base 3 dB).
 6. Il **cambio di nodo durante un turno di parola** (di base: no).
 7. La **prova su schede**: due nodi in laboratorio, una scheda mobile.
 
 ## 6. Limiti del modello
-- Collegamenti stimati e ombreggiamento casuale: i valori **assoluti** dipendono da queste ipotesi, **quelli relativi** (qualità contro caso, con o senza rete) no.
-- Gradino della voce, finestra di rilevamento (10 ms), errore di misura dell'SNR (1 dB) e latenza di rete (50 ms) sono **ipotesi**.
+- Collegamenti stimati e ombreggiamento casuale: i valori **assoluti** dipendono da queste ipotesi, **quelli relativi** (qualità contro caso, con o senza voto) no.
+- Gradino della voce, finestra di rilevamento (10 ms), errore di misura dell'SNR (1 dB) la perdita di un VOTO (3 %), la perdita extra fra i nodi (10 dB) e l'annuncio a 50 ms (solo per esperimenti) sono **ipotesi**.
 - Due soli nodi e una sola mobile; niente traffico concorrente; l'orologio dei nodi non serve a questa logica.
 - Non è provato su schede.
 

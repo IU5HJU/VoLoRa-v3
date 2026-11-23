@@ -12,7 +12,7 @@ import struct
 
 VERSION = 3
 T_BEACON, T_MESH = 13, 14
-SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6)
+SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7)
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
@@ -137,6 +137,17 @@ def enc_group_ack(obj, veto_call=None, rung=0):
     return _mesh("GROUP_ACK", struct.pack(">HBB", obj, 1, rung) + pack_call(veto_call))
 
 
+def enc_vote(call, session, margin_db, node_id):
+    """VOTO (isofrequenza, vedi docs/voting-isofrequenza.md): un nodo che ha decodificato la prima trasmissione di `call` (sessione `session`) dichiara il proprio margine
+    in dB e il proprio identificativo (0-255). Va sul canale di servizio fra i nodi, in uno slot per nodo. 12 byte."""
+    return _mesh("VOTE", pack_call(call) + struct.pack(">H", session & 0xFFFF) + _s8(margin_db) + bytes([node_id & 0xFF]))
+
+
+def vote_winner(votes):
+    """votes = [(margine_dB, id_nodo)]: vince il margine piu' alto; a parita' l'identificativo piu' basso. Ritorna l'id vincente."""
+    return min(votes, key=lambda v: (-v[0], v[1]))[1]
+
+
 def decode(b):
     """Decodifica BEACON o MESH. Ritorna un dizionario o None."""
     if len(b) < 3 or (b[0] >> 4) != VERSION:
@@ -168,6 +179,8 @@ def decode(b):
             d["members"] = [(unpack_call(x[14 + 7 * i:20 + 7 * i]), x[20 + 7 * i] & 3, x[20 + 7 * i] >> 2) for i in range(cnt)]
             if len(x) < 14 + 7 * cnt:
                 return None
+        elif n == "VOTE":
+            d.update(call=unpack_call(x[0:6]), session=struct.unpack(">H", x[6:8])[0], margin=struct.unpack("b", x[8:9])[0], node=x[9])
         elif n == "GROUP_ACK":
             d.update(obj=struct.unpack(">H", x[0:2])[0], veto=bool(x[2]), rung=x[3])
             if x[2]:
