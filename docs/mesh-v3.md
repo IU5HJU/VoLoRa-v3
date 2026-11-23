@@ -149,6 +149,28 @@ I due parametri **N_min** e **T** vanno tarati sul simulatore e poi sul campo. *
 3. Quali **famiglie di codici** supportare nella prima versione (di partenza: ritrasmissione selettiva e un solo codice a fontana).
 4. Se i membri **si sentono fra loro**: se no, i turni devono bastare da soli per non collidere.
 
+## 8c. Formato dei frame del mesh (23/11/2026)
+Codificati e decodificati in [`tools/frame_mesh.py`](../tools/frame_mesh.py), provati in `tests/sim/test_frame_mesh.py` (andata e ritorno, frame troncati scartati). **Non provati su schede.** Tutti i numeri sono big endian, il byte 0 è `0x30 | tipo`.
+
+**Campi comuni**
+- **Nominativo compatto:** 6 byte = 8 caratteri da 6 bit (cifre, lettere, `/` e `-`). Un nominativo di 8 caratteri o meno entra sempre.
+- **Posizione (7 byte):** byte 0 = 0 e **locatore** a 6 caratteri (per esempio `JN53ab`), oppure byte 0 = 1 e **latitudine e longitudine a 24 bit** (risoluzione circa 1,2 m e 2,4 m): è la regola fissa, locatore **o** GPS assoluta.
+- **Identificativo globale dell'oggetto (2 byte):** CRC16 del nominativo di origine più un contatore: lo stesso per mittente, ripetitori e destinatario.
+- **Salti e ripetuto:** nel flag del DATA (punto 4 di [protocollo-immagini.md](protocollo-immagini.md)).
+
+| Frame | Tipo | Byte | Contenuto |
+|---|---|---|---|
+| BEACON | 13 | **7** | solo il nominativo compatto |
+| POLL | 14/1 | 14 | chi chiama (6), chi è interrogato (6) |
+| POLL-REPLY (livello 2) | 14/2 | 22 | nominativo (6), **posizione (7)**, **RSSI e SNR** del POLL (2), maschera dei gradini (2), codici (1), memoria (2) |
+| RICHIESTA-RIPETITORI | 14/3 | 19 | id oggetto (2), nominativo di origine (6), destinatario (6), dimensione (3) |
+| OFFERTA | 14/4 | 23 | id oggetto (2), nominativo (6), **posizione (7)**, gradino massimo verso mittente e verso destinatario (4+4 bit), **i due margini in dB** (2), codici supportati (1), memoria (2) |
+| GRUPPO | 14/5 | 17 + 7 per membro | id oggetto (2), codice (1), gradino comune (1), simboli sorgente K (2), dimensione del simbolo (1), seme (2), **ora di inizio UTC** (4), numero di membri (1); per ogni membro nominativo (6) e **stato** (ammesso, escluso, riserva) con **turno** (1) |
+| CONFERMA | 14/6 | 6 | id oggetto (2), esito 0 (1), gradino (1) |
+| VETO | 14/6 | 12 | come CONFERMA con esito 1 e il nominativo del membro che il destinatario non sente al gradino scelto |
+
+Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 19, OFFERTA 23, GRUPPO a due membri 30. A R14 ogni byte costa molto tempo in aria: per questo il beacon è di soli 7 byte e i frame con la posizione compaiono dal livello 2 in poi (dopo il primo contatto).
+
 ## 9. Cosa cambia nel protocollo immagini già scritto
 | Punto | Oggi | Con il mesh |
 |---|---|---|

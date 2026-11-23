@@ -24,6 +24,7 @@ import zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import protocollo_immagini as pi  # noqa: E402
 import scala_modi as sm  # noqa: E402
+import frame_mesh as fm  # noqa: E402
 
 VERSION = 3
 GUARD_S = 0.15            # commutazione trasmissione-ricezione
@@ -58,12 +59,18 @@ def _s8(v):
     return struct.pack("b", max(-128, min(127, int(round(v)))))
 
 
-def enc_hello(sess, call, chip, rung_mask, max_frame, mem_kb, reply=False, rssi=None, snr=None):
-    """Con `rssi` e `snr` la risposta (reply) porta anche la misura del HELLO appena sentito (flag 2): il mittente puo' scegliere il gradino senza raffica di PROBE."""
-    flags = (1 if reply else 0) | (2 if rssi is not None else 0)
+F_POS = 16    # HELLO e OFFER: in coda la posizione (7 byte, vedi frame_mesh.pack_pos)
+
+
+def enc_hello(sess, call, chip, rung_mask, max_frame, mem_kb, reply=False, rssi=None, snr=None, pos=None):
+    """Con `rssi` e `snr` la risposta (reply) porta anche la misura del HELLO appena sentito (flag 2): il mittente puo' scegliere il gradino senza raffica di PROBE.
+    Con `pos` (locatore o GPS) in coda la posizione (flag 16). Al primo contatto puo' mancare: la regola del progetto ammette il solo nominativo."""
+    flags = (1 if reply else 0) | (2 if rssi is not None else 0) | (F_POS if pos is not None else 0)
     b = _hdr(T["HELLO"], sess, flags) + _call(call) + bytes([1 if chip == "SX1262" else 0]) + struct.pack(">HBH", rung_mask, max_frame, mem_kb)
     if rssi is not None:
         b += _s8(rssi) + _s8(snr)
+    if pos is not None:
+        b += fm.pack_pos(pos)
     return b
 
 
@@ -83,9 +90,11 @@ def enc_mode_ack(sess, rung):
     return _hdr(T["MODE_ACK"], sess) + bytes([rung])
 
 
-def enc_offer(sess, call, objtype, size, piece, npieces, w, h, layer_ends, crc):
-    return (_hdr(T["OFFER"], sess) + _call(call) + bytes([objtype]) + size.to_bytes(3, "big") + bytes([piece]) + struct.pack(">HHH", npieces, w, h) +
-            bytes([len(layer_ends)]) + b"".join(struct.pack(">H", e) for e in layer_ends) + struct.pack(">I", crc))
+def enc_offer(sess, call, objtype, size, piece, npieces, w, h, layer_ends, crc, pos=None):
+    """Con `pos` in coda la posizione del mittente (flag 16): nelle trasmissioni vere e' obbligatoria (docs/regole-radioamatoriali.md)."""
+    return (_hdr(T["OFFER"], sess, F_POS if pos is not None else 0) + _call(call) + bytes([objtype]) + size.to_bytes(3, "big") + bytes([piece]) + struct.pack(">HHH", npieces, w, h) +
+            bytes([len(layer_ends)]) + b"".join(struct.pack(">H", e) for e in layer_ends) + struct.pack(">I", crc) +
+            (fm.pack_pos(pos) if pos is not None else b""))
 
 
 def enc_accept(sess, layers, window, k):
@@ -120,8 +129,12 @@ def decode(b):
             n = body[0]
             d.update(call=body[1:1 + n].decode(), chip="SX1262" if body[1 + n] else "SX1278", reply=bool(d["flags"] & 1))
             d["rung_mask"], d["max_frame"], d["mem_kb"] = struct.unpack(">HBH", body[2 + n:7 + n])
+            o = 7 + n
             if d["flags"] & 2:
-                d["rssi"], d["snr"] = struct.unpack("bb", body[7 + n:9 + n])
+                d["rssi"], d["snr"] = struct.unpack("bb", body[o:o + 2])
+                o += 2
+            if d["flags"] & F_POS:
+                d["pos"] = fm.unpack_pos(body[o:o + 7])
         elif tipo == T["PROBE"]:
             d.update(rung=body[0], idx=body[1], count=body[2])
         elif tipo == T["PROBE_REPORT"]:
@@ -141,10 +154,13 @@ def decode(b):
             nl = body[o + 11]
             d["layer_ends"] = [struct.unpack(">H", body[o + 12 + 2 * i:o + 14 + 2 * i])[0] for i in range(nl)]
             d["crc"] = struct.unpack(">I", body[o + 12 + 2 * nl:o + 16 + 2 * nl])[0]
+            if d["flags"] & F_POS:
+                d["pos"] = fm.unpack_pos(body[o + 16 + 2 * nl:o + 23 + 2 * nl])
         elif tipo == T["ACCEPT"]:
             d.update(layers=body[0], window=body[1], k=body[2])
         elif tipo == T["DATA"]:
             d["offset"] = struct.unpack(">H", body[:2])[0]
+            d.update(relayed=bool(d["flags"] & fm.F_RELAYED), hops=d["flags"] >> fm.HOP_SHIFT)
             d["payload"] = body[2:]
         elif tipo == T["STATUS"]:
             d["base"], d["bitmap"] = struct.unpack(">HQ", body[:10])

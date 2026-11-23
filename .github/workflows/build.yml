@@ -31,6 +31,8 @@ jobs:
         run: python3 tests/sim/test_sim_mesh.py
       - name: Prove codice a fontana
         run: python3 tests/sim/test_fontana.py
+      - name: Prove frame mesh
+        run: python3 tests/sim/test_frame_mesh.py
       - name: "Applicazione, logica"
         run: python3 tests/app/test_core.py
       - name: "Applicazione, orologio, GPS e prove sul campo"
