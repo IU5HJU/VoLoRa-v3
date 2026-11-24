@@ -8,6 +8,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 from . import __version__, bluetooth, core, field, geo, runner, serialio, timesync, uartlink
+import ebyte_e28 as eb  # noqa: E402  (tools/, nel percorso grazie a core)
 
 SHORTCUTS = [
     ("F1", "INFO", "Chiede a entrambe le schede il chip e la versione (INFO)"),
@@ -838,8 +839,76 @@ class App:
         ttk.Button(r2, text="Solo ascolto (porta RX)", command=lambda: self.uart_run("rx")).pack(side="left", padx=2)
         ttk.Button(r2, text="Ferma", command=lambda: self.uart_stop.set()).pack(side="left", padx=2)
         self.uart_stop = threading.Event()
-        self.u_log = tk.Text(f, height=14, wrap="word")
+        cf = ttk.LabelFrame(f, text="Configurazione del modulo (portare M2 M1 M0 a 1 1 1: modo configurazione, seriale 9600 8N1)")
+        cf.pack(fill="x", padx=8, pady=3)
+        c1 = ttk.Frame(cf); c1.pack(fill="x", padx=4, pady=2)
+        self.c_vars = {}
+        ttk.Label(c1, text="Porta").pack(side="left")
+        self.c_vars["port"] = tk.StringVar()
+        self.c_port_cb = ttk.Combobox(c1, textvariable=self.c_vars["port"], values=serialio_ports(), width=16)
+        self.c_port_cb.pack(side="left", padx=(2, 8))
+        ttk.Label(c1, text="Canale").pack(side="left")
+        self.c_vars["chan"] = tk.StringVar(value="24")
+        ttk.Entry(c1, textvariable=self.c_vars["chan"], width=4).pack(side="left", padx=(2, 8))
+        ttk.Label(c1, text="Velocità d'aria").pack(side="left")
+        self.c_air = ttk.Combobox(c1, state="readonly", width=22, values=[f"{i} - {n}" for i, n in enumerate(eb.AIR_NAMES)])
+        self.c_air.current(3)
+        self.c_air.pack(side="left", padx=(2, 8))
+        ttk.Label(c1, text="Baud").pack(side="left")
+        self.c_baud = ttk.Combobox(c1, state="readonly", width=7, values=[str(b) for b in eb.BAUDS])
+        self.c_baud.set("9600")
+        self.c_baud.pack(side="left", padx=(2, 8))
+        ttk.Label(c1, text="Potenza dBm").pack(side="left")
+        self.c_pow = ttk.Combobox(c1, state="readonly", width=4, values=[str(p) for p in eb.POWERS_DBM])
+        self.c_pow.set("27")
+        self.c_pow.pack(side="left", padx=(2, 8))
+        self.c_lbt = tk.BooleanVar(value=False)
+        ttk.Checkbutton(c1, text="LBT", variable=self.c_lbt).pack(side="left")
+        c2 = ttk.Frame(cf); c2.pack(fill="x", padx=4, pady=2)
+        ttk.Button(c2, text="Leggi parametri", command=self.uart_cfg_read).pack(side="left", padx=2)
+        ttk.Button(c2, text="Scrivi parametri (salvati)", command=self.uart_cfg_write).pack(side="left", padx=2)
+        self.c_info = ttk.Label(c2, text="")
+        self.c_info.pack(side="left", padx=8)
+        self.u_log = tk.Text(f, height=12, wrap="word")
         self.u_log.pack(fill="both", expand=True, padx=8, pady=4)
+
+    def _cfg_job(self, write):
+        port = self.c_vars["port"].get().strip()
+        if not port:
+            self.set_status("Scegli la porta del modulo.")
+            return
+        if self.busy.is_set():
+            self.set_status("Una prova e' gia' in corso.")
+            return
+        try:
+            params = dict(chan=int(self.c_vars["chan"].get()), air_code=int(self.c_air.get().split()[0]), baud=int(self.c_baud.get()),
+                          power_dbm=int(self.c_pow.get()), lbt=bool(self.c_lbt.get()))
+        except ValueError:
+            messagebox.showwarning("Configurazione", "Il canale deve essere un numero.")
+            return
+        self.busy.set()
+        def job():
+            s = None
+            try:
+                s = self.uart_opener(port, 9600, "N")
+                cfg = uartlink.write_config(s, **params) if write else uartlink.read_config(s)
+                self.post(lambda: self.uart_log(("Scritti e riletti: " if write else "Letti: ") + eb.describe(cfg)))
+            except Exception as e:  # noqa: nessuna risposta o porta non apribile
+                self.post(lambda: self.uart_log(f"Errore: {e} (il modulo e' in modo configurazione con M2 M1 M0 = 1 1 1?)"))
+            finally:
+                if s is not None:
+                    try:
+                        s.close()
+                    except Exception:  # noqa
+                        pass
+                self.busy.clear()
+        threading.Thread(target=job, daemon=True).start()
+
+    def uart_cfg_read(self):
+        self._cfg_job(False)
+
+    def uart_cfg_write(self):
+        self._cfg_job(True)
 
     def uart_log(self, s):
         self.u_log.insert("end", s + "\n")

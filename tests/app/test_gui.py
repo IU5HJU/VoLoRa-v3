@@ -85,6 +85,16 @@ for _ in range(100):
     if "UARTSUM" in app.u_log.get("1.0", "end"):
         break
 check("ricevuti=20" in app.u_log.get("1.0", "end"), "scheda Modulo 2,4 GHz: prova con moduli finti, 20 su 20")
+fm_cfg = uartlink.FakeConfigModule()
+app.uart_opener = lambda port, baud, parity: fm_cfg
+app.c_vars["port"].set("/dev/fakeC"); app.c_vars["chan"].set("30"); app.c_air.current(4); app.c_baud.set("115200")
+app.uart_cfg_write()
+for _ in range(60):
+    pump(root, 0.2)
+    if "Scritti e riletti" in app.u_log.get("1.0", "end"):
+        break
+txt = app.u_log.get("1.0", "end")
+check("Scritti e riletti" in txt and "canale 30" in txt and "115200" in txt and "2460 MHz" in txt, "scheda Modulo 2,4 GHz: scrittura e rilettura dei parametri con un modulo finto")
 # serie con F10
 app.series_modes.set("L4,L5"); app.series_count.set("5"); app.vars["att"].set("100")
 app.action("F10")

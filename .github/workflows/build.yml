@@ -37,6 +37,8 @@ jobs:
         run: python3 tests/sim/test_voting.py
       - name: Prove incapsulamento seriale
         run: python3 tests/sim/test_uart_frame.py
+      - name: Prove parametri modulo Ebyte
+        run: python3 tests/sim/test_ebyte_e28.py
       - name: Prove moduli UART finti
         run: python3 tests/app/test_uartlink.py
       - name: "Applicazione, logica"

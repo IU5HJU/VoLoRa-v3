@@ -70,6 +70,23 @@ check(all(g in frames for g in got2) and len(got2) >= 12 and dec2.bad >= 1, f"co
 d3 = uf.Decoder()
 d3.feed(bytes([9]) * 3000)
 check(d3.bad >= 1 and not d3.buf or len(d3.buf) <= uf.MAX_FRAME, "rumore senza delimitatore: il buffer non cresce all'infinito")
-check(len(uf.encode_frame(b"x" * 100)) == 100 + 2 + 1 + 1, "costo per 100 byte: 4 byte (CRC 2, delimitatore 1, COBS 1)")
+check(len(uf.encode_frame(b"x" * 100)) == 100 + uf.OVERHEAD, "costo per 100 byte: 5 byte (seme 1, CRC 2, COBS 1, delimitatore 1)")
+import ebyte_e28 as eb  # noqa: E402
+worst = [b"\xe2" * 116, b"\xe3" * 116, b"\xe2\xe2\xe2" * 38, bytes(116), bytes([255]) * 116, bytes(rng.getrandbits(8) for _ in range(116))]
+ok2 = True
+for w in worst:
+    e = uf.encode_frame(w)
+    d = uf.Decoder().feed(e)
+    if eb.contains_forbidden(e) or d != [w] or len(e) > eb.MAX_PACKET:
+        ok2 = False
+check(ok2 and uf.MAX_PAYLOAD == 116, "payload peggiori (E2 e E3 di fila, zeri, 255): mai E2E2E2 o E3E3E3 sul filo, andata e ritorno esatti, frame di 116 byte entra nei 121 del modulo")
+bad_seen = 0
+for _ in range(3000):
+    n = rng.choice([8, 40, 116])
+    e = uf.encode_frame(bytes(rng.choice([0xE2, 0xE3, rng.getrandbits(8)]) for _ in range(n)))
+    if eb.contains_forbidden(e):
+        bad_seen += 1
+check(bad_seen == 0, "3000 payload ricchi di E2 e E3: nessuna sequenza riservata sul filo")
+check(uf.max_pieces() == 6 and len(uf.encode_frame(bytes(6 + 6 * 16))) <= 121 and len(uf.encode_frame(bytes(6 + 7 * 16))) > 121, "DATA a 6 pezzi (102 byte) entra nei 121 byte del modulo, a 7 pezzi no")
 print("incapsulamento seriale: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

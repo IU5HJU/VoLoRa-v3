@@ -9,6 +9,7 @@ import threading
 import time
 
 from . import core  # noqa: F401  (porta tools/ in sys.path)
+import ebyte_e28 as eb  # noqa: E402
 import uart_frame as uf  # noqa: E402
 
 MAGIC = b"VL"
@@ -57,7 +58,7 @@ class FakeModulePair:
     """Due estremi di un collegamento radio finto: i byte scritti da una parte arrivano all'altra a pacchetti d'aria di al massimo `air_max` byte, con
     ritardo, velocita' seriale, perdita di pacchetti e byte rovinati. Serve alle prove sul PC."""
 
-    def __init__(self, loss=0.0, corrupt=0.0, delay_s=0.002, air_max=240, bps=0.0, seed=1):
+    def __init__(self, loss=0.0, corrupt=0.0, delay_s=0.002, air_max=eb.MAX_PACKET, bps=0.0, seed=1):
         self.loss, self.corrupt, self.delay, self.air_max, self.bps = loss, corrupt, delay_s, air_max, bps
         self.rng = random.Random(seed)
         self.a, self.b = self._End(self), self._End(self)
@@ -94,6 +95,61 @@ class FakeModulePair:
 
         def close(self):
             self.closed = True
+
+
+class FakeConfigModule:
+    """Modulo finto in modo configurazione (M2 M1 M0 = 1 1 1, 9600 8N1): risponde a C1 C1 C1 e accetta C0/C2 + 5 byte. Per le prove sul PC."""
+
+    def __init__(self):
+        self.cfg = eb.build_config()
+        self._buf = bytearray()
+        self._out = bytearray()
+
+    def write(self, data):
+        self._buf += data
+        while True:
+            if self._buf.startswith(eb.CMD_READ):
+                self._out += self.cfg
+                del self._buf[:3]
+            elif self._buf[:1] in (b"\xc0", b"\xc2") and len(self._buf) >= 6:
+                eb.parse_config(bytes(self._buf[:6]))
+                self.cfg = bytes(self._buf[:6])
+                del self._buf[:6]
+            else:
+                break
+
+    def read(self, n=256):
+        time.sleep(0.01)
+        out, self._out = bytes(self._out[:n]), self._out[n:]
+        return out
+
+    def close(self):
+        pass
+
+
+def read_config(stream, timeout=2.0):
+    """Manda C1 C1 C1 (modulo in modo configurazione) e legge i 6 byte di risposta. Ritorna il dizionario dei parametri."""
+    stream.write(eb.CMD_READ)
+    got = b""
+    t0 = time.monotonic()
+    while len(got) < 6 and time.monotonic() - t0 < timeout:
+        got += stream.read(6 - len(got))
+    return eb.parse_config(got)
+
+
+def write_config(stream, verify=True, **params):
+    """Scrive i parametri (C0, salvati) e, con verify, li rilegge. Ritorna i parametri letti (o quelli scritti)."""
+    cmd = eb.build_config(**params)
+    stream.write(cmd)
+    time.sleep(0.2)
+    return read_config(stream) if verify else eb.parse_config(cmd)
+
+
+def open_config_window(stream):
+    """In trasmissione trasparente: E2 E2 E2 apre per 10 secondi la finestra in cui un comando C0 cambia i parametri; dopo 10 secondi il modulo lavora con i nuovi.
+    (Dal manuale, pag. 11: non provato con un modulo vero.)"""
+    stream.write(eb.WINDOW_E2)
+    time.sleep(0.1)
 
 
 def run_tx(stream, count, size, interval_s=0.0, stop=None, t0=None, now=time.monotonic):
