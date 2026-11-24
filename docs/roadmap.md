@@ -43,6 +43,8 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 - Discesa se il canale peggiora; timeout che riporta al modo robusto se il cambio non è confermato.
 - L'immagine si ridimensiona in base al modo concordato.
 
+- **Cambio di banda** (profilo fisico, per esempio 2,4 GHz) quando il collegamento è molto forte: frame pronti sul PC, procedura al punto 7b di [protocollo-immagini.md](protocollo-immagini.md); servono due radio per stazione e misure a 2,4 GHz.
+
 ## Fase 5: integrazione e prove
 - Compatibilità v2 e V3 su schede vere.
 - Prove a banco, in casa, sul campo a varie distanze.

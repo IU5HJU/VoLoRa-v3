@@ -48,7 +48,7 @@ Tutti i numeri sono *big endian*. Il byte 0 è `0x30 | tipo`.
 | 11 | ABORT | interruzione |
 | 12 | ID | identificazione periodica |
 | 13 | BEACON | solo nominativo, 7 byte (mesh: vedi [mesh-v3.md](mesh-v3.md), punto 8c) |
-| 14 | MESH | sottotipi POLL, POLL-REPLY, RICHIESTA-RIPETITORI, OFFERTA, GRUPPO, CONFERMA/VETO (punto 8c di mesh-v3.md) |
+| 14 | MESH / ESTESO | secondo byte = sottotipo: 1-63 mesh (POLL, POLL-REPLY, RICHIESTA-RIPETITORI, OFFERTA, GRUPPO, CONFERMA/VETO, VOTO: punto 8c di mesh-v3.md), **64-127 collegamento e cambio di banda** (BAND-SET, BAND-ACK, BAND-BACK: punto 7b), 128-255 riservati. È lo spazio per le funzioni future: i 16 tipi del primo byte sono tutti usati |
 | 15 | TEST | frame di misura (firmware di misura) |
 
 **Intestazione comune dei frame di sessione:** `byte0 (versione, tipo)`, `sessione (2)`, `flag (1)`. La **sessione** è casuale per ogni oggetto (come nella v2). **Nel mesh** la sessione è l'**identificativo globale dell'oggetto**: CRC16 del nominativo di origine più un contatore a 16 bit (`frame_mesh.object_id`), uguale per mittente, ripetitori e destinatario. Il **nominativo** compare in HELLO, OFFER, DONE e ID (lunghezza + ASCII, come nella v2) e **non in ogni frame DATA**: i pezzi usano la sessione, che HELLO e OFFER hanno legato al nominativo.
@@ -61,7 +61,7 @@ Tutti i numeri sono *big endian*. Il byte 0 è `0x30 | tipo`.
 
 **OFFER:** `0x35`, sessione (2), flag (1), nominativo (1+N), **tipo di oggetto** (1), **dimensione (3)**, **dimensione del pezzo (1)**, **numero di pezzi (2)**, larghezza e altezza (2+2), **numero di livelli (1)** e per ognuno **l'indice del pezzo che chiude il livello (2)**, **CRC32 dell'oggetto intero (4)**, e con il flag `16` in coda la **posizione del mittente (7)**. Tipi di oggetto: `0` blocco di prova (byte pseudocasuali), `1` JPEG progressivo (i livelli sono le scansioni), `2` scala di JPEG a risoluzioni diverse; il resto è riservato.
 
-**HELLO:** `0x30`, nonce (2), flag (bit 0 `RISPOSTA`, bit 1 `MISURA`), nominativo, chip (SX1278/SX1262), maschera dei gradini supportati (2), frame massimo (1), memoria disponibile in kB (2), presenza di microSD. Serve a sapere che gradini sono ammessi (per esempio R0-R2 con la banda di ricezione dell'SX1278, SF5 solo SX1262). Se la risposta ha il bit `MISURA`, in coda porta **RSSI (1) e SNR (1)** dell'HELLO appena sentito dal ricevitore (precisato con il simulatore: vedi il punto 6). Con il bit `16` (POSIZIONE) in coda ci sono **7 byte di posizione** (locatore o GPS assoluta, formato in [mesh-v3.md](mesh-v3.md) punto 8c): al primo contatto può mancare (la regola ammette il solo nominativo), dal livello 2 in poi c'è sempre. Il rapporto di segnale (RSSI/SNR) è nella risposta, nel PROBE-REPORT e nello STATUS.
+**HELLO:** `0x30`, nonce (2), flag (bit 0 `RISPOSTA`, bit 1 `MISURA`, bit 4 `POSIZIONE`, bit 7 `OPZIONI`), nominativo, chip (SX1278/SX1262), maschera dei gradini supportati (2), frame massimo (1), memoria disponibile in kB (2), presenza di microSD. Serve a sapere che gradini sono ammessi (per esempio R0-R2 con la banda di ricezione dell'SX1278, SF5 solo SX1262). Se la risposta ha il bit `MISURA`, in coda porta **RSSI (1) e SNR (1)** dell'HELLO appena sentito dal ricevitore (precisato con il simulatore: vedi il punto 6). Con il bit `16` (POSIZIONE) in coda ci sono **7 byte di posizione** (locatore o GPS assoluta, formato in [mesh-v3.md](mesh-v3.md) punto 8c): al primo contatto può mancare (la regola ammette il solo nominativo), dal livello 2 in poi c'è sempre. Il rapporto di segnale (RSSI/SNR) è nella risposta, nel PROBE-REPORT e nello STATUS.
 
 **Gli altri frame (precisati con il simulatore):**
 - **PROBE:** intestazione (4), gradino (1), indice nella raffica (1), quanti nella raffica (1), riempimento fino a **32 byte** in tutto.
@@ -70,6 +70,15 @@ Tutti i numeri sono *big endian*. Il byte 0 è `0x30 | tipo`.
 - **ACCEPT:** intestazione (4), livelli accettati (1), finestra in frame (1), k iniziale (1).
 - **DONE:** intestazione (4), nominativo (1+N), **livelli consegnati (1)**, **byte consegnati (3)**, **CRC32 dei byte consegnati (4)**: l'oggetto intero ha un CRC solo se arriva tutto, per questo il CRC che conta a fine trasferimento è quello del **prefisso consegnato** (fino alla fine dell'ultimo livello completo). Il ricevitore risponde con un STATUS.
 - **ABORT:** intestazione (4), motivo (1): `1` il primo livello non entra nel budget.
+
+**Revisione 0.2 dei frame (23/11/2026): spazio per le funzioni future.** Il primo byte ha 16 tipi, tutti assegnati; i flag del DATA sono pieni (5 flag e 3 bit per i salti). Le aggiunte vanno quindi in tre posti, senza toccare il DATA (a R14 ogni byte costa tempo in aria):
+1. **Sottotipi del frame 14** (255 posti, 1-63 mesh, 64-127 collegamento e banda).
+2. **Opzioni in coda** ai frame di controllo (HELLO, OFFER): il **flag 128** dice che dopo la parte fissa (e dopo posizione e rapporto, se ci sono) c'è una lista `tipo (1), lunghezza (1), valore`. Un tipo sconosciuto si **salta**: una stazione vecchia legge le opzioni che conosce e ignora le altre. Opzioni definite: `1` **revisione** del protocollo (1 byte), `2` **profili fisici** supportati (per ognuno: profilo (1) e maschera dei gradini (2)), `3` **firma di autenticità** (riservata, formato da definire), `4` **identificativo globale a 32 bit** dell'oggetto. Costo: nulla se non ci sono (HELLO base 17 byte; con revisione e due profili 28).
+3. **Un HELLO senza opzioni** (revisione 0.1) vale come "solo profilo 0": le stazioni vecchie restano compatibili.
+
+**Identificativo dell'oggetto:** a 32 bit (CRC32 di nominativo di origine e contatore) in OFFER e RICHIESTA-RIPETITORI; la sessione dei frame DATA e dei frame brevi è la sua **parte bassa a 16 bit**. Con 20 oggetti insieme in volo la probabilità di collisione a 16 bit è dello 0,3 %, con 100 del 7 %: l'identificativo intero in OFFER permette di riconoscere il caso.
+
+**Gradino nei frame mesh:** un byte (255 = non sentito) al posto dei 4 bit: un gradino o un profilo in più non rompe il formato.
 
 ## 5. Dimensione dei pezzi per gradino
 Il **tempo in aria di un frame non deve superare circa 3 s** (perdite e tempi di ritorno), con un **minimo di 32 byte di dati** e sempre in **multipli del pezzo (16 byte)**. Sull'SX1278 il frame FSK massimo è **64 byte** (FIFO, da confermare con la misura M5): 58 byte di dati. Sull'SX1262 si arriva a 249.
@@ -117,6 +126,25 @@ Il tempo reale sarà più alto, perché la stima non include la commutazione tra
 **Discesa.** Si scende di un gradino **subito** se in una finestra la perdita supera il **20 %** o se due STATUS di fila mancano. La discesa non richiede conferma: chi non sente più il mittente entra in **ricerca** dopo il **tempo di fallback** (il maggiore fra 30 s e 12 volte il tempo in aria di un frame). **La ricerca (provata sul simulatore, 21/11/2026)**: le due stazioni seguono lo **stesso calendario in funzione del tempo**, R10, R11, R10, R12, R10, R13, R10, R14 e daccapo, da 120 s a gradino (R10 a ogni secondo turno, perché il collegamento spesso torna); il mittente manda HELLO al gradino in cui si trova e il ricevitore risponde. Regole: il ricevitore esce dalla ricerca solo se sente un frame diverso da HELLO; il mittente tiene il gradino dopo la risposta ma riprende il calendario se la prova fallisce; il ricevitore resta al gradino 12 frame (almeno 60 s) dopo aver risposto; ritrovati, si riprende il trasferimento senza rifare le PROBE. Dettagli e risultati in [simulatore-immagini.md](simulatore-immagini.md). **Il timer conta solo il tempo in ascolto**: mentre una stazione trasmette (una finestra lunga a un gradino lento dura decine di secondi) il timer non scorre. Senza questa regola, il simulatore faceva scattare il fallback sul mittente nel mezzo della sua stessa finestra.
 
 **Cambio di gradino.** `MODE-SET` (gradino, ripetuto 3 volte) → `MODE-ACK` nel gradino attuale → **entrambe** le stazioni passano al nuovo gradino **alla fine del MODE-ACK**. Se la prima PROBE sul nuovo gradino non ottiene risposta entro il fallback, **si torna a R10** e si riparte da HELLO.
+
+## 7b. Cambio di banda (profili fisici, 2,4 GHz o altro)
+**Idea (autore, 23/11/2026):** se le due stazioni si sentono molto bene possono **negoziare un collegamento su un'altra banda**, per esempio a 2,4 GHz, e trasferire immagini e file multimediali più in fretta. La banda base (430-440 MHz) resta il **canale di incontro e di ripiego**.
+
+**Profili fisici.** Un profilo è un'intera scala di gradini su una banda: **profilo 0** = 430-440 MHz (R0-R14, quella di [scala-modi.md](scala-modi.md)); **profilo 1** = 2,4 GHz (SX1280; scala ancora da definire con le misure); altri valori sono liberi per bande future. Ogni profilo ha una sua **tabella dei canali**: nei frame il canale è un indice (la tabella del 2,4 GHz va definita; è una banda condivisa con Wi‑Fi e Bluetooth, quindi l'ascolto prima di trasmettere conta ancora di più).
+
+**Ipotesi hardware, da decidere:** una T3 con SX1278 non può andare a 2,4 GHz. Una stazione che vuole il cambio di banda ha **due radio**: per esempio una scheda a 433 MHz e una T3-S3 con SX1280 e amplificatore, collegate fra loro (il ripetitore v2 ha già due schede). Con due radio la banda base **resta in ascolto** (beacon, polling, mesh) mentre il trasferimento va sull'altra banda.
+
+**Procedura**
+1. **Capacità.** Nell'HELLO (opzione `profili`) ciascuna stazione dichiara i profili che ha. Senza opzione si intende il solo profilo 0.
+2. **Condizione.** Si prova il cambio solo se i profili in comune includono un profilo diverso dallo 0 **e** il collegamento sulla banda base è molto forte: margine misurato sul gradino attuale almeno `M_banda`. Per dare un ordine di grandezza: a 2,4 GHz la perdita in spazio libero è circa **15 dB maggiore** che a 433 MHz e la banda larga di 1625 kHz raccoglie circa **5 dB di rumore in più** rispetto a 500 kHz; quindi servono circa 20 dB di margine in più sul collegamento base, più il margine di 6 dB. Valore di partenza **25 dB, da tarare con le misure** (calcolo, non misura).
+3. **BAND-SET** (14 byte, sulla banda attuale, ripetuto 3 volte come il MODE-SET): profilo, canale, gradino nel profilo, pezzi per frame, ripetizioni e **quando** si cambia (alla fine del BAND-ACK oppure a un'ora UTC concordata). **BAND-ACK** (6 byte) conferma.
+4. **Prova sulla nuova banda.** Entrambe passano all'altra radio e si manda una **raffica di PROBE** (come in [punto 7](#7-scelta-e-cambio-del-gradino)): se la perdita è sotto il 10 % si prosegue con DATA e STATUS sulla nuova banda.
+5. **Ripiego.** Se la raffica non passa, o se per un tempo `G` non si sente più nulla sulla nuova banda, **si torna da sole alla banda base** e si usa la ricerca a calendario già descritta; **BAND-BACK** (5 byte) lo comunica se si riesce. Dopo un fallimento non si riprova per un tempo `T_riprova` (di partenza 5 minuti).
+6. **Salita e discesa dentro il profilo** come al punto 7, con la scala del profilo; se la qualità cala molto si torna alla banda base, che è sempre più robusta.
+
+**Quanto si guadagna (calcolo con la formula del tempo in aria, non misura):** LoRa a 2,4 GHz con banda 1625 kHz e SF5 dà circa **191 kbit/s lordi**, contro circa 37,5 kbit/s lordi di R3 (500/SF6, il LoRa più veloce a 433 MHz): **fino a circa 5 volte**. Per un oggetto da 20 kB a 433 MHz a R3 servono circa 7 s; la differenza grande è nei gradini medi (R4-R5: 10-19 s). L'SX1280 ha anche modi FLRC e GFSK, che potrebbero andare più veloci: **non verificati**, vanno letti sul datasheet.
+
+**Non provato:** tutto il capitolo è solo nei frame (codec e prove sul PC). Nessuna scheda a 2,4 GHz è stata ancora usata nel progetto.
 
 ## 8. Trasferimento a finestre
 1. **OFFER** → **ACCEPT** (livelli voluti, finestra `W` da 1 a 64, di base 16).

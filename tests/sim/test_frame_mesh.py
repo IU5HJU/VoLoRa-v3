@@ -53,10 +53,10 @@ d = fm.decode(fm.enc_poll_reply("IK5XYZ", {"loc": "JN54xx"}, -118, -7, 0x7FFF, 3
 check(d["nome"] == "POLL_REPLY" and d["pos"] == {"loc": "JN54xx"} and d["rssi"] == -118 and d["snr"] == -7 and d["rung_mask"] == 0x7FFF and d["codes"] == 3, "POLL-REPLY: posizione, rapporto, capacita'")
 oid = fm.object_id("IU5HJU", 7)
 d = fm.decode(fm.enc_req_relay(oid, "IU5HJU", "IZ5AAA", 20000))
-check(d["nome"] == "REQ_RELAY" and d["obj"] == oid and d["dest"] == "IZ5AAA" and d["size"] == 20000, "RICHIESTA-RIPETITORI")
+check(d["nome"] == "REQ_RELAY" and d["obj"] == oid and d["dest"] == "IZ5AAA" and d["size"] == 20000 and len(fm.enc_req_relay(oid, "IU5HJU", "IZ5AAA", 1)) == 21, "RICHIESTA-RIPETITORI con identificativo a 32 bit (21 byte)")
 d = fm.decode(fm.enc_offer_relay(oid, "IK5XYZ", {"lat": 43.7, "lon": 11.2}, 4, 5, 9, -3, fm.CODE_SELECTIVE | fm.CODE_FOUNTAIN, 120))
-check(d["nome"] == "OFFER_RELAY" and d["rung_src"] == 4 and d["rung_dst"] == 5 and d["margin_src"] == 9 and d["margin_dst"] == -3 and d["codes"] == 3 and abs(d["pos"]["lat"] - 43.7) < 1e-4,
-      "OFFERTA: posizione, gradini verso mittente e destinatario, margini, codici")
+check(d["obj"] == fm.short_id(oid) and d["nome"] == "OFFER_RELAY" and d["rung_src"] == 4 and d["rung_dst"] == 5 and d["margin_src"] == 9 and d["margin_dst"] == -3 and d["codes"] == 3 and abs(d["pos"]["lat"] - 43.7) < 1e-4,
+      "OFFERTA: posizione, gradini (un byte) verso mittente e destinatario, margini, codici")
 mem = [("IK5XYZ", fm.ADMIT, 0), ("IZ5AAA", fm.ADMIT, 1), ("IW5BBB", fm.RESERVE, 2), ("IU5CCC", fm.EXCLUDE, 3)]
 d = fm.decode(fm.enc_group(oid, fm.CODE_FOUNTAIN, 6, 128, 16, 0xBEEF, 1795000000, mem))
 check(d["nome"] == "GROUP" and d["members"] == mem and d["k"] == 128 and d["rung"] == 6 and d["start"] == 1795000000 and d["seed"] == 0xBEEF, "GRUPPO: membri con stato e turno, codice, parametri, ora di inizio")
@@ -85,6 +85,35 @@ check(dt["relayed"] and dt["hops"] == 2 and dt["flags"] & 1 and dt["offset"] == 
 dt = sim.decode(sim.enc_data(3, 10, b"x" * 16, 1))
 check(not dt["relayed"] and dt["hops"] == 0, "DATA normale: non ripetuto, 0 salti")
 
+# ---- revisione 0.2: opzioni, profili fisici, cambio di banda ----
+check(fm.short_id(fm.object_id("IU5HJU", 7)) == fm.object_id("IU5HJU", 7) & 0xFFFF and fm.object_id("IU5HJU", 7) > 0xFFFF, "identificativo a 32 bit; la forma corta (sessione) e' la parte bassa")
+opts = [fm.opt_revision(), fm.opt_profiles([(fm.PROFILE_SUBGHZ, 0x7FFF), (fm.PROFILE_2G4, 0x00FF)])]
+h = sim.decode(sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100, pos={"loc": "JN53ab"}, opts=opts))
+check(h["flags"] & fm.F_OPT and h["opts"][fm.OPT_REV] == bytes([fm.REVISION]) and fm.parse_profiles(h["opts"][fm.OPT_PROFILES]) == [(0, 0x7FFF), (1, 0x00FF)] and h["pos"] == {"loc": "JN53ab"},
+      "HELLO con posizione e opzioni: revisione e due profili fisici (430 MHz e 2,4 GHz)")
+base = len(sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100))
+check(len(sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100, opts=opts)) == base + 3 + 8, f"le opzioni costano solo quando ci sono: HELLO base {base} byte, +11 byte con revisione e due profili")
+future = sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100, opts=[(77, b"xyz"), fm.opt_revision()])
+hf = sim.decode(future)
+check(hf["opts"][77] == b"xyz" and hf["opts"][fm.OPT_REV] == bytes([fm.REVISION]) and hf["call"] == "IU5HJU", "un'opzione di tipo sconosciuto non rompe la lettura delle altre (compatibilita' in avanti)")
+check(sim.decode(sim.enc_hello(1, "IU5HJU", "SX1278", 0x7FFF, 255, 100) + b"") ["flags"] & fm.F_OPT == 0, "un HELLO della revisione 0.1 (senza opzioni) si legge ancora")
+try:
+    fm.unpack_opts(b"\x01\x05ab")
+    check(False, "opzioni troncate: errore")
+except ValueError:
+    check(True, "opzioni troncate: errore")
+o = sim.decode(sim.enc_offer(2, "IU5HJU", 0, 20000, 16, 1250, 0, 0, [400, 1250], 0xDEADBEEF, pos={"loc": "JN53ab"}, opts=[fm.opt_id32(fm.object_id("IU5HJU", 9))]))
+check(o["crc"] == 0xDEADBEEF and o["pos"] == {"loc": "JN53ab"} and int.from_bytes(o["opts"][fm.OPT_ID32], "big") == fm.object_id("IU5HJU", 9), "OFFER con posizione e identificativo a 32 bit in opzione")
+b = fm.enc_band_set(0xABCD, fm.PROFILE_2G4, 3, 2, 15, 3, fm.BAND_AT_UTC, 1795000000)
+d = fm.decode(b)
+check(len(b) == 14 and d["nome"] == "BAND_SET" and d["profile"] == 1 and d["channel"] == 3 and d["rung"] == 2 and d["k"] == 15 and d["repeat"] == 3 and d["mode"] == fm.BAND_AT_UTC and d["start"] == 1795000000, "BAND-SET: 14 byte, profilo, canale, gradino, k, quando")
+d = fm.decode(fm.enc_band_ack(0xABCD, 1, 3))
+check(d["nome"] == "BAND_ACK" and d["profile"] == 1 and d["channel"] == 3 and len(fm.enc_band_ack(1, 1, 3)) == 6, "BAND-ACK: 6 byte")
+d = fm.decode(fm.enc_band_back(0xABCD, fm.BACK_PROBE_FAILED))
+check(d["nome"] == "BAND_BACK" and d["reason"] == 1 and len(fm.enc_band_back(1, 1)) == 5, "BAND-BACK: ritorno alla banda base, 5 byte")
+d = fm.decode(fm.enc_offer_relay(fm.object_id("IU5HJU", 1), "IK5XYZ", {"loc": "JN53ab"}, 13, fm.NOT_HEARD, 9, -3, 3, 100))
+check(d["rung_src"] == 13 and d["rung_dst"] == fm.NOT_HEARD, "OFFERTA: il gradino non sentito (255) non confonde piu' R15 o altri gradini futuri")
+check(all(v < 64 for k, v in fm.SUB.items() if k not in ("BAND_SET", "BAND_ACK", "BAND_BACK")) and all(64 <= fm.SUB[k] < 128 for k in ("BAND_SET", "BAND_ACK", "BAND_BACK")), "sottotipi: 1-63 mesh, 64-127 collegamento e banda, 128-255 riservati")
 # compatibilita' con la v2: nessun frame V3 e' un pacchetto v2 e viceversa (la v2 scarta la versione diversa da 2)
 v2 = bytes([0x21]) + bytes(8)                       # byte 0: versione 2, modo 1 (Codec2 1200)
 check(fm.decode(v2) is None and sim.decode(v2) is None, "un pacchetto v2 non viene decodificato dai decoder V3")

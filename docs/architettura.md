@@ -11,6 +11,7 @@ Ogni dispositivo ha **un compito solo** e un firmware che fa soltanto quello. Da
 | Nodo immagini | invio e ricezione di immagini | LoRa e FSK, negoziazione del modo |
 | Ripetitore RX | ascolta e configura la TX | come oggi, firmware dedicato |
 | Ripetitore TX | trasmette | come oggi, firmware dedicato |
+| Nodo a due bande (ipotesi) | trasferimenti veloci a 2,4 GHz con la banda 430-440 MHz come incontro e ripiego | due radio (per esempio una scheda a 433 MHz e una T3-S3 con SX1280); da decidere |
 | Nodo Internet | porta i pacchetti al reflector | gateway; **solo aiuto alla sperimentazione**, non fa parte del collegamento radio affidabile |
 
 Da decidere: se le immagini passano da ripetitore e reflector.

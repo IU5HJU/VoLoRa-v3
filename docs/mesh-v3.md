@@ -166,13 +166,17 @@ Codificati e decodificati in [`tools/frame_mesh.py`](../tools/frame_mesh.py), pr
 | BEACON | 13 | **7** | solo il nominativo compatto |
 | POLL | 14/1 | 14 | chi chiama (6), chi è interrogato (6) |
 | POLL-REPLY (livello 2) | 14/2 | 22 | nominativo (6), **posizione (7)**, **RSSI e SNR** del POLL (2), maschera dei gradini (2), codici (1), memoria (2) |
-| RICHIESTA-RIPETITORI | 14/3 | 19 | id oggetto (2), nominativo di origine (6), destinatario (6), dimensione (3) |
-| OFFERTA | 14/4 | 23 | id oggetto (2), nominativo (6), **posizione (7)**, gradino massimo verso mittente e verso destinatario (4+4 bit), **i due margini in dB** (2), codici supportati (1), memoria (2) |
+| RICHIESTA-RIPETITORI | 14/3 | **21** | id oggetto **a 32 bit (4)**, nominativo di origine (6), destinatario (6), dimensione (3) |
+| OFFERTA | 14/4 | **24** | id oggetto (2), nominativo (6), **posizione (7)**, gradino massimo verso mittente e verso destinatario (**un byte ciascuno**, 255 = non sentito), **i due margini in dB** (2), codici supportati (1), memoria (2) |
 | GRUPPO | 14/5 | 16 + 7 per membro | id oggetto (2), codice (1), gradino comune (1), simboli sorgente K (2), dimensione del simbolo (1), seme (2), **ora di inizio UTC** (4), numero di membri (1); per ogni membro nominativo (6) e **stato** (ammesso, escluso, riserva) con **turno** (1) |
 | CONFERMA | 14/6 | 6 | id oggetto (2), esito 0 (1), gradino (1) |
 | VETO | 14/6 | 12 | come CONFERMA con esito 1 e il nominativo del membro che il destinatario non sente al gradino scelto |
+| VOTO | 14/7 | 12 | isofrequenza: nominativo della mobile (6), sessione (2), margine in dB (1), identificativo del nodo (1); sul canale di servizio fra i nodi ([voting-isofrequenza.md](voting-isofrequenza.md)) |
+| BAND-SET | 14/64 | 14 | cambio di banda: sessione (2), profilo (1), canale (1), gradino (1), k (1), ripetizioni (1), quando (1), ora UTC (4) |
+| BAND-ACK | 14/65 | 6 | sessione (2), profilo (1), canale (1) |
+| BAND-BACK | 14/66 | 5 | ritorno alla banda base: sessione (2), motivo (1) |
 
-Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 19, OFFERTA 23, GRUPPO a due membri 30. A R14 ogni byte costa molto tempo in aria: per questo il beacon è di soli 7 byte e i frame con la posizione compaiono dal livello 2 in poi (dopo il primo contatto).
+Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 21, OFFERTA 24, GRUPPO a due membri 30, VOTO 12, BAND-SET 14. **Revisione 0.2** (opzioni TLV, profili fisici, identificativo a 32 bit) e cambio di banda: [protocollo-immagini.md](protocollo-immagini.md), punti 4 e 7b. A R14 ogni byte costa molto tempo in aria: per questo il beacon è di soli 7 byte e i frame con la posizione compaiono dal livello 2 in poi (dopo il primo contatto).
 
 ## 9. Cosa cambia nel protocollo immagini già scritto
 | Punto | Oggi | Con il mesh |
@@ -195,6 +199,7 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 19, OFFERTA 23, GRU
 | 23/11/2026 | **Il gruppo di ripetitori è coordinato dal mittente** (il destinatario può mettere il veto). | autore |
 | 23/11/2026 | Regola "pochi e veloci" di partenza: **almeno 2 membri, tolleranza di 1 gradino** (da tarare sul simulatore). | autore |
 | 23/11/2026 | Primo passo del piano: **simulatore mesh sul PC**. | autore |
+| 24/11/2026 | **Revisione 0.2 dei frame:** opzioni in coda, profili fisici e **cambio di banda** (per esempio 2,4 GHz) negoziabile quando il collegamento è molto forte; banda base come canale di incontro e di ripiego. Identificativo a 32 bit, gradino a un byte, sottotipi riservati. Vedi [protocollo-immagini.md](protocollo-immagini.md), punto 7b. | autore |
 | 23/11/2026 | **L'infrastruttura v2 esistente non si modifica.** Il V3 è retrocompatibile **solo** per voce, messaggio vocale e testo del protocollo v2; tutto il resto (immagini, beacon, mesh, voto) è aggiunto con frame V3. Il voto è fra nodi V3; un ripetitore v2 non vota. Vedi [compatibilita-v2.md](compatibilita-v2.md). | autore |
 | 23/11/2026 | **Internet non è un mezzo affidabile** in un progetto radioamatoriale: è solo un aiuto per la sperimentazione. Nessun annuncio o coordinamento fra i nodi passa da Internet: va via radio (stessa ragione per cui l'orologio è NTP **o** GPS). Il voto fra due nodi in isofrequenza avviene via radio sul canale di servizio (frame VOTO); ritardo massimo di partenza 200 ms (compensato dal loop del microfono della v2). | autore |
 | 23/11/2026 | La banda di riferimento resta **430-440 MHz** (gamma del servizio di radioamatore; la divisione in fette fra i servizi non interessa allo studio, e cambia nei paesi vicini). Non è larga e non è libera da altri servizi: si lavora il più possibile in **isofrequenza**. Nella voce, due nodi che sentono insieme la mobile non devono trasmettere tutti e due; chi instrada per primo si decide con un'elezione per qualità. Il voting vero non è obbligatorio. (Vedi [voting-isofrequenza.md](voting-isofrequenza.md).) | autore |

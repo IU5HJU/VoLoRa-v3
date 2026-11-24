@@ -9,13 +9,21 @@ POSIZIONE (7 byte, regola fissa del progetto: locatore o GPS assoluta):
 NOMINATIVO COMPATTO (6 byte = 8 caratteri da 6 bit): 0 riempimento, 1-10 cifre, 11-36 lettere, 37 '/', 38 '-'.
 """
 import struct
+import zlib
 
 VERSION = 3
+REVISION = 2                                   # revisione 0.2 dei frame (23/11/2026): opzioni TLV, profili, banda, id a 32 bit
 T_BEACON, T_MESH = 13, 14
-SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7)
+# Sottotipi del frame 14: 1-63 mesh, 64-127 collegamento e cambio di banda, 128-255 riservati (spazio per le funzioni future)
+SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, BAND_SET=64, BAND_ACK=65, BAND_BACK=66)
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
+PROFILE_SUBGHZ, PROFILE_2G4 = 0, 1            # profilo fisico: 0 = 430-440 MHz (R0-R14, SX1278/SX1262), 1 = 2,4 GHz (SX1280; scala ancora da definire)
+BAND_AT_ACK, BAND_AT_UTC = 0, 1               # BAND-SET: il cambio avviene alla fine del BAND-ACK oppure all'ora UTC indicata
+BACK_PROBE_FAILED, BACK_TIMEOUT, BACK_USER = 1, 2, 3
+F_OPT = 128                                   # flag dei frame di controllo: in coda ci sono opzioni TLV
+OPT_REV, OPT_PROFILES, OPT_SIGN, OPT_ID32 = 1, 2, 3, 4    # tipi di opzione (OPT_SIGN: riservata alla firma di autenticita', formato da definire)
 F_RELAYED, HOP_SHIFT = 16, 5                  # flag del frame DATA: bit 4 = ritrasmesso da un ripetitore, bit 5-7 = numero di salti (0-7)
 
 _CH = "\0" + "0123456789" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "/-"
@@ -77,8 +85,53 @@ def crc16(data, crc=0xFFFF):
 
 
 def object_id(origin_call, counter):
-    """Identificativo globale dell'oggetto: CRC16 di (nominativo di origine + contatore a 16 bit). Lo stesso su tutti i ripetitori e per il destinatario."""
-    return crc16(origin_call.upper().encode("ascii") + struct.pack(">H", counter & 0xFFFF))
+    """Identificativo globale dell'oggetto a 32 bit: CRC32 di (nominativo di origine + contatore a 16 bit). Lo stesso su tutti i ripetitori e per il destinatario.
+    Nel DATA e nei frame brevi si usa la forma corta a 16 bit (short_id); l'identificativo intero sta in OFFER e RICHIESTA-RIPETITORI."""
+    return zlib.crc32(origin_call.upper().encode("ascii") + struct.pack(">H", counter & 0xFFFF))
+
+
+def short_id(obj32):
+    """Parte bassa a 16 bit dell'identificativo: e' la sessione dei frame DATA."""
+    return obj32 & 0xFFFF
+
+
+# ----------------------------------------------------------------------------------------------------------------------------- opzioni TLV
+def pack_opts(opts):
+    """opts = [(tipo, bytes), ...] -> byte 'tipo, lunghezza, valore' uno dopo l'altro, fino alla fine del frame."""
+    out = b""
+    for t, v in opts:
+        if not 0 < t < 256 or len(v) > 255:
+            raise ValueError("opzione non valida")
+        out += bytes([t, len(v)]) + v
+    return out
+
+
+def unpack_opts(b):
+    """Legge le opzioni fino alla fine; un tipo sconosciuto si salta (e' il modo di non rompere le versioni future). ValueError se troncate."""
+    d, i = {}, 0
+    while i < len(b):
+        if i + 2 > len(b) or i + 2 + b[i + 1] > len(b):
+            raise ValueError("opzioni troncate")
+        d[b[i]] = b[i + 2:i + 2 + b[i + 1]]
+        i += 2 + b[i + 1]
+    return d
+
+
+def opt_revision(rev=REVISION):
+    return (OPT_REV, bytes([rev]))
+
+
+def opt_profiles(profiles):
+    """profiles = [(id_profilo, maschera_gradini_16bit), ...]: i profili fisici supportati e, per ognuno, i gradini."""
+    return (OPT_PROFILES, b"".join(struct.pack(">BH", p, m) for p, m in profiles))
+
+
+def parse_profiles(v):
+    return [struct.unpack(">BH", v[i:i + 3]) for i in range(0, len(v) - len(v) % 3, 3)]
+
+
+def opt_id32(obj32):
+    return (OPT_ID32, struct.pack(">I", obj32))
 
 
 def data_flags(base, relayed=False, hops=0):
@@ -113,18 +166,22 @@ def enc_poll_reply(call, pos, rssi, snr, rung_mask, codes, mem_kb):
 
 
 def enc_req_relay(obj, origin, dest, size):
-    return _mesh("REQ_RELAY", struct.pack(">H", obj) + pack_call(origin) + pack_call(dest) + size.to_bytes(3, "big"))
+    return _mesh("REQ_RELAY", struct.pack(">I", obj) + pack_call(origin) + pack_call(dest) + size.to_bytes(3, "big"))
+
+
+NOT_HEARD = 255
 
 
 def enc_offer_relay(obj, call, pos, rung_src, rung_dst, margin_src, margin_dst, codes, mem_kb):
-    """Un candidato ripetitore: gradino massimo verso mittente e destinatario (4 bit ciascuno, 15 = non sentito), i due margini in dB, i codici, la memoria."""
-    return _mesh("OFFER_RELAY", struct.pack(">H", obj) + pack_call(call) + pack_pos(pos) + bytes([(rung_src & 15) << 4 | (rung_dst & 15)]) +
+    """Un candidato ripetitore: gradino massimo verso mittente e destinatario (un byte ciascuno, 255 = non sentito: lo spazio per altri gradini e profili c'e'),
+    i due margini in dB, i codici, la memoria. `obj` e' l'identificativo (si usa la parte a 16 bit)."""
+    return _mesh("OFFER_RELAY", struct.pack(">H", short_id(obj)) + pack_call(call) + pack_pos(pos) + bytes([rung_src & 255, rung_dst & 255]) +
                  _s8(margin_src) + _s8(margin_dst) + bytes([codes]) + struct.pack(">H", mem_kb))
 
 
 def enc_group(obj, code, rung, k_symbols, symbol_size, seed, start_utc, members):
     """members = [(nominativo, stato ADMIT/EXCLUDE/RESERVE, turno 0-63)]. start_utc in secondi Unix (32 bit)."""
-    b = struct.pack(">HBBHBHI", obj, code, rung, k_symbols, symbol_size, seed, int(start_utc)) + bytes([len(members)])
+    b = struct.pack(">HBBHBHI", short_id(obj), code, rung, k_symbols, symbol_size, seed, int(start_utc)) + bytes([len(members)])
     for call, state, turn in members:
         b += pack_call(call) + bytes([(turn & 63) << 2 | (state & 3)])
     return _mesh("GROUP", b)
@@ -133,14 +190,30 @@ def enc_group(obj, code, rung, k_symbols, symbol_size, seed, start_utc, members)
 def enc_group_ack(obj, veto_call=None, rung=0):
     """Conferma del destinatario; con veto_call il destinatario non sente quel membro al gradino scelto."""
     if veto_call is None:
-        return _mesh("GROUP_ACK", struct.pack(">HBB", obj, 0, rung))
-    return _mesh("GROUP_ACK", struct.pack(">HBB", obj, 1, rung) + pack_call(veto_call))
+        return _mesh("GROUP_ACK", struct.pack(">HBB", short_id(obj), 0, rung))
+    return _mesh("GROUP_ACK", struct.pack(">HBB", short_id(obj), 1, rung) + pack_call(veto_call))
 
 
 def enc_vote(call, session, margin_db, node_id):
     """VOTO (isofrequenza, vedi docs/voting-isofrequenza.md): un nodo che ha decodificato la prima trasmissione di `call` (sessione `session`) dichiara il proprio margine
     in dB e il proprio identificativo (0-255). Va sul canale di servizio fra i nodi, in uno slot per nodo. 12 byte."""
     return _mesh("VOTE", pack_call(call) + struct.pack(">H", session & 0xFFFF) + _s8(margin_db) + bytes([node_id & 0xFF]))
+
+
+def enc_band_set(session, profile, channel, rung, k, repeat, mode=BAND_AT_ACK, start_utc=0):
+    """Proposta di cambio di banda (come il MODE-SET, ma verso un altro profilo fisico, per esempio 2,4 GHz). Si manda sulla banda attuale, ripetuta.
+    profile = profilo fisico, channel = indice nella tabella dei canali del profilo, rung = gradino nel profilo, k = pezzi per frame DATA, mode/start_utc = quando."""
+    return _mesh("BAND_SET", struct.pack(">HBBBBBBI", session & 0xFFFF, profile, channel, rung, k, repeat, mode, int(start_utc)))
+
+
+def enc_band_ack(session, profile, channel):
+    """Conferma sulla banda attuale: l'altra stazione ha il profilo e prova il canale."""
+    return _mesh("BAND_ACK", struct.pack(">HBB", session & 0xFFFF, profile, channel))
+
+
+def enc_band_back(session, reason):
+    """Ritorno alla banda base (informativo: chi non sente piu' nulla ci torna da solo allo scadere del timer)."""
+    return _mesh("BAND_BACK", struct.pack(">HB", session & 0xFFFF, reason))
 
 
 def vote_winner(votes):
@@ -169,10 +242,10 @@ def decode(b):
             d.update(call=unpack_call(x[0:6]), pos=unpack_pos(x[6:13]), rssi=struct.unpack("b", x[13:14])[0], snr=struct.unpack("b", x[14:15])[0])
             d["rung_mask"], d["codes"], d["mem_kb"] = struct.unpack(">HBH", x[15:20])
         elif n == "REQ_RELAY":
-            d.update(obj=struct.unpack(">H", x[0:2])[0], origin=unpack_call(x[2:8]), dest=unpack_call(x[8:14]), size=int.from_bytes(x[14:17], "big"))
+            d.update(obj=struct.unpack(">I", x[0:4])[0], origin=unpack_call(x[4:10]), dest=unpack_call(x[10:16]), size=int.from_bytes(x[16:19], "big"))
         elif n == "OFFER_RELAY":
-            d.update(obj=struct.unpack(">H", x[0:2])[0], call=unpack_call(x[2:8]), pos=unpack_pos(x[8:15]), rung_src=x[15] >> 4, rung_dst=x[15] & 15,
-                     margin_src=struct.unpack("b", x[16:17])[0], margin_dst=struct.unpack("b", x[17:18])[0], codes=x[18], mem_kb=struct.unpack(">H", x[19:21])[0])
+            d.update(obj=struct.unpack(">H", x[0:2])[0], call=unpack_call(x[2:8]), pos=unpack_pos(x[8:15]), rung_src=x[15], rung_dst=x[16],
+                     margin_src=struct.unpack("b", x[17:18])[0], margin_dst=struct.unpack("b", x[18:19])[0], codes=x[19], mem_kb=struct.unpack(">H", x[20:22])[0])
         elif n == "GROUP":
             d["obj"], d["code"], d["rung"], d["k"], d["symbol_size"], d["seed"], d["start"] = struct.unpack(">HBBHBHI", x[:13])
             cnt = x[13]
@@ -181,6 +254,12 @@ def decode(b):
                 return None
         elif n == "VOTE":
             d.update(call=unpack_call(x[0:6]), session=struct.unpack(">H", x[6:8])[0], margin=struct.unpack("b", x[8:9])[0], node=x[9])
+        elif n == "BAND_SET":
+            d["session"], d["profile"], d["channel"], d["rung"], d["k"], d["repeat"], d["mode"], d["start"] = struct.unpack(">HBBBBBBI", x[:12])
+        elif n == "BAND_ACK":
+            d["session"], d["profile"], d["channel"] = struct.unpack(">HBB", x[:4])
+        elif n == "BAND_BACK":
+            d["session"], d["reason"] = struct.unpack(">HB", x[:3])
         elif n == "GROUP_ACK":
             d.update(obj=struct.unpack(">H", x[0:2])[0], veto=bool(x[2]), rung=x[3])
             if x[2]:
