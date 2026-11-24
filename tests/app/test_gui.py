@@ -72,6 +72,19 @@ for _ in range(100):
     if len(app.rows) == 2:
         break
 check(len(app.rows) == 2 and app.rows[1]["loss_pct"] >= 90, "seconda misura sotto la sensibilita'")
+# scheda Modulo 2,4 GHz con moduli finti
+from volora_misure import uartlink  # noqa: E402
+pair = uartlink.FakeModulePair(loss=0.0, seed=1)
+streams = {"/dev/fakeA": pair.a, "/dev/fakeB": pair.b}
+app.uart_opener = lambda port, baud, parity: streams[port]
+app.u_vars["ptx"].set("/dev/fakeA"); app.u_vars["prx"].set("/dev/fakeB")
+app.u_vars["count"].set("20"); app.u_vars["size"].set("80"); app.u_vars["interval"].set("0.01"); app.u_vars["wait"].set("1")
+app.uart_run()
+for _ in range(100):
+    pump(root, 0.2)
+    if "UARTSUM" in app.u_log.get("1.0", "end"):
+        break
+check("ricevuti=20" in app.u_log.get("1.0", "end"), "scheda Modulo 2,4 GHz: prova con moduli finti, 20 su 20")
 # serie con F10
 app.series_modes.set("L4,L5"); app.series_count.set("5"); app.vars["att"].set("100")
 app.action("F10")

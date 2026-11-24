@@ -7,7 +7,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, bluetooth, core, field, geo, runner, serialio, timesync
+from . import __version__, bluetooth, core, field, geo, runner, serialio, timesync, uartlink
 
 SHORTCUTS = [
     ("F1", "INFO", "Chiede a entrambe le schede il chip e la versione (INFO)"),
@@ -137,6 +137,7 @@ class App:
         self.sched_stop = threading.Event()
         self.ntp_func = timesync.ntp_sync      # sostituibili dalle prove
         self.gps_opener = self._open_gps_serial
+        self.uart_opener = lambda port, baud, parity: uartlink.SerialStream(port, baud, parity)     # sostituibile nelle prove
         self.bt_opener = bluetooth.open_bt        # (indirizzo) -> (oggetto tipo seriale, descrizione): sostituibile dalle prove
         self.gps_want = False                     # l'utente vuole il GPS collegato: se cade, si riconnette da solo
         self.gps_connecting = False
@@ -226,6 +227,7 @@ class App:
         ttk.Label(self.root, textvariable=self.status, relief="sunken", anchor="w").pack(fill="x", side="bottom")
 
         self._build_field(nb)
+        self._build_uart(nb)
         self._build_images(nb)
         self._build_github(nb)
         self._build_help(nb)
@@ -802,6 +804,93 @@ class App:
                 extra["antenna_A" if mine_tx else "antenna_B"] = x["antenna"]
                 w.writerow(field.to_rilievo_row(r, extra))
         self.set_status(f"Salvato {p}")
+
+    # ------------------------------------------------------------------------------------------ moduli radio UART (2,4 GHz)
+    def _build_uart(self, nb):
+        f = ttk.Frame(nb)
+        nb.add(f, text="Modulo 2,4 GHz (UART)")
+        self.tab_uart = f
+        ttk.Label(f, text="Prova di collegamento fra moduli radio con interfaccia seriale (per esempio Ebyte E28-2G4T27SX): frame numerati, conteggio di ricevuti e scartati, "
+                          "velocita' e latenza. Il modulo va configurato prima (canale e velocita' d'aria uguali sui due; vedi docs/modulo-2g4-uart.md).", wraplength=880,
+                  justify="left").pack(anchor="w", padx=8, pady=(6, 2))
+        r = ttk.Frame(f); r.pack(fill="x", padx=8, pady=3)
+        self.u_vars = {}
+        for label, key, val, w in (("Porta TX", "ptx", "", 16), ("Porta RX", "prx", "", 16), ("Baud", "baud", "9600", 7), ("Byte per frame", "size", "100", 6),
+                                   ("Frame", "count", "50", 5), ("Intervallo s", "interval", "0.1", 5), ("Attesa finale s", "wait", "5", 4)):
+            ttk.Label(r, text=label).pack(side="left")
+            v = tk.StringVar(value=val)
+            self.u_vars[key] = v
+            if key in ("ptx", "prx"):
+                cb = ttk.Combobox(r, textvariable=v, values=serialio_ports(), width=w)
+                cb.pack(side="left", padx=(2, 8))
+                self.u_vars[key + "_cb"] = cb
+            else:
+                ttk.Entry(r, textvariable=v, width=w).pack(side="left", padx=(2, 8))
+        r2 = ttk.Frame(f); r2.pack(fill="x", padx=8, pady=3)
+        ttk.Label(r2, text="Parita'").pack(side="left")
+        self.u_par = ttk.Combobox(r2, width=3, state="readonly", values=["N", "E", "O"])
+        self.u_par.set("N")
+        self.u_par.pack(side="left", padx=(2, 12))
+        ttk.Button(r2, text="Aggiorna porte", command=lambda: [self.u_vars[k + "_cb"].configure(values=serialio_ports()) for k in ("ptx", "prx")]).pack(side="left", padx=2)
+        self.u_btn = ttk.Button(r2, text="Prova A→B (due moduli su questo PC)", command=self.uart_run)
+        self.u_btn.pack(side="left", padx=6)
+        ttk.Button(r2, text="Solo invio (porta TX)", command=lambda: self.uart_run("tx")).pack(side="left", padx=2)
+        ttk.Button(r2, text="Solo ascolto (porta RX)", command=lambda: self.uart_run("rx")).pack(side="left", padx=2)
+        ttk.Button(r2, text="Ferma", command=lambda: self.uart_stop.set()).pack(side="left", padx=2)
+        self.uart_stop = threading.Event()
+        self.u_log = tk.Text(f, height=14, wrap="word")
+        self.u_log.pack(fill="both", expand=True, padx=8, pady=4)
+
+    def uart_log(self, s):
+        self.u_log.insert("end", s + "\n")
+        self.u_log.see("end")
+
+    def uart_run(self, only=None):
+        if self.busy.is_set():
+            self.set_status("Una prova e' gia' in corso.")
+            return
+        try:
+            size, count = int(self.u_vars["size"].get()), int(self.u_vars["count"].get())
+            interval, wait, baud = float(self.u_vars["interval"].get()), float(self.u_vars["wait"].get()), int(self.u_vars["baud"].get())
+        except ValueError:
+            messagebox.showwarning("Modulo 2,4 GHz", "Controlla i campi numerici.")
+            return
+        par = self.u_par.get()
+        ptx, prx = self.u_vars["ptx"].get().strip(), self.u_vars["prx"].get().strip()
+        need = {"tx": [ptx], "rx": [prx]}.get(only, [ptx, prx])
+        if not all(need):
+            self.set_status("Scegli le porte dei moduli.")
+            return
+        self.uart_stop.clear()
+        self.busy.set()
+        def job():
+            opened = []
+            try:
+                tx = self.uart_opener(ptx, baud, par) if only != "rx" else None
+                rx = self.uart_opener(prx, baud, par) if only != "tx" else None
+                opened = [s for s in (tx, rx) if s is not None]
+                if only is None:
+                    self.post(lambda: self.uart_log(f"Prova A→B: {count} frame da {size} byte ogni {interval:g} s…"))
+                    r = uartlink.run_link_test(tx, rx, count, size, interval, wait)
+                    self.post(lambda: self.uart_log(uartlink.summary_line(r) + f"  (byte sul filo per frame: {r['wire_bytes']})"))
+                elif only == "tx":
+                    self.post(lambda: self.uart_log(f"Invio di {count} frame da {size} byte…"))
+                    sent, dur = uartlink.run_tx(tx, count, size, interval, self.uart_stop)
+                    self.post(lambda: self.uart_log(f"UARTSUM inviati={sent} in {dur:.1f} s"))
+                else:
+                    self.post(lambda: self.uart_log(f"In ascolto fino a {count} frame (massimo {count * max(interval, 0.05) + wait + 30:.0f} s)…"))
+                    r = uartlink.run_rx(rx, count, count * max(interval, 0.05) + wait + 30, self.uart_stop, idle_s=wait)
+                    self.post(lambda: self.uart_log(f"UARTSUM ricevuti={r['ok']} crc_scartati={r['bad_crc']} contenuto_sbagliato={r['bad_content']}"))
+            except Exception as e:  # noqa: porta non apribile e simili
+                self.post(lambda: self.uart_log(f"Errore: {e}"))
+            finally:
+                for s in opened:
+                    try:
+                        s.close()
+                    except Exception:  # noqa
+                        pass
+                self.busy.clear()
+        threading.Thread(target=job, daemon=True).start()
 
     def _build_images(self, nb):
         f = ttk.Frame(nb)

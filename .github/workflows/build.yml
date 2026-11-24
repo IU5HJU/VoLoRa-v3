@@ -35,6 +35,10 @@ jobs:
         run: python3 tests/sim/test_frame_mesh.py
       - name: Prove elezione voting
         run: python3 tests/sim/test_voting.py
+      - name: Prove incapsulamento seriale
+        run: python3 tests/sim/test_uart_frame.py
+      - name: Prove moduli UART finti
+        run: python3 tests/app/test_uartlink.py
       - name: "Applicazione, logica"
         run: python3 tests/app/test_core.py
       - name: "Applicazione, orologio, GPS e prove sul campo"

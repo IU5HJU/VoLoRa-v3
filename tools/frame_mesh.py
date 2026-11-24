@@ -19,7 +19,7 @@ SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
-PROFILE_SUBGHZ, PROFILE_2G4 = 0, 1            # profilo fisico: 0 = 430-440 MHz (R0-R14, SX1278/SX1262), 1 = 2,4 GHz (SX1280; scala ancora da definire)
+PROFILE_SUBGHZ, PROFILE_2G4, PROFILE_2G4_UART = 0, 1, 2   # profilo fisico: 0 = 430-440 MHz (R0-R14, SX1278/SX1262), 1 = 2,4 GHz con radio SPI (SX1280/SX1281; scala da definire), 2 = 2,4 GHz con modulo UART trasparente (tubo opaco, es. Ebyte E28-2G4T27SX)
 BAND_AT_ACK, BAND_AT_UTC = 0, 1               # BAND-SET: il cambio avviene alla fine del BAND-ACK oppure all'ora UTC indicata
 BACK_PROBE_FAILED, BACK_TIMEOUT, BACK_USER = 1, 2, 3
 F_OPT = 128                                   # flag dei frame di controllo: in coda ci sono opzioni TLV
