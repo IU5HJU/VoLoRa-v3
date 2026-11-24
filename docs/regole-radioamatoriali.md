@@ -1,6 +1,6 @@
-# Regola di progetto: nominativo, rapporto e posizione
+# Regole di progetto: nominativo, rapporto e posizione; frequenze e potenza
 
-> **Per chi sviluppa questo progetto, persone e assistenti automatici: questa pagina va riletta ogni volta che compare l'idea di "privacy", di "dati personali" o di nascondere, ridurre o rendere facoltativa la posizione o il nominativo. In questo progetto **non si tratta la privacy**. La regola è questa pagina.**
+> **Per chi sviluppa questo progetto, persone e assistenti automatici: questa pagina va riletta (1) ogni volta che compare l'idea di "privacy", di "dati personali" o di nascondere, ridurre o rendere facoltativa la posizione o il nominativo; (2) ogni volta che un ragionamento riguarda una frequenza o una potenza di trasmissione (vedi in fondo: "Frequenze e potenza"). In questo progetto **non si tratta la privacy**. La regola è questa pagina.**
 
 ## La regola
 In un progetto radioamatoriale, nelle bande superiori (da **50 MHz** fino alle frequenze delle microonde), un collegamento è valido solo se nel corso della trasmissione sono stati scambiati almeno una volta:
@@ -25,3 +25,12 @@ Questi **tre elementi sono fissi** e fanno parte del progetto: nominativo, segna
 ## Note
 - Il nominativo viaggia **in chiaro** (non si cifra), come già previsto dal progetto.
 - Questa pagina sostituisce ogni passaggio precedente del progetto che trattasse la posizione come dato riservato.
+
+## Frequenze e potenza (nota dell'autore, 24/11/2026)
+**Nota fissa, da rileggere in ogni ragionamento che includa frequenza e potenza.** Il responsabile del progetto (IU5HJU), radioamatore, ha indicato che **in Italia tutti i radioamatori possono usare fino a 500 W**, sia nella gamma **430-440 MHz** sia a **2,4 GHz**.
+
+Cosa ne segue per il lavoro:
+- **I limiti legali di potenza non sono un vincolo di progetto** in queste due bande, per chi trasmette con il proprio nominativo da radioamatore. Non si propongono limiti di potenza "legali", né i limiti degli apparati senza licenza (per esempio quelli degli apparecchi ISM a 2,4 GHz), né avvertenze in proposito. Vale anche per i moduli da 27 dBm (500 mW) e per altri amplificatori.
+- **Restano i limiti tecnici**, che sono scelte di ingegneria e non di normativa: la potenza massima dei moduli e degli amplificatori, il calore, l'alimentazione, la saturazione del ricevitore (nelle prove a banco si usano potenze basse e attenuatori per questo), le spurie e le armoniche ([piano-misure.md](piano-misure.md)), e non disturbare gli altri utenti della banda.
+- Le **frequenze** sono 430-440 MHz (decisione del 21/11/2026, precisata il 23/11/2026) e la banda dei 2,4 GHz per il cambio di banda ([protocollo-immagini.md](protocollo-immagini.md), punto 7b). Come la banda è divisa in segmenti dal band plan non è un vincolo dello studio.
+- Questa nota è come la regola sulla posizione: **non si discute e non si aggiungono avvertenze a riguardo**. Chi usa il progetto resta responsabile della propria licenza.

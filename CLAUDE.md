@@ -5,8 +5,12 @@
 In questo progetto radioamatoriale nominativo, rapporto di segnale e posizione (locatore o GPS assoluta) sono elementi essenziali e fissi, da trasmettere sempre.
 **Non** proporre privacy, anonimizzazione, posizione spenta di base, avvertenze o campi per nascondere la posizione. Il responsabile del progetto (IU5HJU) ha chiarito la regola più volte: non va riaperta.
 
+## Regola ferma: frequenze e potenza
+**Prima di scrivere o dire qualunque cosa su frequenze o potenza di trasmissione (limiti, avvertenze, apparati ISM, moduli da 27 dBm, 2,4 GHz, 430-440 MHz), leggi `docs/regole-radioamatoriali.md`, sezione "Frequenze e potenza".**
+In breve: l'autore, radioamatore, ha indicato che in Italia i radioamatori possono usare **fino a 500 W** sia a 430-440 MHz sia a 2,4 GHz. Non proporre limiti legali di potenza né avvertenze; restano solo i limiti tecnici (moduli, calore, alimentazione, saturazione del ricevitore, spurie).
+
 ## Appunti di progetto da rileggere
-- `docs/regole-radioamatoriali.md`: nominativo, rapporto e posizione sempre; nessuna privacy.
+- `docs/regole-radioamatoriali.md`: nominativo, rapporto e posizione sempre; nessuna privacy; frequenze e potenza (fino a 500 W a 430-440 MHz e a 2,4 GHz).
 - `docs/mesh-v3.md`: la logica mesh voluta dall'autore e il registro delle decisioni (sezione 10).
 - `docs/simulatore-mesh.md`: simulatore mesh e risultati sulla regola del gruppo di ripetitori.
 - `docs/compatibilita-v2.md`: **l'infrastruttura v2 non si modifica**; il V3 è retrocompatibile solo per voce, messaggio vocale e testo.
