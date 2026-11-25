@@ -102,7 +102,7 @@ Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio ac
 
 ## 5. Cose da decidere o studiare
 1. ~~Ritardo massimo~~ **Deciso il 23/11/2026: 200 ms** (compensati dal loop del microfono della v2). Resta la scala in dB (20 dB nel modello).
-2. ~~Canale per l'annuncio~~ **Deciso il 23/11/2026: via radio**, mai da Internet. Da scegliere la **frequenza del canale di servizio** fra i nodi, il gradino e l'antenna, e se la scheda di trasmissione del nodo può fare da radio di servizio (da verificare).
+2. ~~Canale per l'annuncio~~ **Deciso il 23/11/2026: via radio**, mai da Internet. **Deciso il 25/11/2026: frequenza dedicata nella banda 430-440 MHz**, una per zona, concordata fra chi installa i nodi, con gradino veloce (R3-R7) e antenne in alto. Da scegliere la frequenza e il gradino precisi; e se la scheda di trasmissione del nodo può fare da radio di servizio (da verificare).
 3. Quante **ripetizioni** del VOTO (una riduce il caso, ma allunga il voto) e il **tempo di guardia** fra gli slot (10 ms nel modello).
 4. Il formato del VOTO è in [`tools/frame_mesh.py`](../tools/frame_mesh.py) (`enc_vote`, sottotipo 7 del frame MESH, 12 byte); da integrare in [mesh-v3.md](mesh-v3.md), punto 8c.
 5. Quanto tempo il nodo ricorda il vincitore e la soglia dell'isteresi (di base 3 dB).

@@ -199,6 +199,7 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 21, OFFERTA 24, GRU
 | 23/11/2026 | **Il gruppo di ripetitori è coordinato dal mittente** (il destinatario può mettere il veto). | autore |
 | 23/11/2026 | Regola "pochi e veloci" di partenza: **almeno 2 membri, tolleranza di 1 gradino** (da tarare sul simulatore). | autore |
 | 23/11/2026 | Primo passo del piano: **simulatore mesh sul PC**. | autore |
+| 25/11/2026 | **Decisioni di partenza** (dalla lista delle aperte): ruolo "nodo mesh" a sé; ritrasmissione selettiva e fontana nei gruppi; **canale di servizio del voto = frequenza dedicata** nella banda 430-440 MHz, uno per zona, gradino veloce e antenne in alto; **canale delle immagini negoziato nell'HELLO**; gradino di ascolto **R10 fisso**; beacon fisso a 10 minuti con slot; ripetitori per rapporto di segnale, massimo 2 salti; canale a 2,4 GHz scelto con **scansione RSSI dei due lati**; soglia del cambio di banda **25 dB** (da tarare); **firma di autenticità**: opzione prevista e non attiva; identificazione ogni **10 minuti** nei trasferimenti lunghi. | autore |
 | 24/11/2026 | **Revisione 0.2 dei frame:** opzioni in coda, profili fisici e **cambio di banda** (per esempio 2,4 GHz) negoziabile quando il collegamento è molto forte; banda base come canale di incontro e di ripiego. Identificativo a 32 bit, gradino a un byte, sottotipi riservati. Vedi [protocollo-immagini.md](protocollo-immagini.md), punto 7b. | autore |
 | 23/11/2026 | **L'infrastruttura v2 esistente non si modifica.** Il V3 è retrocompatibile **solo** per voce, messaggio vocale e testo del protocollo v2; tutto il resto (immagini, beacon, mesh, voto) è aggiunto con frame V3. Il voto è fra nodi V3; un ripetitore v2 non vota. Vedi [compatibilita-v2.md](compatibilita-v2.md). | autore |
 | 23/11/2026 | **Internet non è un mezzo affidabile** in un progetto radioamatoriale: è solo un aiuto per la sperimentazione. Nessun annuncio o coordinamento fra i nodi passa da Internet: va via radio (stessa ragione per cui l'orologio è NTP **o** GPS). Il voto fra due nodi in isofrequenza avviene via radio sul canale di servizio (frame VOTO); ritardo massimo di partenza 200 ms (compensato dal loop del microfono della v2). | autore |
@@ -219,12 +220,12 @@ Requisito dell'autore (23/11/2026): quando le stazioni usano la modalità **VOCE
 
 ## 11. Da decidere
 1. ~~**Quante stazioni** per zona~~ **Deciso: circa 5.** Con 5 stazioni il beacon a R14 collide poco: nel [simulatore mesh](simulatore-mesh.md) il beacon senza coordinamento arriva nell'80 % dei casi e con slot adattivo nel 100 %.
-2. **Gradino di ascolto** (fisso R10 o R12, oppure adattivo con R14 dove i vicini sono pochi), dopo le misure dei gradini stretti fra schede vere.
+2. ~~**Gradino di ascolto**~~ **Deciso il 25/11/2026: R10 fisso** (125 kHz SF12, beacon da circa 1 s). R12 e R14 si rivalutano dopo le misure dei gradini stretti fra schede vere.
 3. **Anti collisione:** ~~CAD più ritardo casuale~~ Il solo ascolto non basta (terminali nascosti, [terminali-nascosti.md](terminali-nascosti.md)): **slot dall'orologio**, con ascolto come aiuto. Da confermare con le prove.
-4. **Intervallo del beacon** e se adattivo.
-5. **Ripetizione:** scelta geografica o per rapporto di segnale; numero massimo di salti.
-6. **Codici a fontana** oppure ritrasmissione selettiva dei pacchetti mancanti. Il codice a fontana è in `tools/fontana.py` (circa 1,6 simboli in più per generazione di 128 pezzi): la scelta resta aperta fino alle prove su schede.
-7. **Ruolo del firmware:** il nodo mesh fa beacon, polling, ripetizione e invio insieme. Va riconciliato con il principio "ogni firmware fa una cosa sola" o definito come ruolo a sé.
+4. ~~**Intervallo del beacon**~~ **Deciso il 25/11/2026: fisso, 10 minuti, con slot** dal nominativo e dall'orologio.
+5. ~~**Ripetizione:**~~ **Deciso il 25/11/2026: per rapporto di segnale** (margine migliore verso mittente e destinatario), **massimo 2 salti**.
+6. ~~**Codici a fontana** oppure ritrasmissione selettiva~~ **Deciso il 25/11/2026: ritrasmissione selettiva sul collegamento diretto, codice a fontana nei gruppi di ripetitori.** Il codice a fontana è in `tools/fontana.py` (circa 1,6 simboli in più per generazione di 128 pezzi); il costo di calcolo sull'ESP32 va misurato.
+7. ~~**Ruolo del firmware**~~ **Deciso il 25/11/2026: "nodo mesh" è un ruolo a sé** (beacon, polling, ripetizione e invio insieme); voce/testo e immagini restano ruoli separati.
 8. **Convivenza con la voce v2** sullo stesso canale: **canale proprio per il V3** (e CAD), vedi [compatibilita-v2.md](compatibilita-v2.md); la coesistenza con le stazioni v2 va misurata sul campo.
 
 ## 12. Piano

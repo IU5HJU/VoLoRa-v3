@@ -187,8 +187,8 @@ Il simulatore ([simulatore-immagini.md](simulatore-immagini.md)) esegue questo p
 7. ~~**Il fallback a R10 può non essere ascoltabile**~~ **Risolto in gran parte con la ricerca a calendario** (punto 7 della negoziazione): dove R10 non si sente più la consegna passa da 2 prove su 12 a 10 su 12; nei casi estremi (solo R13-R14) arriva a 5-6 su 12. Resta da capire perché non di più.
 8. ~~**Costo dell'incontro**~~ **Risolto sul simulatore** con la misura dentro la risposta all'HELLO: da circa 21 s a circa 5 s con segnale forte, stessa affidabilità.
 9. **FSK a 50 kbit/s (R2) è quasi inutile:** la sua velocità netta (circa 38 kbit/s) è come quella di LoRa 500/SF6 (R3, 34 kbit/s) ma con 10 dB in meno di sensibilità stimata. Si può togliere o sostituire con un gradino diverso.
-10. **Canale delle immagini:** una frequenza diversa da quella della voce (v2: 433,475 MHz di base) per non occupare il canale della voce; negoziabile o fisso?
-11. **Intervallo di identificazione** dei trasferimenti lunghi.
+10. ~~**Canale delle immagini:**~~ **Deciso il 25/11/2026: negoziato nell'HELLO.** Le stazioni si incontrano sul canale fisso (R10) e negoziano un canale da una **tabella dei canali del profilo 0**, con lo stesso BAND-SET del cambio di banda (profilo 0, `canale` = indice nella tabella, 0 = incontro). La tabella e la scelta del canale (scansione) sono ancora da definire. La voce v2 resta sul suo canale (433,475 MHz di base).
+11. ~~**Intervallo di identificazione**~~ **Deciso il 25/11/2026: ogni 10 minuti** di trasferimento (frame ID); più OFFER e DONE, che contengono il nominativo.
 12. **Immagini via ripetitore e reflector:** sì o no ([punti-aperti.md](punti-aperti.md)).
 
 ## 13. Piano di prova
