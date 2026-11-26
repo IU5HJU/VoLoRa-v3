@@ -16,6 +16,7 @@ La regola che tiene insieme i due mondi: **il nucleo C++ deve riprodurre il rife
 | `firmware/v3/src/estimate.h` | Stime di tempo del protocollo immagini (`estimateSeconds`, `chunkSize`, `frameAirtimeS`, tabella dei 15 gradini). Porta di `tools/protocollo_immagini.py`. |
 | `firmware/v3/tests/test_conformance.cpp` | Riproduce i vettori e li confronta con il riferimento. Compilato con `-Wall -Wextra`, **ASan e UBSan**. |
 | `firmware/v3/tests/vettori/*.txt` | Vettori generati dal Python (`tools/gen_vettori_firmware.py`): per ogni scenario ingressi e uscite del ponte, riga per riga. |
+| `firmware/v3/src/main.cpp`, `platformio.ini` | Il guscio per la scheda mobile: BLE, coda, orologio, seriale. Compilato dalla CI; radio simulata. |
 | `tests/sim/test_vettori_firmware.py` | Controlla che i vettori nel repository siano quelli che il Python genera oggi (se si cambia il riferimento, si rigenerano e si rifa la prova del C++). |
 
 **Conformità provata sul PC:** 30566 controlli, 0 falliti, su 14 scenari: testo, file da 20 kB e da 64 kB, ritrasmissione selettiva, due interruzioni del BLE, telefono sparito oltre 60 s, annullamento, nessuna posizione, radio fallita, SX1262 a R10, FSK a R1, 26 ingressi sbagliati o strani, oggetto dalla radio al telefono, e **4000 frame casuali**: stesse notifiche byte per byte e stesse statistiche (richieste, richieste ripetute, blocchi, RAM massima). Più 210 combinazioni di stima del tempo (chip × gradino × dimensione). Per verificare che la prova sappia accorgersi di una differenza ho cambiato di proposito, uno alla volta, il ritardo delle ritrasmissioni, l'intervallo dell'avanzamento e il tempo di abbandono: la prova li ha trovati tutti.
@@ -27,8 +28,17 @@ python3 tests/sim/test_vettori_firmware.py   # i vettori sono aggiornati
 
 **Il modello a tempo della radio.** Nel nucleo la radio è ancora il **modello a tempo** del riferimento (`Bridge::tick`): un blocco "parte" dopo il tempo che la stima dice. Serve per provare il ponte da solo e per far funzionare la scheda con il telefono **prima** che esista il protocollo radio vero. Il callback `Sink::radioBlock` è dove, nel firmware vero, il blocco entra nella radio; la fine di ogni blocco la dirà la radio e sostituirà il tempo.
 
+## Fatto: il guscio per la scheda del mobile (compila, non provato)
+`firmware/v3/src/main.cpp` e `platformio.ini`: servizio BLE con le quattro caratteristiche di [ble-telefono.md](ble-telefono.md) (NimBLE-Arduino 1.4.2), **accoppiamento con codice a 6 cifre** (LE Secure Connections con bonding, niente "Just Works"; il codice per ora esce sulla **seriale**, lo schermo OLED non è collegato), coda fra i callback del BLE e il ponte (24 frame), `tick` dall'orologio, ripubblicazione della pubblicità dopo ogni disconnessione, nominativo salvato in memoria permanente. **Compila per T3 (SX1278) e T-Beam (SX1262)** nella CI (`pio run -e t3`, `-e tbeam1262`): flash circa 604 kB su 1,31 MB (46%), RAM statica circa 42 kB su 328 kB (13%), comprese le librerie BLE.
+
+**La radio è simulata.** I blocchi "partono" con il modello a tempo del nucleo e si vedono sulla seriale (`[radio simulata] oggetto 7 blocco 3`): il telefono vede comunque consegna, avanzamento e tempi come con la radio vera. Serve a **provare per prima la pagina del telefono con una scheda vera**, senza aspettare il protocollo radio.
+
+Seriale a 115200 baud: `CALL IU5HJU` (salva il nominativo; senza, la scheda risponde NO_CALL), `STATO` (nominativo, BLE, oggetto in corso, RAM, richieste, blocchi, pacchetti scartati).
+
+**Primo passo sulla scheda vera (da fare):** caricare il firmware, scrivere `CALL`, aprire `telefono.html` con Chrome su Android, accoppiare con il codice che compare sulla seriale e mandare un testo e un file. Cosa si guarda: l'accoppiamento funziona? Chrome vede il servizio? Le notifiche arrivano intere (serve MTU almeno 64)? La scrittura senza risposta regge i 240 byte (la pagina scende da sola a 100 e a 15 se serve)? La RAM libera resta alta durante un file da 64 kB (il nucleo ne usa 3 kB)?
+
 ## Da fare, in ordine
-1. **Guscio per la scheda del mobile** (`firmware/v3/src/main.cpp`): servizio BLE (4 caratteristiche, accoppiamento con codice), coda fra il BLE e il ponte, `tick` dall'orologio. Compilato dalla CI; **non si può compilare qui** (il registro di PlatformIO non è raggiungibile da questo ambiente). Vedi sotto.
+1. ~~**Guscio per la scheda del mobile**~~ **Scritto e compilato dalla CI** (vedi la sezione sotto). Non provato su una scheda.
 2. **Codec dei frame del protocollo immagini** in C++ (HELLO, OFFER, ACCEPT, DATA, STATUS, DONE), con vettori dal Python.
 3. **Macchina a stati del protocollo immagini** in C++ (porta di `tools/sim_immagini.py`, circa 900 righe): incontro a R10, salita e discesa dei gradini, finestre, ritrasmissione selettiva, budget di tempo.
 4. **Driver radio** (RadioLib): modi LoRa e FSK dei 15 gradini, potenza, **BOOST** ([boost.md](boost.md)), maschera dei gradini ([limiti_chip.py](../tools/limiti_chip.py)). Qui servono le **misure** della fase 1 (tempi in aria reali, sensibilità, rendimento delle schede) prima di fidarsi dei numeri.
