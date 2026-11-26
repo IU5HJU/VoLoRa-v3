@@ -18,7 +18,7 @@ def check(c, m):
 
 
 check(ch.frequency_khz(ch.CH_MEETING) == 433700 and ch.frequency_khz(ch.CH_SERVICE) == 433850, "incontro a 433,700 MHz; il canale 1 (433,850 MHz) e' ora per trasferimenti stretti")
-check(ch.SERVICE_2M_KHZ == 144850 and ch.valid_frequency("SX1278", 144850) and ch.valid_frequency("SX1262", 144850), "il canale di servizio del voto e' a 144,850 MHz, nel campo di sintonia di SX1278 e SX1262")
+check(ch.SERVICE_2M_KHZ == 144850 and ch.valid_frequency("SX1278", 144850) and not ch.valid_frequency("SX1262", 144850), "il canale di servizio del voto (144,850 MHz) e' nel campo dell'SX1278 (T3, T-Beam SX1278) ma NON in quello dell'SX1262 (da 150 MHz): il T-Beam con SX1262 non puo' fare il voto a 2 m")
 h3 = ch.harmonic_khz(ch.SERVICE_2M_KHZ, 3)
 nearest = min(min(abs(h3 - ch.span_khz(i)[0]), abs(h3 - ch.span_khz(i)[1])) for i in ch.PROFILE0)
 check(h3 == 434550 and all(not (ch.span_khz(i)[0] <= h3 <= ch.span_khz(i)[1]) for i in ch.PROFILE0) and nearest > 500, f"la terza armonica del servizio ({h3 / 1000:.3f} MHz) cade fuori dai canali, a {nearest:.0f} kHz dal piu' vicino: serve un filtro passa-basso sulla radio a 2 m")

@@ -98,6 +98,7 @@ Dove i nodi non si sentono sul canale di servizio il voto non è possibile (dopp
 
 **Come è fatto un nodo (hardware):** due schede (RX a 433 MHz e TX/servizio), **un duplexer 2 m / 70 cm** e **una collineare bibanda**. Cose da controllare:
 - **Terza armonica:** 3 × 144,850 = **434,550 MHz**, che cade in 70 cm, a circa 0,6 MHz dai nostri canali: serve un **filtro passa-basso** sulla radio a 2 m (o la sezione VHF del duplexer, se ha una buona reiezione a 434 MHz). La T3 a 433 MHz ha il suo filtro tarato su 433, non su 145.
+- **Quale chip:** il voto a 144,850 MHz lo può fare solo un **SX1278** (T3 e T-Beam con SX1278: campo 137-175 MHz). **L'SX1262 parte da 150 MHz**: un T-Beam con SX1262 **non** può fare la radio di servizio a 2 m (può fare la radio principale a 433 MHz). Da confermare sul datasheet (il limite viene da RadioLib).
 - **Le schede a 433 MHz a 144 MHz:** l'adattamento e il filtro della T3 sono per i 433 MHz; il rendimento a 144,85 MHz va **misurato** (stessa cosa del punto aperto 7 per i 430 e 440 MHz).
 - **Isolamento del duplexer** fra le due porte: la radio a 2 m trasmette mentre quella a 70 cm ascolta la mobile; va misurato quanto disturba il ricevitore a 433 MHz.
 
