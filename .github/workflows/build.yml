@@ -45,6 +45,8 @@ jobs:
         run: python3 tests/sim/test_nodo_semplice.py
       - name: Prove configurazione del nodo
         run: python3 tests/sim/test_config_nodo.py
+      - name: Prove ascolto del nodo
+        run: python3 tests/sim/test_ascolto_nodo.py
       - name: Prove moduli UART finti
         run: python3 tests/app/test_uartlink.py
       - name: "Applicazione, logica"

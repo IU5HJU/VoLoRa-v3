@@ -31,6 +31,11 @@ class NodeConfig:
     air_code_veloce: int = 3                 # codice velocita' d'aria del modulo Ebyte
     reflector_v2: str = ""                   # indirizzo del reflector v2 (infrastruttura esistente, non si modifica)
     reflector_v3: str = ""                   # indirizzo del reflector V3 (da definire)
+    attesa_fine_qso_min: int = 10            # minuti da 1 a 255 in modo v2 dopo la fine del QSO, prima di tornare ai turni
+    lock_v2: bool = False                    # blocca il nodo in v2 finche' non lo sblocca la seriale, il web o un comando SYSOP firmato
+    consenti_forza_v3: bool = False          # una mobile V3 puo' forzare l'invio di immagini anche in modo v2 (mai a QSO in corso)
+    slot_v2_s: float = 2.0                   # turni dell'ascolto a riposo (scheda singola)
+    slot_v3_s: float = 2.0
     note: str = field(default="", repr=False)
 
 
@@ -47,6 +52,10 @@ def validate(cfg):
         return err, warn
     if cfg.profilo_v2 not in PROFILI_V2:
         err.append("profilo v2: range, standard o messaggio")
+    if not 1 <= cfg.attesa_fine_qso_min <= 255:
+        err.append("attesa a fine QSO: da 1 a 255 minuti")
+    if cfg.slot_v2_s <= 0 or cfg.slot_v3_s <= 0:
+        err.append("i turni dell'ascolto devono durare piu' di zero secondi")
     if cfg.chip not in ch.CHIP_RANGES_KHZ or not ch.valid_frequency(cfg.chip, cfg.freq_nodo_khz):
         err.append(f"frequenza del nodo {cfg.freq_nodo_khz} kHz fuori dal campo del chip {cfg.chip}")
     if cfg.topologia == "singola":
@@ -76,6 +85,12 @@ def validate(cfg):
     if cfg.v3_ruolo == "gateway":
         warn.append("gateway V3: il reflector V3 non esiste ancora (da definire); senza reflector il nodo ripiega sulla rete mesh" if not cfg.reflector_v3 else "gateway V3: il reflector V3 e' da definire")
     return err, warn
+
+
+def ascolto(cfg):
+    """L'ascolto a turni del nodo a scheda singola secondo la configurazione (tools/ascolto_nodo.py)."""
+    import ascolto_nodo as an
+    return an.Ascolto(cfg.slot_v2_s, cfg.slot_v3_s, cfg.attesa_fine_qso_min, cfg.consenti_forza_v3, cfg.lock_v2)
 
 
 def caps(cfg):

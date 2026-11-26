@@ -87,6 +87,11 @@ check(not dt["relayed"] and dt["hops"] == 0, "DATA normale: non ripetuto, 0 salt
 
 d = fm.decode(fm.enc_node_info("IK5XYZ", 3, 144900, 3))
 check(len(fm.enc_node_info("IK5XYZ", 3, 144900, 3)) == 14 and d["nome"] == "NODE_INFO" and d["call"] == "IK5XYZ" and d["node"] == 3 and d["service_khz"] == 144900 and d["caps"] == 3, "NODO: 14 byte, nominativo, identificativo, canale di servizio e capacita'")
+key = bytes(range(16))
+sy = fm.enc_sysop(key, "IU5HJU", fm.SYSOP_SET_ATTESA, 30, 5)
+d = fm.verify_sysop(key, sy, 4)
+check(len(sy) == 23 and d is not None and d["cmd"] == fm.SYSOP_SET_ATTESA and d["arg"] == 30 and d["call"] == "IU5HJU", "SYSOP: comando firmato, 23 byte, firma e contatore verificati")
+check(fm.verify_sysop(key, sy, 5) is None and fm.verify_sysop(bytes(16), sy, 4) is None and fm.verify_sysop(key, sy[:-1] + bytes([sy[-1] ^ 1]), 4) is None, "SYSOP: contatore gia' usato, chiave sbagliata o firma alterata: rifiutato")
 # ---- revisione 0.2: opzioni, profili fisici, cambio di banda ----
 check(fm.short_id(fm.object_id("IU5HJU", 7)) == fm.object_id("IU5HJU", 7) & 0xFFFF and fm.object_id("IU5HJU", 7) > 0xFFFF, "identificativo a 32 bit; la forma corta (sessione) e' la parte bassa")
 opts = [fm.opt_revision(), fm.opt_profiles([(fm.PROFILE_SUBGHZ, 0x7FFF), (fm.PROFILE_2G4, 0x00FF)])]
@@ -115,7 +120,7 @@ d = fm.decode(fm.enc_band_back(0xABCD, fm.BACK_PROBE_FAILED))
 check(d["nome"] == "BAND_BACK" and d["reason"] == 1 and len(fm.enc_band_back(1, 1)) == 5, "BAND-BACK: ritorno alla banda base, 5 byte")
 d = fm.decode(fm.enc_offer_relay(fm.object_id("IU5HJU", 1), "IK5XYZ", {"loc": "JN53ab"}, 13, fm.NOT_HEARD, 9, -3, 3, 100))
 check(d["rung_src"] == 13 and d["rung_dst"] == fm.NOT_HEARD, "OFFERTA: il gradino non sentito (255) non confonde piu' R15 o altri gradini futuri")
-check(all(v < 64 for k, v in fm.SUB.items() if not k.startswith("BAND_")) and all(64 <= v < 128 for k, v in fm.SUB.items() if k.startswith("BAND_")), "sottotipi: 1-63 mesh, 64-127 collegamento e banda, 128-255 riservati")
+check(all(v < 64 for k, v in fm.SUB.items() if not k.startswith(("BAND_", "SYSOP"))) and all(64 <= v < 128 for k, v in fm.SUB.items() if k.startswith(("BAND_", "SYSOP"))), "sottotipi: 1-63 mesh, 64-127 collegamento e banda, 128-255 riservati")
 b = fm.enc_band_set_freq(0xABCD, fm.PROFILE_SUBGHZ, 433955, 12, 3, 3, fm.BAND_AT_UTC, 1795000000)
 d = fm.decode(b)
 check(len(b) == 17 and d["nome"] == "BAND_SET_FREQ" and d["freq_khz"] == 433955 and d["rung"] == 12 and d["start"] == 1795000000, "BAND-SET con frequenza esplicita: 17 byte (le frequenze sono configurabili, le tabelle possono differire)")

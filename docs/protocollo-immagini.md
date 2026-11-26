@@ -172,7 +172,7 @@ La **preparazione dei livelli** si fa fuori dal firmware, dall'applicazione ([ap
 
 ## 10. Identificazione, sicurezza, memoria
 - **Identificazione.** Il nominativo è in HELLO, OFFER, DONE e nei frame `ID`, che nei trasferimenti lunghi si mandano **a intervalli regolari**; l'intervallo si fissa con la normativa (la v2 manda il nominativo ogni circa 5 secondi in voce). Il canale non è cifrato (come la v2).
-- **Integrità.** CRC radio su ogni frame e CRC32 dell'oggetto in OFFER e DONE; nessuna autenticazione: chiunque può inviare. Si decide in seguito se aggiungere una firma (nei nodi Internet la v2 usa HMAC).
+- **Integrità.** CRC radio su ogni frame e CRC32 dell'oggetto in OFFER e DONE; nessuna autenticazione, **tranne il frame SYSOP** (comando del sysop via radio, firmato con HMAC e contatore: [configurazione-nodo.md](configurazione-nodo.md), punto 5): chiunque può inviare gli altri. Si decide in seguito se aggiungere una firma (nei nodi Internet la v2 usa HMAC).
 - **Memoria.** La T3 non ha PSRAM: un oggetto fino a circa 100 kB sta in RAM; oltre serve la **microSD** ([scheda-sd.md](scheda-sd.md)), solo nel nodo immagini. La dimensione massima dichiarata in HELLO dice quanto si può offrire.
 
 ## 11. Immagini fittizie per le prove

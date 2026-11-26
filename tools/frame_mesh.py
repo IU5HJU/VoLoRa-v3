@@ -8,6 +8,8 @@ POSIZIONE (7 byte, regola fissa del progetto: locatore o GPS assoluta):
   byte 0 = 1 -> GPS: latitudine (3 byte) e longitudine (3 byte), (lat+90)/180 e (lon+180)/360 su 24 bit: risoluzione circa 1,2 m e 2,4 m
 NOMINATIVO COMPATTO (6 byte = 8 caratteri da 6 bit): 0 riempimento, 1-10 cifre, 11-36 lettere, 37 '/', 38 '-'.
 """
+import hmac
+import hashlib
 import struct
 import zlib
 
@@ -15,7 +17,7 @@ VERSION = 3
 REVISION = 2                                   # revisione 0.2 dei frame (23/11/2026): opzioni TLV, profili, banda, id a 32 bit
 T_BEACON, T_MESH = 13, 14
 # Sottotipi del frame 14: 1-63 mesh, 64-127 collegamento e cambio di banda, 128-255 riservati (spazio per le funzioni future)
-SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, NODE_INFO=8, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68)
+SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, NODE_INFO=8, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68, SYSOP=70)
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
@@ -237,6 +239,32 @@ def enc_band_back(session, reason):
     return _mesh("BAND_BACK", struct.pack(">HB", session & 0xFFFF, reason))
 
 
+SYSOP_LOCK_V2, SYSOP_UNLOCK, SYSOP_SET_ATTESA, SYSOP_SET_FORZA_V3 = 1, 2, 3, 4
+
+
+def _sysop_body(call, cmd, arg, counter):
+    return pack_call(call) + struct.pack(">BHI", cmd & 0xFF, arg & 0xFFFF, counter & 0xFFFFFFFF)
+
+
+def enc_sysop(key, call, cmd, arg, counter):
+    """Comando del SYSOP via radio, FIRMATO (HMAC-SHA256 troncato a 8 byte, chiave condivisa come i comandi del sysop della v2) e con contatore anti-ripetizione.
+    cmd: 1 blocca il nodo in v2, 2 sblocca, 3 imposta l'attesa a fine QSO (arg = minuti 1-255), 4 consente o no il comando di una mobile V3 (arg 0/1). 23 byte.
+    E' un frame V3: non modifica i comandi del sysop della v2."""
+    body = _sysop_body(call, cmd, arg, counter)
+    return _mesh("SYSOP", body + hmac.new(key, body, hashlib.sha256).digest()[:8])
+
+
+def verify_sysop(key, frame_bytes, last_counter):
+    """Ritorna il dizionario del comando se la firma e' valida e il contatore e' maggiore dell'ultimo accettato; altrimenti None."""
+    d = decode(frame_bytes)
+    if d is None or d["nome"] != "SYSOP":
+        return None
+    body = _sysop_body(d["call"], d["cmd"], d["arg"], d["counter"])
+    if not hmac.compare_digest(hmac.new(key, body, hashlib.sha256).digest()[:8], d["mac"]) or d["counter"] <= last_counter:
+        return None
+    return d
+
+
 def vote_winner(votes):
     """votes = [(margine_dB, id_nodo)]: vince il margine piu' alto; a parita' l'identificativo piu' basso. Ritorna l'id vincente."""
     return min(votes, key=lambda v: (-v[0], v[1]))[1]
@@ -273,6 +301,10 @@ def decode(b):
             d["members"] = [(unpack_call(x[14 + 7 * i:20 + 7 * i]), x[20 + 7 * i] & 3, x[20 + 7 * i] >> 2) for i in range(cnt)]
             if len(x) < 14 + 7 * cnt:
                 return None
+        elif n == "SYSOP":
+            d["call"] = unpack_call(x[0:6])
+            d["cmd"], d["arg"], d["counter"] = struct.unpack(">BHI", x[6:13])
+            d["mac"] = bytes(x[13:21])
         elif n == "NODE_INFO":
             d["call"] = unpack_call(x[0:6])
             d["node"], d["service_khz"], d["caps"] = struct.unpack(">BIB", x[6:12])

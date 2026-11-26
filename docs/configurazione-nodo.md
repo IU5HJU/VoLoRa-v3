@@ -37,6 +37,9 @@ La configurazione diventa le **capacità** del frame NODO (un byte, [mesh-v3.md]
 ```json
 {
   "nominativo": "IU5HJU",
+  "attesa_fine_qso_min": 10,
+  "lock_v2": false,
+  "consenti_forza_v3": false,
   "v2_ruolo": "gateway",
   "v3_ruolo": "pappagallo",
   "topologia": "singola",
@@ -47,8 +50,20 @@ La configurazione diventa le **capacità** del frame NODO (un byte, [mesh-v3.md]
 }
 ```
 
-## 5. Punti aperti
-- **"Nodo con gateway con seconda scheda":** da precisare se la seconda scheda è la **radio del voto** (come nella topologia doppia) o una **scheda che fa solo da gateway Internet**.
-- **Una radio ascolta un profilo alla volta:** il nodo a scheda singola che fa da gateway v2 per la voce dal vivo ascolta il profilo range o standard; per sentire anche il V3 a R10 serve ascolto a turni (calendario di ricerca) o un profilo solo.
+## 5. L'ascolto della scheda singola (deciso il 26/11/2026)
+Una radio ascolta **un profilo alla volta**: la voce dal vivo della v2 (Range, SF8/250 kHz) e i beacon V3 a R10 (SF12/125 kHz, uguale al profilo Messaggio v2) non si sentono insieme. Regole decise dall'autore (codice in [`tools/ascolto_nodo.py`](../tools/ascolto_nodo.py), prove in `tests/sim/test_ascolto_nodo.py`):
+
+1. **A riposo** (nessuna trasmissione radio e nessun flusso dalla rete) la radio **alterna v2 e V3 a turni dall'orologio** (di partenza 2 s + 2 s).
+2. **Quando c'è voce v2** (dalla radio o da Internet) il nodo **resta in modo v2** fino alla fine del QSO (3 s di silenzio o END, come la v2) **più un'attesa impostabile da 1 a 255 minuti**; poi torna ai turni.
+3. **Lock:** il nodo resta in v2 **senza limite di tempo** finché non lo sblocca l'**interfaccia seriale**, l'**interfaccia web** o un **comando SYSOP via radio**.
+4. **Comando di una mobile V3:** se la configurazione lo consente (`consenti_forza_v3`), una mobile V3 può **forzare il nodo a trasmettere immagini** anche in modo v2, anche con il lock; poi il nodo torna in v2. *(Assunto da me: mai mentre c'è un QSO in corso, cioè una trasmissione v2 negli ultimi 3 s.)*
+
+**Comando SYSOP via radio (frame V3 firmato).** La v2 non si modifica, quindi il comando di sblocco **non può essere un comando della v2**: è un frame V3 **SYSOP** (sottotipo 70 del frame 14, 23 byte) con **firma HMAC-SHA256 troncata a 8 byte** e **contatore anti-ripetizione**, come i comandi del sysop della v2. Comandi: **1 blocca in v2**, **2 sblocca**, **3 imposta l'attesa a fine QSO** (1-255 minuti), **4 consente o no il comando della mobile V3**. È l'unico frame V3 **firmato** per ora; per gli altri la firma resta un'opzione prevista e non attiva. La chiave (16 byte) la tiene il sysop.
+
+## 6. Punti aperti
+- ~~**"Nodo con gateway con seconda scheda":**~~ **Deciso il 26/11/2026:** la seconda scheda è la **radio del voto** (topologia doppia); il gateway Internet lo fa la scheda principale con il suo Wi-Fi.
+- ~~**Una radio ascolta un profilo alla volta:**~~ **Deciso il 26/11/2026:** ascolto a turni dall'orologio, modo v2 durante il QSO e con lock (punto 5).
 - **Il reflector V3** e il suo protocollo.
 - **Pagina di configurazione** (e le spunte nella pagina di installazione del firmware).
+- **Gestione delle chiavi** del sysop (dove si scrivono, come si cambiano).
+- **Da verificare con le schede:** durata dei turni (quanti pacchetti v2 si perdono all'ingresso in modo v2), tempo di commutazione della radio fra i due profili.
