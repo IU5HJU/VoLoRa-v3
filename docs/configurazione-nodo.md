@@ -66,6 +66,9 @@ Una radio ascolta **un profilo alla volta**: la voce dal vivo della v2 (Range, S
 ## 6. La pagina di configurazione (site/nodo.html)
 **Decisa il 26/11/2026:** la configurazione si fa con una **pagina web nella pagina di installazione** (GitHub Pages): [`site/nodo.html`](../site/nodo.html), raggiungibile dalla pagina di installazione del firmware. Un modulo con le spunte (ruolo gateway/pappagallo per v2 e V3, topologia, radio e frequenze, profilo, attesa, lock, comando forzato da mobile e/o nodo, chiave SYSOP) **controlla** la configurazione con le stesse regole di `tools/config_nodo.py` e produce `nodo.json`. Tutto resta nel browser; **la chiave SYSOP si genera nel browser** (16 byte casuali) e non viene inviata a nessuno. **Non scrive ancora sulla scheda**: manca il firmware V3 che legga il file; la scrittura per seriale dal browser (Web Serial) si farà quando il firmware esiste. Provata con Playwright (`tests/page/run_nodo.js`) e con un controllo incrociato in `tests/sim/test_config_nodo.py`.
 
+## 6b. Modalità BOOST (+20 dBm)
+La pagina ha la sezione 4: casella **BOOST** (estremo, con rischio) con la conferma "ho letto il rischio e lo accetto"; i campi `boost` e `boost_rischio_accettato` finiscono nel JSON. Senza conferma la configurazione non è valida; l'avviso tecnico resta visibile. Di base +17 dBm. Dettagli in [boost.md](boost.md).
+
 ## 7. Punti aperti
 - ~~**"Nodo con gateway con seconda scheda":**~~ **Deciso il 26/11/2026:** la seconda scheda è la **radio del voto** (topologia doppia); il gateway Internet lo fa la scheda principale con il suo Wi-Fi.
 - ~~**Una radio ascolta un profilo alla volta:**~~ **Deciso il 26/11/2026:** ascolto a turni dall'orologio, modo v2 durante il QSO e con lock (punto 5).

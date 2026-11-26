@@ -28,7 +28,8 @@ Seriale a **921600 baud**, una riga per comando. La parola di sincronismo LoRa �
 | `MODE LORA <bw kHz> <sf> <cr 5-8>` | per esempio `MODE LORA 250 7 5` |
 | `MODE FSK <kbit/s> <dev kHz> <rxbw kHz> [shape 0\|3\|5\|10]` | l'`rxbw` deve essere una banda ammessa dalla radio: **SX1278 fino a 250 kHz, SX1262 fino a 467 kHz** (RadioLib) |
 | `FREQ <MHz>` | solo 430-440 MHz |
-| `POWER <dBm>` | da -9 a 22 (la radio rifiuta ciò che non può fare) |
+| `POWER <dBm>` | da -9 a 22 (la radio rifiuta ciò che non può fare); **sull'SX1278 oltre +17 dBm solo con BOOST**, sull'SX1262 oltre +17 dBm con avviso |
+| `BOOST ON RISCHIO` / `BOOST OFF` / `BOOST STATUS` | modalità **+20 dBm, estrema, con rischio** (sempre spenta all'avvio): [boost.md](boost.md). Senza la parola `RISCHIO` non si attiva |
 | `PAYLOAD <26-255>` | byte del pacchetto di prova |
 | `PREAMBLE <n>` | simboli LoRa o byte FSK |
 | `TX <n> <intervallo ms> [seq iniziale]` | manda n pacchetti; per ognuno stampa `TX seq=.. toa_us=.. calc_us=..` (tempo misurato dall'avvio al fine trasmissione, contro la formula) e alla fine `TXSUM` |

@@ -56,7 +56,7 @@ Compatibile: l'SX1278 sintonizza 137-175 MHz (Band 3); l'SX1262 no (parte da 150
 2. **R0 (FSK 150 kb/s):** gradino **solo SX1278**; il T-Beam con SX1262 parte da R1. Nessuna modifica alla scala.
 3. **R12-R14 (LoRa 31,25 / 15,6 / 7,8 kHz):** **solo con TCXO annunciato** nell'HELLO; senza TCXO non sono nella maschera. R14 resta al limite anche con 2 ppm per scheda (da misurare).
 4. **FSK sull'SX1278:** **si resta a 64 byte** per frame; la gestione del FIFO oltre i 64 byte si rivaluta dopo le misure se l'FSK risulta lo strozzo.
-5. **Potenza dei nodi che ritrasmettono (SX1278):** **+17 dBm in continuo**; +20 dBm solo per frame brevi (beacon, polling) entro il ciclo dell'1% del chip. Limite tecnico, non legale.
+5. **Potenza dei nodi che ritrasmettono (SX1278):** **+17 dBm in continuo**; +20 dBm solo per frame brevi (beacon, polling) entro il ciclo dell'1% del chip. Limite tecnico, non legale. **Estensione:** l'autore ha chiesto una modalità **BOOST +20 dBm** estrema per ogni profilo, con segnalazione del rischio: [boost.md](boost.md).
 **Scritta sul PC la maschera dei gradini** (`tools/limiti_chip.py`: `rung_mask`, `common_mask`; usata dal simulatore delle immagini): ogni stazione annuncia nell'HELLO i gradini che il suo chip realizza (SX1278 senza TCXO: R0-R11 = `0x0FFF`; SX1262 senza TCXO: R1-R11 = `0x0FFE`; con TCXO anche R12-R14), la maschera comune è l'AND delle due meno R3 se i chip differiscono. Il formato dell'HELLO non cambia (la maschera era già a 16 bit). Il calendario di ricerca del collegamento perso si restringe ai gradini comuni. **Da fare:** potenza predefinita +17 dBm nel firmware e il bit TCXO letto dalla scheda vera (nel firmware non esiste ancora).
 
 ## 7. Cosa NON è stato confrontato

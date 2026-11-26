@@ -58,6 +58,16 @@ const check = (c, m) => { if (!c) { console.log('FALLITO: ' + m); fails++; } els
     s = await stato();
     check(s.config.forza_v3_da === 3 && s.config.lock_v2 === true && /^[0-9a-f]{32}$/.test(s.config.chiave_sysop_hex) && s.err.length === 0, `[${scheme}] forza da mobile e nodo, lock, chiave generata di 32 cifre esadecimali`);
     check(JSON.parse(await page.textContent('#json')).chiave_sysop_hex === s.config.chiave_sysop_hex, `[${scheme}] il JSON mostrato contiene la chiave`);
+    check(await page.isHidden('#boost_box') && s.config.boost === false, `[${scheme}] di base il BOOST e' spento e il riquadro del rischio nascosto`);
+    await page.check('#boost');
+    s = await stato();
+    check(await page.isVisible('#boost_box') && s.err.some(e => /accettare il rischio/.test(e)) && s.warn.some(w => /ESTREMA/.test(w) && /1%/.test(w)), `[${scheme}] BOOST senza conferma: errore, avviso di rischio visibile`);
+    await page.check('#boost_ok');
+    s = await stato();
+    check(s.err.length === 0 && s.config.boost === true && s.config.boost_rischio_accettato === true && s.warn.some(w => /RISCHIO/.test(w)), `[${scheme}] BOOST con rischio accettato: valido, l'avviso resta`);
+    await page.uncheck('#boost');
+    s = await stato();
+    check(s.config.boost === false && s.config.boost_rischio_accettato === false && !s.warn.some(w => /BOOST/.test(w)), `[${scheme}] BOOST spento: niente avviso e conferma azzerata nel JSON`);
     const noScroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     check(noScroll, `[${scheme}] nessuno scorrimento orizzontale a 390 px`);
     check(errors.length === 0, `[${scheme}] nessun errore nella console: ${errors.join(' | ')}`);

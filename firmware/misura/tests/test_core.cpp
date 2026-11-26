@@ -49,6 +49,31 @@ int main() {
   CHECK(fskValid(300.0f, 100.0f, 467.0f) && !fskValid(300.0f, 101.0f, 467.0f));  // dev + kbps/2 <= 250
   CHECK(!fskValid(400.0f, 10.0f, 200.0f) && !fskValid(100.0f, 0.1f, 200.0f));
 
+  // BOOST +20 dBm: modalita' estrema, con avviso e conteggio del ciclo di lavoro
+  Params bp;
+  bp.powerDbm = 10;
+  CHECK(effectivePowerDbm(bp) == 10 && !bp.boost);
+  bp.boost = true;
+  CHECK(effectivePowerDbm(bp) == kBoostDbm && kBoostDbm == 20);   // +20 dBm in ogni profilo (LoRa e FSK)
+  bp.fsk = true;
+  CHECK(effectivePowerDbm(bp) == 20);
+  CHECK(parseBoost(tokenize("boost on rischio")) == BoostCmd::On);
+  CHECK(parseBoost(tokenize("boost on")) == BoostCmd::NeedsAck && parseBoost(tokenize("boost on si")) == BoostCmd::NeedsAck);   // senza la parola RISCHIO non si attiva
+  CHECK(parseBoost(tokenize("BOOST OFF")) == BoostCmd::OffCmd && parseBoost(tokenize("boost status")) == BoostCmd::Status);
+  CHECK(parseBoost(tokenize("boost")) == BoostCmd::Invalid && parseBoost(tokenize("boost max")) == BoostCmd::Invalid && parseBoost(tokenize("power 20")) == BoostCmd::Invalid);
+  CHECK(std::strstr(kBoostWarning, "RISCHIO") && std::strstr(kBoostWarning, "1%") && std::strstr(kBoostWarning, "+17") && std::strstr(kBoostWarning, "antenna"));
+  BoostGuard g;
+  CHECK(g.dutyPct(1000) == 0.0f && !g.overLimit(1000));
+  g.addTx(1000, 500000);        // 0,5 s in 100 s = 0,5%
+  CHECK(std::fabs(g.dutyPct(2000) - 0.5f) < 0.01f && !g.overLimit(2000));
+  g.addTx(3000, 700000);        // 1,2 s in 100 s = 1,2%
+  CHECK(std::fabs(g.dutyPct(4000) - 1.2f) < 0.01f && g.overLimit(4000));
+  CHECK(g.overLimit(99000));    // ancora dentro la finestra di 100 s
+  CHECK(!g.overLimit(150000) && g.dutyPct(150000) < 0.01f);   // dopo 100 s senza trasmettere il ciclo torna a zero
+  BoostGuard cw;                // CW: 0,43 s ogni 0,43 s per 30 s = ciclo 30% su 100 s
+  for (uint32_t k = 0; k < 70; k++) cw.addTx(10000 + k * 430, 430000);
+  CHECK(cw.overLimit(10000 + 70 * 430) && cw.dutyPct(10000 + 70 * 430) > 25.0f);
+
   // Pacchetto: costruzione, lettura, errori
   uint8_t buf[kMaxPayload];
   CHECK(!buildPacket(buf, 25, 1, "IU5HJU") && !buildPacket(buf, 256, 1, "IU5HJU"));

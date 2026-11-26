@@ -24,6 +24,8 @@ static SX1278 radio = new Module(pins::kRadioCs, pins::kRadioDio0, pins::kRadioR
 static Params P;
 static char callsign[9] = "";
 static bool verbose = true;
+static BoostGuard boostGuard;   // ciclo di lavoro in trasmissione, solo informativo in BOOST (non spegne il BOOST)
+static uint32_t boostLastWarnMs = 0;
 static bool modeReady = false;
 static int wantedPayload = 64;   // pacchetto richiesto con PAYLOAD; quello in uso (P.payload) puo' essere ridotto dal limite del chip in FSK
 
@@ -78,9 +80,9 @@ static bool applyMode() {
     Serial.printf("[nota] pacchetto ridotto a %d byte (richiesti %d): l'SX1278 in FSK non ne accetta di piu' (FIFO da 64 byte)\n", P.payload, wantedPayload);
   if (!P.fsk) {
 #if defined(RADIO_SX1262)
-    st = radio.begin(P.freqMhz, P.bwKhz, P.sf, P.cr, MISURA_SYNC, P.powerDbm, P.preamble, MISURA_TCXO_V);
+    st = radio.begin(P.freqMhz, P.bwKhz, P.sf, P.cr, MISURA_SYNC, misura::effectivePowerDbm(P), P.preamble, MISURA_TCXO_V);
 #else
-    st = radio.begin(P.freqMhz, P.bwKhz, P.sf, P.cr, MISURA_SYNC, P.powerDbm, P.preamble);
+    st = radio.begin(P.freqMhz, P.bwKhz, P.sf, P.cr, MISURA_SYNC, misura::effectivePowerDbm(P), P.preamble);
 #endif
     if (st == RADIOLIB_ERR_NONE) st = radio.setCRC(true);
 #if !defined(RADIO_SX1262)
@@ -89,9 +91,9 @@ static bool applyMode() {
 #endif
   } else {
 #if defined(RADIO_SX1262)
-    st = radio.beginFSK(P.freqMhz, P.kbps, P.devKhz, P.rxBwKhz, P.powerDbm, P.preamble, MISURA_TCXO_V);
+    st = radio.beginFSK(P.freqMhz, P.kbps, P.devKhz, P.rxBwKhz, misura::effectivePowerDbm(P), P.preamble, MISURA_TCXO_V);
 #else
-    st = radio.beginFSK(P.freqMhz, P.kbps, P.devKhz, P.rxBwKhz, P.powerDbm, P.preamble, false);
+    st = radio.beginFSK(P.freqMhz, P.kbps, P.devKhz, P.rxBwKhz, misura::effectivePowerDbm(P), P.preamble, false);
 #endif
     if (st == RADIOLIB_ERR_NONE) st = radio.fixedPacketLengthMode(static_cast<uint8_t>(P.payload));
 #if defined(RADIO_SX1262)
@@ -117,8 +119,20 @@ static void showParams() {
     Serial.printf("MODE FSK %.2f kbit/s dev %.1f kHz rxbw %.1f kHz shape %d | ", P.kbps, P.devKhz, P.rxBwKhz, P.shape);
   else
     Serial.printf("MODE LORA bw %.2f kHz sf %d cr 4/%d | ", P.bwKhz, P.sf, P.cr);
-  Serial.printf("freq %.4f MHz power %d dBm payload %d preamble %d call %s ready %d\n", P.freqMhz, P.powerDbm, P.payload, P.preamble,
-                callsign[0] ? callsign : "-", modeReady ? 1 : 0);
+  Serial.printf("freq %.4f MHz power %d dBm%s payload %d preamble %d call %s ready %d\n", P.freqMhz, misura::effectivePowerDbm(P),
+                P.boost ? " BOOST (RISCHIO)" : "", P.payload, P.preamble, callsign[0] ? callsign : "-", modeReady ? 1 : 0);
+}
+
+// In BOOST ogni trasmissione conta nel ciclo di lavoro; sopra l'1% si segnala il rischio (al massimo ogni 5 s). Il BOOST non si spegne da solo: e' una scelta dell'operatore.
+static void boostAccount(uint32_t airUs) {
+  if (!P.boost) return;
+  const uint32_t now = millis();
+  boostGuard.addTx(now, airUs);
+  if (boostGuard.overLimit(now) && now - boostLastWarnMs > 5000UL) {
+    boostLastWarnMs = now;
+    Serial.printf("ATTENZIONE BOOST: ciclo di lavoro %.1f%% su %d s, oltre %.0f%% (rischio calore e danno alla radio). BOOST OFF per tornare a +%d dBm\n",
+                  boostGuard.dutyPct(now), static_cast<int>(BoostGuard::kBuckets), kBoostDutyMaxPct, P.powerDbm);
+  }
 }
 
 static uint32_t expectedToaUs() {
@@ -161,6 +175,7 @@ static void cmdTx(int n, int intervalMs, uint32_t startSeq) {
     if (st == RADIOLIB_ERR_NONE && done) {
       ok++;
       sumToa += toa;
+      boostAccount(toa);
     }
     if (verbose) Serial.printf("TX seq=%u len=%d toa_us=%u calc_us=%u st=%d\n", seq, P.payload, toa, calc, done ? st : (st ? st : -999));
     scr.done = ok;
@@ -261,7 +276,8 @@ static void cmdCw(int seconds) {
   static uint8_t buf[255];
   memset(buf, 0xFF, sizeof(buf));
   const size_t cwBytes = static_cast<size_t>(P.payload);
-  Serial.printf("CW start %d s su %.4f MHz, %d dBm\n", seconds, P.freqMhz, P.powerDbm);
+  Serial.printf("CW start %d s su %.4f MHz, %d dBm\n", seconds, P.freqMhz, misura::effectivePowerDbm(P));
+  if (P.boost) Serial.println("ATTENZIONE BOOST: CW e' trasmissione continua (ciclo 100%), molto oltre l'1% del chip a +20 dBm: rischio di calore e di danno alla radio");
   scr.kind = ScreenState::Cw;
   scr.secondsLeft = seconds;
   refresh();
@@ -270,6 +286,7 @@ static void cmdCw(int seconds) {
   while (static_cast<int32_t>(end - millis()) > 0) {
     radio.transmit(buf, cwBytes);  // bloccante: 0,43 s con 64 byte a 1,2 kbit/s
     n++;
+    boostAccount(expectedToaUs());
     if (serialKey()) {
       Serial.println("STOP");
       break;
@@ -286,7 +303,7 @@ static void cmdCw(int seconds) {
 static void printHelp() {
   Serial.println(
       "Comandi: INFO | SHOW | HELP | CALL <nominativo> | MODE LORA <bwKHz> <sf> <cr 5-8> | MODE FSK <kbps> <devKHz> <rxbwKHz> [shape 0|3|5|10]\n"
-      "         FREQ <MHz 430-440> | POWER <dBm> | PAYLOAD <26-255> | PREAMBLE <n> | VERBOSE 0|1 | DISPLAY 0|1\n"
+      "         FREQ <MHz 430-440> | POWER <dBm> | BOOST ON RISCHIO|OFF|STATUS (+20 dBm, ESTREMA, con rischio) | PAYLOAD <26-255> | PREAMBLE <n> | VERBOSE 0|1 | DISPLAY 0|1\n"
       "         TX <n> <intervallo ms> [seq iniziale] | RX <secondi> | CW <secondi 1-30> | un tasto qualsiasi ferma TX, RX e CW");
 }
 
@@ -342,7 +359,34 @@ static void handleLine(const char* line) {
   } else if (!strcmp(c, "FREQ") && t.n == 2 && parseFloat(t.tok[1], &f) && freqOk(f)) {
     P.freqMhz = f;
     if (applyMode()) showParams();
+  } else if (!strcmp(c, "BOOST")) {
+    const BoostCmd bc = parseBoost(t);
+    if (bc == BoostCmd::On) {
+      P.boost = true;
+      boostGuard = BoostGuard();
+      Serial.println(kBoostWarning);
+      if (applyMode()) showParams();
+    } else if (bc == BoostCmd::NeedsAck) {
+      Serial.println(kBoostWarning);
+      Serial.println("ERR BOOST non attivato: scrivi BOOST ON RISCHIO");
+    } else if (bc == BoostCmd::OffCmd) {
+      P.boost = false;
+      if (applyMode()) showParams();
+    } else if (bc == BoostCmd::Status) {
+      Serial.printf("BOOST %s, potenza %d dBm, ciclo di lavoro %.2f%% su %d s\n", P.boost ? "ATTIVO (RISCHIO)" : "spento", misura::effectivePowerDbm(P),
+                    boostGuard.dutyPct(millis()), static_cast<int>(BoostGuard::kBuckets));
+    } else {
+      Serial.println("ERR BOOST ON RISCHIO | BOOST OFF | BOOST STATUS");
+    }
   } else if (!strcmp(c, "POWER") && t.n == 2 && parseInt(t.tok[1], &a) && a >= -9 && a <= 22) {
+#if !defined(RADIO_SX1262)
+    if (a > kContinuousDbm) {
+      Serial.println("ERR SX1278: oltre +17 dBm solo in BOOST (BOOST ON RISCHIO)");
+      return;
+    }
+#else
+    if (a > kContinuousDbm) Serial.println("ATTENZIONE: oltre +17 dBm sull'SX1262: calore e corrente alta (118 mA a +22 dBm); per +20 dBm vedi BOOST ON RISCHIO");
+#endif
     P.powerDbm = a;
     if (applyMode()) showParams();
   } else if (!strcmp(c, "PAYLOAD") && t.n == 2 && parseInt(t.tok[1], &a) && a >= kMinPayload && a <= kMaxPayload) {

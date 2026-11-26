@@ -129,6 +129,39 @@ def common_mask(chip_a, mask_a, chip_b, mask_b):
     return m
 
 
+# ------------------------------------------------------------------------------------------------ modalita' BOOST (+20 dBm), decisa il 26/11/2026
+# Modalita' ESTREMA applicabile a ogni profilo fisico, con segnalazione del rischio. Rischio tecnico (non normativo): calore, corrente, ciclo del chip,
+# antenna adattata, ricevitori vicini, armoniche e spurie. Dettagli in docs/boost.md.
+BOOST_DBM = 20
+PROFILE_POWER_DBM = {          # profilo -> (potenza normale predefinita, massimo del profilo): la potenza BOOST e' BOOST_DBM dove il profilo arriva, altrimenti il suo massimo
+    0: {"SX1278": (17, 20), "SX1262": (17, 22)},     # 430-440 MHz
+    1: {"SX1280": (10, 12)},                          # 2,4 GHz con radio SPI semplice (+12,5 dBm): senza amplificatore il BOOST non arriva a +20
+    2: {"E28-2G4T27SX": (17, 27)},                   # modulo Ebyte UART: gradini 17, 20, 23, 27 dBm
+}
+BOOST_DUTY_PCT = {"SX1278": 1.0}                    # ciclo massimo a +20 dBm (datasheet Table 35); per l'SX1262 e il modulo Ebyte il datasheet usato non pone un ciclo a +20 dBm
+
+
+def boost_dbm(profile, device):
+    """Potenza del BOOST per un profilo e un dispositivo: +20 dBm, o il massimo del profilo se e' piu' basso."""
+    return min(BOOST_DBM, PROFILE_POWER_DBM[profile][device][1])
+
+
+def boost_risks(profile, device):
+    """Elenco dei rischi TECNICI da mostrare quando si attiva il BOOST (nessun limite legale: vale docs/regole-radioamatoriali.md)."""
+    r = ["calore e corrente di trasmissione piu' alti, batteria e alimentazione sotto sforzo",
+         "ricevitori vicini saturati; armoniche e spurie piu' forti: filtrare",
+         "antenna adattata obbligatoria: mai trasmettere senza antenna o con antenna guasta"]
+    if device == "SX1278":
+        r.insert(0, "SX1278 a +20 dBm: ciclo di lavoro massimo 1% e VSWR 3:1 (datasheet Table 35); in continuo il massimo e' +17 dBm")
+    if device == "SX1262":
+        r.insert(0, "SX1262: +20 dBm e' sotto il suo massimo (+22 dBm) ma la corrente e' alta (circa 118 mA a +22)")
+    if device == "SX1280":
+        r.insert(0, "SX1280 senza amplificatore: il BOOST non arriva a +20 dBm (massimo circa +12,5 dBm)")
+    if device.startswith("E28"):
+        r.insert(0, "modulo Ebyte: a +20 dBm (e piu' a 23 e 27) il ricevitore dell'altro modulo puo' essere danneggiato se vicino (blocking 10 dBm): attenuatore o distanza")
+    return r
+
+
 def sens_datasheet(chip, bw, sf):
     return SENS[chip].get((bw, sf))
 

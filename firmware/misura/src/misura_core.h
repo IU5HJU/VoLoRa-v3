@@ -24,6 +24,7 @@ struct Params {
   int shape = 0;  // 0 nessuno, 3 = 0,3, 5 = 0,5, 10 = 1,0
   // Comuni
   int powerDbm = 2;
+  bool boost = false;  // modalita' BOOST attiva (+20 dBm): estrema, con rischio (vedi BoostGuard)
   int payload = 64;   // byte del pacchetto di prova
   int preamble = 8;   // simboli LoRa o byte FSK
 };
@@ -112,6 +113,66 @@ inline bool loraValid(float bw, int sf, int cr) {
 
 inline bool fskValid(float kbps, float dev, float rxbw) {
   return kbps >= 0.5f && kbps <= 300.0f && dev >= 0.6f && dev <= 200.0f && dev + kbps / 2.0f <= 250.0f && rxbw > 0.0f && rxbw <= 467.0f;
+}
+
+// ---------- Modalita' BOOST (+20 dBm), estrema ----------
+// Vale per ogni profilo (LoRa, FSK). Rischio TECNICO, non normativo (docs/confronto-datasheet.md, docs/boost.md):
+//  - SX1278: +20 dBm solo con ciclo di lavoro massimo 1% e VSWR 3:1 al connettore d'antenna (datasheet SX1276/77/78/79, Table 35); in continuo il limite e' +17 dBm;
+//  - corrente in trasmissione 120 mA (SX1278) o 118 mA (SX1262 a +22 dBm): calore, alimentazione, batteria;
+//  - ricevitori vicini saturati; armoniche e spurie piu' forti; MAI trasmettere senza antenna o con antenna non adatta.
+constexpr int kBoostDbm = 20;
+constexpr int kContinuousDbm = 17;       // SX1278: massimo in continuo (PA_BOOST)
+constexpr uint32_t kBoostWindowMs = 100000UL;   // finestra su cui si misura il ciclo di lavoro
+constexpr float kBoostDutyMaxPct = 1.0f;        // ciclo massimo a +20 dBm sull'SX1278
+constexpr const char* kBoostWarning =
+    "ATTENZIONE BOOST +20 dBm: modalita' ESTREMA, con RISCHIO per la radio e per la scheda. "
+    "SX1278: massimo 1% di ciclo di lavoro (in continuo +17 dBm) e antenna adattata (VSWR max 3:1): mai senza antenna. "
+    "Calore e corrente (circa 120 mA), batteria; ricevitori vicini saturati; armoniche e spurie piu' forti. "
+    "Per attivare: BOOST ON RISCHIO";
+
+// Ciclo di lavoro in trasmissione su una finestra scorrevole, a secchi da 1 s (nessuna memoria dinamica).
+struct BoostGuard {
+  static constexpr int kBuckets = 100;      // 100 secchi da 1 s = finestra di 100 s
+  uint32_t usInBucket[kBuckets] = {0};
+  uint32_t curSecond = 0;
+  bool started = false;
+  void advance(uint32_t nowMs) {
+    const uint32_t sec = nowMs / 1000;
+    if (!started) {
+      started = true;
+      curSecond = sec;
+      return;
+    }
+    // azzera i secchi saltati
+    uint32_t steps = sec - curSecond;
+    if (steps > kBuckets) steps = kBuckets;
+    for (uint32_t i = 1; i <= steps; i++) usInBucket[(curSecond + i) % kBuckets] = 0;
+    curSecond = sec;
+  }
+  void addTx(uint32_t nowMs, uint32_t airUs) {
+    advance(nowMs);
+    usInBucket[curSecond % kBuckets] += airUs;
+  }
+  float dutyPct(uint32_t nowMs) {
+    advance(nowMs);
+    uint64_t sum = 0;
+    for (int i = 0; i < kBuckets; i++) sum += usInBucket[i];
+    return static_cast<float>(sum) / (static_cast<double>(kBuckets) * 1e6) * 100.0f;
+  }
+  bool overLimit(uint32_t nowMs) { return dutyPct(nowMs) > kBoostDutyMaxPct; }
+};
+
+// Potenza da applicare alla radio: con BOOST +20 dBm in ogni profilo, altrimenti quella scelta (mai oltre +17 dBm di default sull'SX1278 se non e' BOOST).
+inline int effectivePowerDbm(const Params& p) { return p.boost ? kBoostDbm : p.powerDbm; }
+
+// "BOOST ON RISCHIO" attiva, "BOOST OFF" spegne; senza la parola RISCHIO non si attiva (il comando deve dire che si e' capito).
+enum class BoostCmd { Invalid, On, OffCmd, Status, NeedsAck };
+inline BoostCmd parseBoost(const Tokens& t) {
+  if (t.n < 2 || std::strcmp(t.tok[0], "BOOST")) return BoostCmd::Invalid;
+  if (!std::strcmp(t.tok[1], "OFF") && t.n == 2) return BoostCmd::OffCmd;
+  if (!std::strcmp(t.tok[1], "STATUS") && t.n == 2) return BoostCmd::Status;
+  if (!std::strcmp(t.tok[1], "ON")) return (t.n == 3 && !std::strcmp(t.tok[2], "RISCHIO")) ? BoostCmd::On : BoostCmd::NeedsAck;
+  return BoostCmd::Invalid;
 }
 
 // ---------- Pacchetto di prova ----------

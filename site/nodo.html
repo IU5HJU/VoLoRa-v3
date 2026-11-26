@@ -81,7 +81,17 @@
   </section>
 
   <section>
-    <h2>4. Controllo e file</h2>
+    <h2>4. Modalità BOOST (+20 dBm, estrema)</h2>
+    <label class="inline"><input id="boost" type="checkbox"> Attiva il BOOST a +20 dBm su ogni profilo (estremo, con rischio)</label>
+    <div id="boost_box" hidden>
+      <div class="warn"><strong>Rischio.</strong> Il BOOST porta la radio a +20 dBm. Sull'SX1278 il costruttore ammette +20 dBm solo con ciclo di lavoro massimo dell'1% e antenna adattata (VSWR 3:1); in continuo il massimo è +17 dBm. Corrente e calore più alti, ricevitori vicini saturati, armoniche e spurie più forti. Mai trasmettere senza antenna.</div>
+      <label class="inline"><input id="boost_ok" type="checkbox"> Ho letto il rischio e lo accetto</label>
+    </div>
+    <p class="hint">Di base il nodo trasmette a +17 dBm. Il BOOST è sempre spento all'avvio del firmware.</p>
+  </section>
+
+  <section>
+    <h2>5. Controllo e file</h2>
     <div id="esito"></div>
     <pre id="json"></pre>
     <button type="button" id="scarica">Scarica nodo.json</button>
@@ -89,7 +99,7 @@
   </section>
 </main>
 <script>
-const CHIP = { SX1278: [[137000, 175000], [395000, 525000]], SX1262: [[150000, 960000]] };
+const CHIP = { SX1278: [[137000, 175000], [410000, 525000]], SX1262: [[150000, 960000]] };
 const okFreq = (chip, khz) => (CHIP[chip] || []).some(([a, b]) => khz >= a && khz <= b);
 const stepMhz = ac => ({ 1: 1, 2: 1, 3: 1, 4: 2, 5: 2, 6: 3, 7: 5 })[ac];
 const $ = id => document.getElementById(id);
@@ -104,6 +114,7 @@ function leggi() {
     freq_veloce_khz: topo === 'tripla' ? khz('freq_veloce') : 0, air_code_veloce: parseInt($('air_code_veloce').value, 10),
     reflector_v2: $('reflector_v2').value.trim(), reflector_v3: $('reflector_v3').value.trim(),
     attesa_fine_qso_min: parseInt($('attesa').value || '0', 10), lock_v2: $('lock_v2').checked,
+    boost: $('boost').checked, boost_rischio_accettato: $('boost').checked && $('boost_ok').checked,
     forza_v3_da: ($('forza_mobile').checked ? 1 : 0) | ($('forza_nodo').checked ? 2 : 0),
     slot_v2_s: 2.0, slot_v3_s: 2.0, chiave_sysop_hex: $('chiave').value.trim().toLowerCase(),
   };
@@ -115,6 +126,10 @@ function convalida(c) {
   if (!/^[A-Z0-9/\-]{3,8}$/.test(c.nominativo)) err.push('nominativo: da 3 a 8 caratteri (lettere, cifre, / e -)');
   if (!(c.attesa_fine_qso_min >= 1 && c.attesa_fine_qso_min <= 255)) err.push('attesa a fine QSO: da 1 a 255 minuti');
   if (c.chiave_sysop_hex && !/^[0-9a-f]{32}$/.test(c.chiave_sysop_hex)) err.push('chiave SYSOP: 32 cifre esadecimali (16 byte)');
+  if (c.boost) {
+    if (!c.boost_rischio_accettato) err.push("BOOST +20 dBm: modalità estrema, serve accettare il rischio (spunta la conferma)");
+    warn.push("BOOST +20 dBm ATTIVO su ogni profilo: modalità ESTREMA, con RISCHIO. " + (c.chip === 'SX1278' ? "SX1278 a +20 dBm: ciclo di lavoro massimo 1% e VSWR 3:1; in continuo il massimo è +17 dBm; " : "SX1262: corrente alta (circa 118 mA a +22 dBm); ") + "calore e corrente più alti; ricevitori vicini saturati; armoniche e spurie più forti; antenna adattata obbligatoria, mai senza antenna");
+  }
   if (!c.chiave_sysop_hex) warn.push('senza chiave SYSOP il nodo non accetta comandi via radio (blocco e sblocco solo da seriale o web)');
   if (!okFreq(c.chip, c.freq_nodo_khz)) err.push(`frequenza del nodo ${c.freq_nodo_khz} kHz fuori dal campo del chip ${c.chip}`);
   if (c.topologia === 'singola') {
@@ -138,6 +153,7 @@ function aggiorna() {
   const topo = $('topologia').value;
   $('voto').hidden = topo === 'singola';
   $('veloce').hidden = topo !== 'tripla';
+  $('boost_box').hidden = !$('boost').checked;
   const p = $('voto_preset').value;
   if (p !== 'altro') $('freq_voto').value = p;
   const c = leggi();

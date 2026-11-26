@@ -36,6 +36,8 @@ class NodeConfig:
     forza_v3_da: int = 0                     # maschera: 1 = una mobile V3, 2 = un altro nodo V3 possono forzare l'invio di immagini anche in modo v2 (mai a QSO in corso)
     slot_v2_s: float = 2.0                   # turni dell'ascolto a riposo (scheda singola)
     slot_v3_s: float = 2.0
+    boost: bool = False                      # modalita' BOOST +20 dBm su ogni profilo (ESTREMA, con rischio): serve boost_rischio_accettato
+    boost_rischio_accettato: bool = False    # il sysop ha letto i rischi tecnici e li accetta
     chiave_sysop_hex: str = ""              # chiave HMAC di 16 byte (32 cifre esadecimali) per i comandi SYSOP via radio: una per nodo
     note: str = field(default="", repr=False)
 
@@ -59,6 +61,15 @@ def validate(cfg):
         err.append("chiave SYSOP: 32 cifre esadecimali (16 byte)")
     if not cfg.chiave_sysop_hex:
         warn.append("senza chiave SYSOP il nodo non accetta comandi via radio (blocco e sblocco solo da seriale o web)")
+    if cfg.boost:
+        import limiti_chip as lc
+        if not cfg.boost_rischio_accettato:
+            err.append("BOOST +20 dBm: modalita' estrema, serve accettare il rischio (spunta la conferma)")
+        warn.append("BOOST +20 dBm ATTIVO su ogni profilo: modalita' ESTREMA, con RISCHIO. " + "; ".join(lc.boost_risks(0, cfg.chip)))
+        if cfg.freq_veloce_khz:
+            warn.append("BOOST sul modulo a 2,4 GHz: " + "; ".join(lc.boost_risks(2, "E28-2G4T27SX")[:1]))
+    elif cfg.boost_rischio_accettato:
+        warn.append("rischio accettato ma BOOST spento: non cambia nulla")
     if not 0 <= cfg.forza_v3_da <= 3:
         err.append("forza_v3_da: 0 nessuno, 1 mobile, 2 nodo, 3 entrambi")
     if cfg.slot_v2_s <= 0 or cfg.slot_v3_s <= 0:
@@ -111,6 +122,16 @@ def caps(cfg):
     if cfg.v3_ruolo == "gateway":
         m |= CAP_GW_V3
     return m
+
+
+def potenze(cfg):
+    """Potenza (dBm) di ogni profilo in uso dal nodo: normale +17 dBm (decisione del 26/11/2026), BOOST +20 dBm se attivo e accettato."""
+    import limiti_chip as lc
+    on = cfg.boost and cfg.boost_rischio_accettato
+    out = {0: lc.boost_dbm(0, cfg.chip) if on else lc.PROFILE_POWER_DBM[0][cfg.chip][0]}
+    if cfg.freq_veloce_khz:
+        out[2] = lc.boost_dbm(2, "E28-2G4T27SX") if on else lc.PROFILE_POWER_DBM[2]["E28-2G4T27SX"][0]
+    return out
 
 
 def azione(cfg, protocollo, internet):

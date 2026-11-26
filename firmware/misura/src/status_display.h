@@ -66,7 +66,7 @@ class StatusDisplay {
       else snprintf(b, sizeof(b), "LoRa %gk SF%d 4/%d", s.p->bwKhz, s.p->sf, s.p->cr);
       d_.print(b);
       d_.setCursor(0, 21);
-      snprintf(b, sizeof(b), "%.3fMHz %+ddBm", s.p->freqMhz, s.p->powerDbm);
+      snprintf(b, sizeof(b), "%.3fMHz %+ddBm%s", s.p->freqMhz, misura::effectivePowerDbm(*s.p), s.p->boost ? " !B" : "");
       d_.print(b);
       d_.setCursor(0, 30);
       snprintf(b, sizeof(b), "pkt %dB pre %d", s.p->payload, s.p->preamble);
