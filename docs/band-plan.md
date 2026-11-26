@@ -31,12 +31,12 @@ Nel 2 m (in alto): 145,794-145,806 MHz comunicazioni spaziali (ISS); 145,806-146
 ## 3. Tabella dei canali del profilo 0 (deciso il 26/11/2026)
 > **Valori di partenza, non limiti.** Nel firmware le frequenze di T3 e T-Beam sono liberamente configurabili e quelle del modulo a 2,4 GHz sono configurabili a piacere dentro 2400-2450 MHz ([regole-radioamatoriali.md](regole-radioamatoriali.md)). Il codice in `tools/canali.py` controlla solo il campo del chip e le sovrapposizioni.
 
-Decisioni dell'autore: **canale di incontro 433,700 MHz** e **canale di servizio del voto 433,850 MHz**, entrambi da 125 kHz. La tabella è in [`tools/canali.py`](../tools/canali.py), provata in `tests/sim/test_canali.py`. Il `canale` del BAND-SET con profilo 0 è l'indice di questa tabella.
+Decisioni dell'autore: **canale di incontro 433,700 MHz** (125 kHz) e **canale di servizio del voto a 144,850 MHz in banda 2 m** (corretto il 26/11/2026: prima era 433,850 MHz; il voto è in [voting-isofrequenza.md](voting-isofrequenza.md)). La tabella è in [`tools/canali.py`](../tools/canali.py), provata in `tests/sim/test_canali.py`. Il `canale` del BAND-SET con profilo 0 è l'indice di questa tabella.
 
 | Canale | Frequenza (MHz) | Larghezza max | Gradini ammessi | Uso |
 |---|---|---|---|---|
 | 0 | 433,700 | 125 kHz | R2, R8-R14 | incontro: beacon, polling, HELLO e trasferimenti stretti |
-| 1 | 433,850 | 125 kHz | R2, R8-R14 | servizio fra i nodi (VOTO) e trasferimenti stretti con ascolto prima di parlare |
+| 1 | 433,850 | 125 kHz | R2, R8-R14 | trasferimenti stretti con ascolto prima di parlare (era il canale del voto) |
 | 2 | 433,955 | 62,5 kHz | R11-R14 | trasferimenti con i gradini stretti |
 | 3-15 | — | — | — | riservati (deciso il 26/11/2026): per ogni altro canale si usa la frequenza esplicita (BAND-SET-FREQ) |
 
@@ -44,7 +44,8 @@ Decisioni dell'autore: **canale di incontro 433,700 MHz** e **canale di servizio
 - **L'incontro (R10) è sul canale 0**, come deciso: HELLO e beacon sempre lì. I trasferimenti negoziano il canale nell'HELLO (BAND-SET con profilo 0).
 - **Cosa entra in 125 kHz:** i gradini con larghezza occupata fino a 125 kHz: FSK R2 (50 kbit/s, 100 kHz di banda occupata, circa 38 kbit/s netti) e LoRa R8-R14. **Il più veloce è R2 in FSK**, poi R8 (circa 1,6 kbit/s netti).
 - **Non entrano i gradini larghi:** R0, R1 (FSK 150k e 100k) e R3-R7 (LoRa 250-500 kHz) non hanno un canale nel segmento. Per i trasferimenti veloci restano il **cambio di banda a 2,4 GHz (profilo 2)** o un accordo temporaneo fra le stazioni per usare tutto il segmento (non nella tabella).
-- **Il canale 1** è condiviso fra il voto (frame di 12 byte, rarissimi) e i trasferimenti stretti: chi trasmette ascolta prima, e il voto ha la precedenza.
+- **Il canale 1 non ospita più il voto**: il voto è a 144,850 MHz (2 m). In 70 cm il canale 1 è un secondo canale da 125 kHz per i trasferimenti stretti.
+- **Il canale di servizio a 2 m, 144,850 MHz,** non è nelle schermate del piano che ho visto (compare solo 145,794-146,000 MHz): **da controllare sul piano dei 2 m**. La **terza armonica** (434,550 MHz) cade in 70 cm a circa 0,6 MHz dal canale 2: filtro passa-basso sulla radio a 2 m.
 - **A 433,700 MHz il piano indica la frequenza FAX** (attività stretta): ascolto prima di trasmettere.
 
 ## 4. 13 cm e 23 cm

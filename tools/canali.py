@@ -13,9 +13,10 @@ CH_MEETING, CH_SERVICE, CH_NARROW = 0, 1, 2
 # indice -> (frequenza centrale kHz, larghezza massima occupata kHz, uso)
 PROFILE0 = {
     CH_MEETING: (433700, 125.0, "incontro: beacon, polling, HELLO e trasferimenti stretti"),
-    CH_SERVICE: (433850, 125.0, "servizio fra i nodi (VOTO) e trasferimenti stretti con ascolto prima di parlare"),
+    CH_SERVICE: (433850, 125.0, "trasferimenti stretti con ascolto prima di parlare (il VOTO non e' piu' qui: vedi SERVICE_2M_KHZ)"),
     CH_NARROW: (433955, 62.5, "trasferimenti con i gradini stretti (R11-R14)"),
 }
+SERVICE_2M_KHZ = 144850                # canale di servizio del VOTO, fisso, in banda 2 m (deciso il 26/11/2026): la stessa antenna bibanda serve le due radio con un duplexer
 RESERVED_FROM = 3                      # 3-15: riservati (tabella estesa, frequenze da definire)
 
 
@@ -60,6 +61,11 @@ def guard_khz(a, b):
 # sulla griglia del modulo (2400 + CHAN x passo).
 CHIP_RANGES_KHZ = {"SX1278": [(137000, 175000), (395000, 525000)], "SX1262": [(150000, 960000)]}     # docs/radio-limiti.md
 HAM_2G4_KHZ = (2400000, 2450000)
+
+
+def harmonic_khz(khz, n):
+    """Frequenza dell'n-esima armonica: la terza del canale di servizio (3 x 144,850 = 434,550 MHz) cade in 70 cm, vicino ai nostri canali."""
+    return khz * n
 
 
 def valid_frequency(chip, khz):

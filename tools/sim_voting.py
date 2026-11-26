@@ -32,8 +32,13 @@ MEAS_SIGMA = 1.0       # dB: errore di misura dell'SNR in un nodo
 LAT_RETE = 0.050       # s: latenza dell'annuncio via rete
 
 
-def _prx(rng, d_km, extra, shadow=None, sigma=8.0):
-    return 10.0 - sm.fspl_db(d_km) - extra + (rng.gauss(0.0, sigma) if shadow is None else shadow)
+def fspl_db_f(d_km, f_mhz):
+    return 32.45 + 20 * math.log10(f_mhz) + 20 * math.log10(max(d_km, 0.05))
+
+
+def _prx(rng, d_km, extra, shadow=None, sigma=8.0, f_mhz=None):
+    loss = sm.fspl_db(d_km) if f_mhz is None else fspl_db_f(d_km, f_mhz)
+    return 10.0 - loss - extra + (rng.gauss(0.0, sigma) if shadow is None else shadow)
 
 
 def ritardo(politica, snr, rng, rid=RUNG):
@@ -105,16 +110,28 @@ SERVICE_MODES = [("R2 FSK 50k", pi.sensitivity_dbm(2), pi.frame_airtime_s(2, VOT
                  ("125/SF12 (R10)", scm.sens_lora(125, 12), scm.lora_toa(12, 125, 1, VOTE_BYTES, 8))]
 
 
-def rung_collegamento(dist_km, extra_nodi, rng, sigma=4.0):
+def _fsk_mode(br, dev):
+    """(nome, sensibilita' dBm con la stessa formula delle altre stime, tempo in aria del VOTO) di un modo FSK stretto."""
+    bw = br + 2 * dev
+    return (f"FSK {br:g}k dev {dev:g} ({bw:g} kHz)", -174 + 10 * math.log10(bw * 1000) + scm.NF + 12, (pi.FSK_PHY_BYTES + VOTE_BYTES) * 8 / (br * 1000))
+
+
+# Servizio a 144,850 MHz (2 m, deciso il 26/11/2026): modi stretti (banda occupata sotto 15 kHz, adatti ai segmenti digitali dei 2 m) e perdita a 144,85 MHz
+SERVICE_MODES_2M = [_fsk_mode(4.8, 2.4), _fsk_mode(2.4, 1.2)]
+SERVICE_F_MHZ = {"2m": 144.85, "70cm": None}
+SERVICE_MODES_BY_BAND = {"2m": SERVICE_MODES_2M, "70cm": SERVICE_MODES}
+
+
+def rung_collegamento(dist_km, extra_nodi, rng, sigma=4.0, band="2m"):
     """Modo piu' veloce del canale di servizio con 6 dB di margine fra i due nodi (antenne in alto: perdita extra piccola): (nome, tempo in aria); None se non si sentono."""
-    prx = _prx(rng, dist_km, extra_nodi, sigma=sigma)
-    for name, sens_dbm, toa in SERVICE_MODES:
+    prx = _prx(rng, dist_km, extra_nodi, sigma=sigma, f_mhz=SERVICE_F_MHZ[band])
+    for name, sens_dbm, toa in SERVICE_MODES_BY_BAND[band]:
         if prx - sens_dbm >= sm.MARGIN_DB:
             return name, toa
     return None
 
 
-def run_voto_radio(dist_nodi_km, extra_mobile=25.0, extra_nodi=10.0, p_loss=0.03, repeat=1, scenari=3000, seed=1):
+def run_voto_radio(dist_nodi_km, extra_mobile=25.0, extra_nodi=10.0, p_loss=0.03, repeat=1, scenari=3000, seed=1, band="2m"):
     """Voto sul canale di servizio fra i nodi, via radio (Internet non e' affidabile). Dopo la fine del primo pacchetto della mobile ogni nodo che l'ha
     decodificata manda un VOTO nel proprio slot (ordine per identificativo); vince il margine migliore, a parita' l'identificativo piu' basso.
     Un VOTO perso (probabilita' p_loss per tentativo, `repeat` tentativi) fa partire anche il perdente: doppio accesso. Se i nodi non si sentono a nessun gradino
@@ -131,7 +148,7 @@ def run_voto_radio(dist_nodi_km, extra_mobile=25.0, extra_nodi=10.0, p_loss=0.03
         if p1 < sens or p2 < sens:
             continue
         n += 1
-        rl = rung_collegamento(dist_nodi_km, extra_nodi, rng)
+        rl = rung_collegamento(dist_nodi_km, extra_nodi, rng, band=band)
         if rl is None:
             senza_link += 1
             doppi += 1
@@ -197,10 +214,10 @@ def main():
         r2 = run_elezione("qualita", "rf", a.distanza, a.scenari, a.seed, nodi_si_sentono=True)
         print(f"| {1000 * W:.0f} ms | {100 * r1['doppio_accesso']:.1f} % | {100 * r2['doppio_accesso']:.1f} % | {1000 * r1['ritardo_medio_s']:.0f} ms |")
     W = w0
-    print("\nVoto via radio sul canale di servizio a 433,850 MHz, 125 kHz (modi: FSK R2 e LoRa 125 kHz; antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo):")
+    print("\nVoto via radio sul canale di servizio a 144,850 MHz (2 m), FSK stretto; antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo:")
     print("| distanza fra i nodi | nodi si sentono | gradino del voto | durata del voto (2 slot) | entra in 200 ms | doppio accesso | nodo migliore |")
     print("|---|---|---|---|---|---|---|")
-    for dk in (3.0, 5.0, 10.0, 20.0, 30.0, 50.0):
+    for dk in (5.0, 10.0, 20.0, 30.0, 50.0, 70.0):
         r = run_voto_radio(dk, scenari=a.scenari, seed=a.seed)
         durata = r["durata_voto_s"]
         gr = "-" if r["gradino_mediano"] is None else r["gradino_mediano"]
