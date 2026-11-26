@@ -42,6 +42,7 @@ La configurazione diventa le **capacità** del frame NODO (un byte, [mesh-v3.md]
   "attesa_fine_qso_min": 10,
   "lock_v2": false,
   "forza_v3_da": 0,
+  "chiave_sysop_hex": "00112233445566778899aabbccddeeff",
   "v2_ruolo": "gateway",
   "v3_ruolo": "pappagallo",
   "topologia": "singola",
@@ -62,10 +63,14 @@ Una radio ascolta **un profilo alla volta**: la voce dal vivo della v2 (Range, S
 
 **Comando SYSOP via radio (frame V3 firmato).** La v2 non si modifica, quindi il comando di sblocco **non può essere un comando della v2**: è un frame V3 **SYSOP** (sottotipo 70 del frame 14, 23 byte) con **firma HMAC-SHA256 troncata a 8 byte** e **contatore anti-ripetizione**, come i comandi del sysop della v2. Comandi: **1 blocca in v2**, **2 sblocca**, **3 imposta l'attesa a fine QSO** (1-255 minuti), **4 consente il comando forzato** (argomento: bit 0 mobile V3, bit 1 altro nodo V3). È l'unico frame V3 **firmato** per ora; per gli altri la firma resta un'opzione prevista e non attiva. La chiave (16 byte) la tiene il sysop.
 
-## 6. Punti aperti
+## 6. La pagina di configurazione (site/nodo.html)
+**Decisa il 26/11/2026:** la configurazione si fa con una **pagina web nella pagina di installazione** (GitHub Pages): [`site/nodo.html`](../site/nodo.html), raggiungibile dalla pagina di installazione del firmware. Un modulo con le spunte (ruolo gateway/pappagallo per v2 e V3, topologia, radio e frequenze, profilo, attesa, lock, comando forzato da mobile e/o nodo, chiave SYSOP) **controlla** la configurazione con le stesse regole di `tools/config_nodo.py` e produce `nodo.json`. Tutto resta nel browser; **la chiave SYSOP si genera nel browser** (16 byte casuali) e non viene inviata a nessuno. **Non scrive ancora sulla scheda**: manca il firmware V3 che legga il file; la scrittura per seriale dal browser (Web Serial) si farà quando il firmware esiste. Provata con Playwright (`tests/page/run_nodo.js`) e con un controllo incrociato in `tests/sim/test_config_nodo.py`.
+
+## 7. Punti aperti
 - ~~**"Nodo con gateway con seconda scheda":**~~ **Deciso il 26/11/2026:** la seconda scheda è la **radio del voto** (topologia doppia); il gateway Internet lo fa la scheda principale con il suo Wi-Fi.
 - ~~**Una radio ascolta un profilo alla volta:**~~ **Deciso il 26/11/2026:** ascolto a turni dall'orologio, modo v2 durante il QSO e con lock (punto 5).
-- **Il reflector V3** e il suo protocollo.
-- **Pagina di configurazione** (e le spunte nella pagina di installazione del firmware).
-- **Gestione delle chiavi** del sysop (dove si scrivono, come si cambiano).
+- **Il reflector V3:** deciso che **sostituirà il reflector v2** (vedi sotto); protocollo da definire.
+- ~~**Pagina di configurazione**~~ **Fatta** (punto 6), senza scrittura sulla scheda.
+- ~~**Gestione delle chiavi** del sysop~~ **Deciso il 26/11/2026: una chiave per nodo** (16 byte, generata dalla pagina, scritta nella configurazione); cambio con la pagina e riscrittura via seriale o web. Resta da definire come si cambia la chiave via radio senza ripetere la vecchia.
+- ~~**Comando forzato che interrompe un QSO**~~ **Deciso il 26/11/2026: mai.**
 - **Da verificare con le schede:** durata dei turni (quanti pacchetti v2 si perdono all'ingresso in modo v2), tempo di commutazione della radio fra i due profili.

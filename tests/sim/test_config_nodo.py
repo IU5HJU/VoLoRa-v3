@@ -47,5 +47,11 @@ check(cn.validate(cn.NodeConfig("IU5HJU", attesa_fine_qso_min=0))[0] != [] and c
 cl = cn.NodeConfig("IU5HJU", lock_v2=True, forza_v3_da=3, attesa_fine_qso_min=30)
 asc = cn.ascolto(cl)
 check(asc.modo(10.0) == "v2_lock" and asc.forza_v3_da == 3 and asc.attesa_s == 1800.0, "la configurazione del nodo comanda l'ascolto (lock, comando della mobile V3, attesa)")
+check(cn.validate(cn.NodeConfig("IU5HJU", chiave_sysop_hex="zz"))[0] != [] and cn.validate(cn.NodeConfig("IU5HJU", chiave_sysop_hex="00112233445566778899aabbccddeeff"))[0] == [], "chiave SYSOP: 32 cifre esadecimali")
+pagina = ('{"nominativo": "IU5HJU", "v2_ruolo": "gateway", "v3_ruolo": "gateway", "topologia": "tripla", "chip": "SX1278", "freq_nodo_khz": 433700, "profilo_v2": "messaggio",'
+          ' "chip_servizio": "SX1278", "freq_voto_khz": 144900, "freq_veloce_khz": 2424000, "air_code_veloce": 3, "reflector_v2": "r.example.org", "reflector_v3": "", "attesa_fine_qso_min": 30,'
+          ' "lock_v2": true, "forza_v3_da": 3, "slot_v2_s": 2.0, "slot_v3_s": 2.0, "chiave_sysop_hex": "00112233445566778899aabbccddeeff"}')
+cp = cn.from_json(pagina)
+check(cn.validate(cp)[0] == [] and cp.forza_v3_da == 3 and cn.caps(cp) == ch.CAP_SERVICE_2M | cn.CAP_FAST_2G4 | cn.CAP_GW_V2 | cn.CAP_GW_V3, "il JSON prodotto dalla pagina di configurazione (site/nodo.html) si legge e si convalida con le stesse regole")
 print("configurazione del nodo: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

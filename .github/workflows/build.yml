@@ -155,6 +155,7 @@ jobs:
           npm install --no-save playwright@1.49.1
           test -x /opt/google/chrome/chrome || { echo "Chrome non trovato sul runner"; exit 1; }
           node tests/page/run.js _site
+          node tests/page/run_nodo.js _site
       - uses: actions/configure-pages@v5
         with:
           # prova ad attivare Pages da solo; con il token di default puo' non essere permesso (allora: Settings -> Pages -> Source: GitHub Actions)

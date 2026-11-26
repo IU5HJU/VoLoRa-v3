@@ -36,6 +36,7 @@ class NodeConfig:
     forza_v3_da: int = 0                     # maschera: 1 = una mobile V3, 2 = un altro nodo V3 possono forzare l'invio di immagini anche in modo v2 (mai a QSO in corso)
     slot_v2_s: float = 2.0                   # turni dell'ascolto a riposo (scheda singola)
     slot_v3_s: float = 2.0
+    chiave_sysop_hex: str = ""              # chiave HMAC di 16 byte (32 cifre esadecimali) per i comandi SYSOP via radio: una per nodo
     note: str = field(default="", repr=False)
 
 
@@ -54,6 +55,10 @@ def validate(cfg):
         err.append("profilo v2: range, standard o messaggio")
     if not 1 <= cfg.attesa_fine_qso_min <= 255:
         err.append("attesa a fine QSO: da 1 a 255 minuti")
+    if cfg.chiave_sysop_hex and (len(cfg.chiave_sysop_hex) != 32 or any(ch_ not in "0123456789abcdefABCDEF" for ch_ in cfg.chiave_sysop_hex)):
+        err.append("chiave SYSOP: 32 cifre esadecimali (16 byte)")
+    if not cfg.chiave_sysop_hex:
+        warn.append("senza chiave SYSOP il nodo non accetta comandi via radio (blocco e sblocco solo da seriale o web)")
     if not 0 <= cfg.forza_v3_da <= 3:
         err.append("forza_v3_da: 0 nessuno, 1 mobile, 2 nodo, 3 entrambi")
     if cfg.slot_v2_s <= 0 or cfg.slot_v3_s <= 0:

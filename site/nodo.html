@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoLoRa V3: configura il nodo</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6570; --card:#fff; --line:#d5dae0; --accent:#0b5fc2; --warn-bg:#fff4d6; --warn-line:#e0b400; --err:#b3261e; --code-bg:#e9edf2; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#12161b; --fg:#e6eaee; --muted:#9aa5b1; --card:#1a2028; --line:#2d3641; --accent:#5aa2ff; --warn-bg:#3a3110; --warn-line:#a98a00; --err:#ff8a80; --code-bg:#252d37; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.5rem; margin:.4em 0 .2em; } h2 { font-size:1.1rem; margin:0 0 .6em; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin:14px 0; }
+  label { display:block; font-weight:600; margin:.8em 0 .2em; }
+  label.inline { display:inline-flex; gap:.5em; align-items:center; font-weight:500; margin:.3em 1em .3em 0; }
+  input[type=text], input[type=number], select { width:100%; max-width:26rem; padding:8px 10px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+  button { font:inherit; padding:9px 16px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; margin:.4em .4em .4em 0; }
+  button.sec { background:transparent; color:var(--accent); }
+  .muted, .hint { color:var(--muted); font-size:.88rem; }
+  .err { color:var(--err); font-weight:600; } .warnl { color:var(--fg); }
+  .warn { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:10px; padding:10px 14px; margin:12px 0; }
+  pre, code { background:var(--code-bg); border-radius:4px; font-size:.9em; } code { padding:1px 5px; } pre { padding:10px 12px; overflow:auto; max-height:22rem; }
+  ul { margin:.3em 0 0 1.2em; padding:0; } [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Configura il nodo</h1>
+  <p class="muted">Modulo per il sysop. Genera il file di configurazione del nodo (ruolo gateway o pappagallo per la v2 e per il V3, topologia, frequenze, ascolto, chiave SYSOP). <strong>Studio: non esiste ancora un firmware V3 che legga questo file.</strong> Tutto resta nel tuo browser: nulla viene inviato da nessuna parte.</p>
+
+  <section>
+    <h2>1. Ruolo, per protocollo</h2>
+    <label for="nominativo">Nominativo del nodo</label>
+    <input id="nominativo" type="text" value="" maxlength="8" placeholder="IU5HJU" autocomplete="off">
+    <label for="v2_ruolo">Voce, messaggio vocale e testo v2</label>
+    <select id="v2_ruolo"><option value="gateway">Gateway: come un nodo v2, con Internet</option><option value="pappagallo">Pappagallo: solo radio, memorizza e ripete</option></select>
+    <label for="v3_ruolo">V3 (immagini, mesh)</label>
+    <select id="v3_ruolo"><option value="gateway">Gateway: reflector V3 con Internet, altrimenti rete mesh</option><option value="pappagallo">Pappagallo: solo radio, memorizza e ripete</option></select>
+    <label for="reflector_v2">Reflector v2 (indirizzo)</label><input id="reflector_v2" type="text" placeholder="reflector.example.org" autocomplete="off">
+    <label for="reflector_v3">Reflector V3 (indirizzo, da definire)</label><input id="reflector_v3" type="text" autocomplete="off">
+  </section>
+
+  <section>
+    <h2>2. Topologia e frequenze</h2>
+    <label for="topologia">Topologia</label>
+    <select id="topologia"><option value="singola">Singola: una scheda, una frequenza</option><option value="doppia">Doppia: seconda scheda con la radio del voto</option><option value="tripla">Tripla: nodo, voto e 2,4 GHz per le immagini veloci</option></select>
+    <label for="chip">Radio principale (433 MHz)</label>
+    <select id="chip"><option>SX1278</option><option>SX1262</option></select>
+    <label for="freq_nodo">Frequenza del nodo (MHz)</label>
+    <input id="freq_nodo" type="number" step="0.001" value="433.700">
+    <label for="profilo_v2">Profilo radio ascoltato per la v2</label>
+    <select id="profilo_v2"><option value="messaggio">Messaggio (SF12/125 kHz, come R10 del V3)</option><option value="range">Range (voce dal vivo, SF8/250 kHz)</option><option value="standard">Standard (voce, SF7/250 kHz)</option></select>
+    <div id="voto" hidden>
+      <label for="chip_servizio">Radio del voto</label>
+      <select id="chip_servizio"><option>SX1278</option><option>SX1262</option></select>
+      <label for="freq_voto">Frequenza del voto (MHz)</label>
+      <select id="voto_preset"><option value="144.900">144,900 MHz (2 m, solo SX1278, una antenna con duplexer)</option><option value="433.850">433,850 MHz (70 cm, qualunque chip, due antenne)</option><option value="altro">Altra frequenza</option></select>
+      <input id="freq_voto" type="number" step="0.001" value="144.900">
+    </div>
+    <div id="veloce" hidden>
+      <label for="air_code_veloce">Velocità d'aria del modulo a 2,4 GHz</label>
+      <select id="air_code_veloce"><option value="1">1k</option><option value="2">5k</option><option value="3" selected>10k</option><option value="4">50k</option><option value="5">100k</option><option value="6">1M (FLRC)</option><option value="7">2M (FSK)</option></select>
+      <label for="freq_veloce">Frequenza a 2,4 GHz (MHz, sulla griglia del modulo, dentro 2400-2450)</label>
+      <input id="freq_veloce" type="number" step="1" value="2424">
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Ascolto del nodo a scheda singola e comandi</h2>
+    <label for="attesa">Attesa dopo la fine di un QSO v2, prima di tornare ai turni (minuti, 1-255)</label>
+    <input id="attesa" type="number" min="1" max="255" value="10">
+    <label class="inline"><input id="lock_v2" type="checkbox"> Blocca il nodo in modo v2 (lock: si sblocca da seriale, web o comando SYSOP)</label>
+    <label class="inline"><input id="forza_mobile" type="checkbox"> Una mobile V3 può forzare l'invio di immagini</label>
+    <label class="inline"><input id="forza_nodo" type="checkbox"> Un altro nodo V3 può forzare l'invio di immagini</label>
+    <p class="hint">Il comando forzato non interrompe mai un QSO v2 in corso.</p>
+    <label for="chiave">Chiave SYSOP (16 byte, 32 cifre esadecimali, una per nodo)</label>
+    <input id="chiave" type="text" maxlength="32" autocomplete="off" spellcheck="false">
+    <button type="button" class="sec" id="gen">Genera una chiave</button>
+    <p class="hint">La chiave serve a firmare i comandi SYSOP via radio. Generata nel browser, tienila al sicuro: chi la ha può bloccare e sbloccare il nodo.</p>
+  </section>
+
+  <section>
+    <h2>4. Controllo e file</h2>
+    <div id="esito"></div>
+    <pre id="json"></pre>
+    <button type="button" id="scarica">Scarica nodo.json</button>
+    <button type="button" class="sec" id="copia">Copia il JSON</button>
+  </section>
+</main>
+<script>
+const CHIP = { SX1278: [[137000, 175000], [395000, 525000]], SX1262: [[150000, 960000]] };
+const okFreq = (chip, khz) => (CHIP[chip] || []).some(([a, b]) => khz >= a && khz <= b);
+const stepMhz = ac => ({ 1: 1, 2: 1, 3: 1, 4: 2, 5: 2, 6: 3, 7: 5 })[ac];
+const $ = id => document.getElementById(id);
+
+function leggi() {
+  const khz = id => Math.round(parseFloat($(id).value || '0') * 1000);
+  const topo = $('topologia').value;
+  return {
+    nominativo: $('nominativo').value.trim().toUpperCase(), v2_ruolo: $('v2_ruolo').value, v3_ruolo: $('v3_ruolo').value, topologia: topo,
+    chip: $('chip').value, freq_nodo_khz: khz('freq_nodo'), profilo_v2: $('profilo_v2').value,
+    chip_servizio: $('chip_servizio').value, freq_voto_khz: topo === 'singola' ? 0 : khz('freq_voto'),
+    freq_veloce_khz: topo === 'tripla' ? khz('freq_veloce') : 0, air_code_veloce: parseInt($('air_code_veloce').value, 10),
+    reflector_v2: $('reflector_v2').value.trim(), reflector_v3: $('reflector_v3').value.trim(),
+    attesa_fine_qso_min: parseInt($('attesa').value || '0', 10), lock_v2: $('lock_v2').checked,
+    forza_v3_da: ($('forza_mobile').checked ? 1 : 0) | ($('forza_nodo').checked ? 2 : 0),
+    slot_v2_s: 2.0, slot_v3_s: 2.0, chiave_sysop_hex: $('chiave').value.trim().toLowerCase(),
+  };
+}
+
+// Stesse regole di tools/config_nodo.py (provate in tests/sim/test_config_nodo.py)
+function convalida(c) {
+  const err = [], warn = [];
+  if (!/^[A-Z0-9/\-]{3,8}$/.test(c.nominativo)) err.push('nominativo: da 3 a 8 caratteri (lettere, cifre, / e -)');
+  if (!(c.attesa_fine_qso_min >= 1 && c.attesa_fine_qso_min <= 255)) err.push('attesa a fine QSO: da 1 a 255 minuti');
+  if (c.chiave_sysop_hex && !/^[0-9a-f]{32}$/.test(c.chiave_sysop_hex)) err.push('chiave SYSOP: 32 cifre esadecimali (16 byte)');
+  if (!c.chiave_sysop_hex) warn.push('senza chiave SYSOP il nodo non accetta comandi via radio (blocco e sblocco solo da seriale o web)');
+  if (!okFreq(c.chip, c.freq_nodo_khz)) err.push(`frequenza del nodo ${c.freq_nodo_khz} kHz fuori dal campo del chip ${c.chip}`);
+  if (c.topologia === 'singola') {
+    if (c.profilo_v2 !== 'messaggio') warn.push('scheda singola: ascolta un profilo alla volta; con la voce dal vivo v2 i beacon V3 a R10 non si sentono insieme: ascolto a turni dall\'orologio');
+  } else {
+    if (!c.freq_voto_khz) err.push('serve la frequenza del voto (144,900 MHz o 433,850 MHz)');
+    else if (!okFreq(c.chip_servizio, c.freq_voto_khz)) err.push(`frequenza del voto ${c.freq_voto_khz} kHz fuori dal campo del chip ${c.chip_servizio} (l'SX1262 parte da 150 MHz: niente 144,900 MHz)`);
+    else if (c.freq_voto_khz === c.freq_nodo_khz) err.push('la frequenza del voto deve essere diversa da quella del nodo');
+  }
+  if (c.topologia === 'tripla') {
+    const step = stepMhz(c.air_code_veloce) * 1000;
+    if (!(c.freq_veloce_khz >= 2400000 && c.freq_veloce_khz <= 2450000)) err.push('2,4 GHz: fuori dalla banda radioamatoriale 2400-2450 MHz');
+    else if ((c.freq_veloce_khz - 2400000) % step) err.push(`2,4 GHz: la griglia del modulo a questa velocità è di ${step / 1000} MHz`);
+  }
+  if (c.v2_ruolo === 'gateway' && !c.reflector_v2) warn.push('gateway v2 senza reflector: senza Internet configurato il nodo lavora da pappagallo');
+  if (c.v3_ruolo === 'gateway') warn.push('gateway V3: il reflector V3 sostituirà quello v2 e non esiste ancora; senza reflector il nodo ripiega sulla rete mesh');
+  return { err, warn };
+}
+
+function aggiorna() {
+  const topo = $('topologia').value;
+  $('voto').hidden = topo === 'singola';
+  $('veloce').hidden = topo !== 'tripla';
+  const p = $('voto_preset').value;
+  if (p !== 'altro') $('freq_voto').value = p;
+  const c = leggi();
+  const { err, warn } = convalida(c);
+  $('esito').innerHTML = (err.length ? '<ul>' + err.map(e => `<li class="err">${e}</li>`).join('') + '</ul>' : '<p><strong>Configurazione valida.</strong></p>') +
+    (warn.length ? '<div class="warn">Avvisi:<ul>' + warn.map(w => `<li class="warnl">${w}</li>`).join('') + '</ul></div>' : '');
+  $('json').textContent = JSON.stringify(c, null, 2);
+  $('scarica').disabled = err.length > 0;
+  window.__esito = { err, warn, config: c };
+}
+
+$('gen').addEventListener('click', () => {
+  const b = new Uint8Array(16); crypto.getRandomValues(b);
+  $('chiave').value = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+  aggiorna();
+});
+$('scarica').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([$('json').textContent + '\n'], { type: 'application/json' }));
+  a.download = 'nodo.json'; a.click(); URL.revokeObjectURL(a.href);
+});
+$('copia').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('json').textContent); } catch (e) { /* appunti non disponibili */ } });
+document.querySelectorAll('input, select').forEach(e => e.addEventListener('input', aggiorna));
+document.querySelectorAll('select').forEach(e => e.addEventListener('change', aggiorna));
+aggiorna();
+</script>
+</body>
+</html>
