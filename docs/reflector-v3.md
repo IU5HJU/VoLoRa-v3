@@ -78,9 +78,9 @@ Una chiave **per client** (si può togliere un client senza toccare gli altri); 
 ## 8. Non fatto, e da decidere
 - **Server di produzione:** deciso il C++ con patch sulla v2 (punto 7); la patch è scritta e provata sul PC (punto 9). Il Python resta riferimento di prova. Manca una prova su un server vero con nodi veri.
 - **Pagine di amministrazione e pubblica** (chi è collegato, chi parla): non portate; vanno uguali alla v2, con in più una colonna "V3" e la rubrica. Quella pubblica non mostra indirizzi, chiavi, id.
-- **Limiti di velocità** per client e di dimensione dei trasferimenti V3 (un'immagine su Internet può essere più grande di quello che passa in radio).
+- ~~**Limiti di velocità** per client e di dimensione dei trasferimenti V3~~ **Deciso il 26/11/2026:** limite di buste al minuto per client V3 e **tetto di 64 kB per oggetto**, come la radio. Da scrivere nella patch C++ (valori da fissare con le prove).
 - **Più modi voce insieme** (oggi un reflector inoltra un solo modo voce: limite della v2 tenuto per compatibilità).
-- **Stanze** (il campo `canale` del collegamento v2 non è usato; i nodi accettano solo il loro canale): si potrebbero usare per separare zone, da decidere.
+- ~~**Stanze**~~ **Deciso il 26/11/2026: non ora.** Si resta con il canale 0, come la v2.
 - **Collegamento con reflector esterni** (SvxLink, YSF, DMR): resta quello che dice lo studio della v2.
 - **Prova su schede:** nessun gateway V3 esiste ancora; il lato "client V3" è solo nelle prove.
 

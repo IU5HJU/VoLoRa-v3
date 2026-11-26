@@ -65,7 +65,7 @@ Un oggetto che arriva dalla radio si offre con `E_RX` e passa per `data_out` a p
 **Non provato:** firmware ESP32 (NimBLE), RAM libera con BLE e radio insieme (qui 3 kB di cache più i frame), latenza reale delle richieste sul BLE e quindi quanto aspetta la radio ai gradini veloci, consumo, MTU reale dei telefoni, perdite reali della scrittura senza risposta, pagina web o applicazione sul telefono, accoppiamento con il codice sullo schermo. Il collegamento BLE del simulatore è affidabile e non perde pacchetti salvo nelle interruzioni.
 
 ## 9. Da decidere
-1. **Telefono:** pagina web (Android, computer), applicazione nativa (anche iPhone) o entrambe.
+1. ~~**Telefono**~~ **Deciso il 26/11/2026: pagina web per prima** (Android e computer); l'applicazione nativa, anche per l'iPhone, dopo.
 2. **Cache della scheda:** 3 blocchi da 1 kB di partenza; da misurare con RAM e latenza reali (blocchi più grandi se il BLE è lento, o più cache).
 3. **Più oggetti in coda:** oggi uno solo, il resto lo tiene il telefono.
-4. **Ricezione senza telefono collegato:** la scheda mobile rifiuta; si può chiedere a un nodo vicino di tenere l'oggetto (microSD dei nodi), da definire con il protocollo dei nodi.
+4. ~~**Ricezione senza telefono collegato**~~ **Deciso il 26/11/2026: un nodo o ripetitore con microSD tiene l'oggetto** per il mobile assente e lo consegna alla riconnessione (servizio "posta"). La scheda mobile resta senza memoria. Da definire: il protocollo di deposito e ritiro fra mobile e nodo, e per quanto tempo si conserva.

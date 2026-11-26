@@ -74,6 +74,6 @@ La pagina ha la sezione 4: casella **BOOST** (estremo, con rischio) con la confe
 - ~~**Una radio ascolta un profilo alla volta:**~~ **Deciso il 26/11/2026:** ascolto a turni dall'orologio, modo v2 durante il QSO e con lock (punto 5).
 - **Il reflector V3:** deciso che **sostituirà il reflector v2**; **progettato** in [reflector-v3.md](reflector-v3.md). Il gateway V3 si dichiara nei HELLO e KEEPALIVE e manda l'annuncio delle stazioni sentite; il lato nodo (firmware) è da scrivere.
 - ~~**Pagina di configurazione**~~ **Fatta** (punto 6), senza scrittura sulla scheda.
-- ~~**Gestione delle chiavi** del sysop~~ **Deciso il 26/11/2026: una chiave per nodo** (16 byte, generata dalla pagina, scritta nella configurazione); cambio con la pagina e riscrittura via seriale o web. Resta da definire come si cambia la chiave via radio senza ripetere la vecchia.
+- ~~**Gestione delle chiavi** del sysop~~ **Deciso il 26/11/2026: una chiave per nodo** (16 byte, generata dalla pagina, scritta nella configurazione); cambio con la pagina e riscrittura via seriale o web. **Deciso il 26/11/2026: la chiave si cambia solo da seriale o web, mai via radio.**
 - ~~**Comando forzato che interrompe un QSO**~~ **Deciso il 26/11/2026: mai.**
 - **Da verificare con le schede:** durata dei turni (quanti pacchetti v2 si perdono all'ingresso in modo v2), tempo di commutazione della radio fra i due profili.

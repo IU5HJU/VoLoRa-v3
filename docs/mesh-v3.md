@@ -198,6 +198,10 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 21, OFFERTA 24, GRU
 ## 10. Registro delle decisioni
 | Data | Decisione | Fonte |
 |---|---|---|
+| 26/11/2026 | **Immagini via ripetitori e reflector: sì.** Formato dell'immagine: **JPEG progressivo** preparato sul telefono o sul PC. | autore |
+| 26/11/2026 | **Telefono:** pagina web (Web Bluetooth) per prima, applicazione nativa per l'iPhone in seguito. **Negozio nei nodi:** un nodo o ripetitore con microSD può tenere gli oggetti per un mobile non collegato. | autore, [ble-telefono.md](ble-telefono.md) |
+| 26/11/2026 | **BOOST oltre l'1% di ciclo: solo avviso**, il nodo non scende da solo. | autore, [boost.md](boost.md) |
+| 26/11/2026 | **Reflector V3:** niente stanze (canale 0 come la v2); limite di velocità per client e **tetto di 64 kB per oggetto**, come la radio. **Chiave SYSOP:** si cambia solo da seriale o web, mai via radio. | autore, [reflector-v3.md](reflector-v3.md) |
 | 26/11/2026 | **Telefono ↔ scheda via BLE** (non Bluetooth classico) per testo, file piccoli e immagini; **il buffer è il telefono** (la microSD è solo di nodi e ripetitori: la radio occupa tutti i pin); la scheda chiede i blocchi a richiesta e tiene 3 kB. | autore, [ble-telefono.md](ble-telefono.md) |
 | 26/11/2026 | **Modalità BOOST +20 dBm**: estrema, per ogni profilo, di base spenta (potenza normale +17 dBm), si attiva solo con conferma del rischio tecnico. | autore, [boost.md](boost.md) |
 | 26/11/2026 | **Gradini e chip** (dal confronto con i datasheet): R3 solo fra chip della stessa famiglia; R0 solo SX1278; R12-R14 solo con TCXO annunciato; FSK a 64 byte sull'SX1278; +17 dBm in continuo sull'SX1278. | autore, [confronto-datasheet.md](confronto-datasheet.md) punto 6 |

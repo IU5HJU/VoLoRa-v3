@@ -35,5 +35,5 @@ In BOOST ogni trasmissione conta in una **finestra scorrevole di 100 s**; sopra 
 ## Da fare / da decidere
 - Compilare e provare il firmware di misura con BOOST su T3 e T-Beam (corrente, temperatura, spurie con l'analizzatore), fase 1.
 - Il firmware dei nodi V3 non esiste ancora: la regola è scritta (parametro `boost` della configurazione, `BOOST ON RISCHIO`), da realizzare con lo stesso codice di `misura_core.h`.
-- **Decisione:** il nodo deve **spegnere il BOOST da solo** se supera l'1% (protezione del chip), oppure resta solo l'avviso come ora?
+- ~~**Decisione**~~ **Deciso il 26/11/2026: solo avviso.** Il nodo non spegne il BOOST da solo se supera l'1%: segnala il rischio e continua.
 - L'app di misura non ha ancora il comando BOOST (si manda da terminale seriale).
