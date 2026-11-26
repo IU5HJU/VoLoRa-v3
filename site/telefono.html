@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoLoRa V3: telefono</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6570; --card:#fff; --line:#d5dae0; --accent:#0b5fc2; --warn-bg:#fff4d6; --warn-line:#e0b400; --err:#b3261e; --ok:#17794a; --code-bg:#e9edf2; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#12161b; --fg:#e6eaee; --muted:#9aa5b1; --card:#1a2028; --line:#2d3641; --accent:#5aa2ff; --warn-bg:#3a3110; --warn-line:#a98a00; --err:#ff8a80; --ok:#5ed39a; --code-bg:#262e38; } }
+  :root[data-theme="dark"] { --bg:#12161b; --fg:#e6eaee; --muted:#9aa5b1; --card:#1a2028; --line:#2d3641; --accent:#5aa2ff; --warn-bg:#3a3110; --warn-line:#a98a00; --err:#ff8a80; --ok:#5ed39a; --code-bg:#262e38; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.5rem; margin:.4em 0 .2em; } h2 { font-size:1.1rem; margin:0 0 .6em; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin:14px 0; }
+  label { display:block; font-weight:600; margin:.8em 0 .2em; }
+  input[type=text], input[type=file], select, textarea { width:100%; max-width:26rem; padding:8px 10px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+  textarea { max-width:100%; min-height:6rem; }
+  button { font:inherit; padding:9px 16px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; margin:.4em .4em .4em 0; }
+  button.sec { background:transparent; color:var(--accent); } button:disabled { opacity:.45; cursor:default; }
+  .muted, .hint { color:var(--muted); font-size:.88rem; }
+  .err { color:var(--err); font-weight:600; } .ok { color:var(--ok); font-weight:600; }
+  .warn { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:10px; padding:10px 14px; margin:12px 0; }
+  progress { width:100%; max-width:26rem; height:14px; }
+  pre, code { background:var(--code-bg); border-radius:4px; font-size:.9em; } code { padding:1px 5px; } pre { padding:10px 12px; overflow:auto; max-height:14rem; white-space:pre-wrap; word-break:break-word; }
+  img.prev { max-width:100%; height:auto; border:1px solid var(--line); border-radius:6px; image-rendering:auto; }
+  .tabs button { margin-right:.3em; } .tabs button.on { background:var(--accent); color:#fff; } .tabs button:not(.on) { background:transparent; color:var(--accent); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VoLoRa V3: telefono</h1>
+  <p class="muted">Invia <strong>testo</strong>, <strong>piccoli file</strong> e <strong>immagini</strong> attraverso la scheda via Bluetooth LE. <strong>Studio: il firmware della scheda con il servizio BLE non esiste ancora</strong>; questa pagina segue la specifica <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/ble-telefono.md">ble-telefono.md</a> ed è provata solo con una scheda finta. Il <strong>buffer è il telefono</strong>: la scheda chiede i blocchi quando la radio ne ha bisogno, quindi tieni la pagina aperta e il telefono vicino finché l'invio non è finito.</p>
+
+  <section>
+    <h2>1. Collegamento</h2>
+    <div id="nobt" class="warn" hidden>Questo browser non supporta il Bluetooth LE dalle pagine web (Web Bluetooth). Usa <strong>Chrome su Android</strong> o su computer. <strong>Su iPhone non funziona</strong>: serve un'applicazione, ancora da scrivere.</div>
+    <button type="button" id="connetti">Collega la scheda</button>
+    <button type="button" class="sec" id="scollega" disabled>Scollega</button>
+    <p id="stato" class="muted" role="status">Non collegato.</p>
+    <p id="info" class="muted" hidden></p>
+  </section>
+
+  <section>
+    <h2>2. Posizione</h2>
+    <p class="hint">Ogni collegamento porta nominativo, rapporto e posizione (locatore o GPS assoluta): la scheda rifiuta l'invio senza posizione se non ha un GPS proprio.</p>
+    <button type="button" id="gps">Usa il GPS del telefono</button>
+    <label for="loc">oppure locatore (6 caratteri, per esempio JN53ab)</label>
+    <input id="loc" type="text" maxlength="6" placeholder="JN53ab" autocomplete="off" spellcheck="false">
+    <button type="button" class="sec" id="usaloc">Usa il locatore</button>
+    <p id="pos" class="muted">Posizione non impostata.</p>
+  </section>
+
+  <section>
+    <h2>3. Invia</h2>
+    <label for="dest">Destinatario (nominativo, al massimo 12 caratteri; CQ per tutti)</label>
+    <input id="dest" type="text" maxlength="12" value="CQ" autocomplete="off" spellcheck="false">
+    <div class="tabs" role="tablist" style="margin-top:.8em">
+      <button type="button" id="t_testo" class="on" role="tab">Testo</button>
+      <button type="button" id="t_file" role="tab">File</button>
+      <button type="button" id="t_img" role="tab">Immagine</button>
+    </div>
+    <div id="p_testo">
+      <label for="testo">Messaggio</label>
+      <textarea id="testo" maxlength="1024" placeholder="Scrivi il messaggio"></textarea>
+      <p class="hint"><span id="testo_n">0</span> / 1024 byte</p>
+    </div>
+    <div id="p_file" hidden>
+      <label for="file">File (fino a 64 kB)</label>
+      <input id="file" type="file">
+      <p id="file_n" class="hint"></p>
+    </div>
+    <div id="p_img" hidden>
+      <label for="img">Immagine</label>
+      <input id="img" type="file" accept="image/*">
+      <label for="target">Dimensione massima dopo la compressione</label>
+      <select id="target"><option value="2000">2 kB (miniatura)</option><option value="5000">5 kB</option><option value="10000" selected>10 kB</option><option value="20000">20 kB</option><option value="40000">40 kB</option><option value="64000">64 kB (il massimo)</option></select>
+      <p class="hint">L'immagine è ridimensionata e compressa nel telefono. Più è piccola, meno dura in radio: a R5 circa 1 s ogni kB, ai gradini lenti molto di più. Per ora JPEG normale (un solo livello); il JPEG progressivo a livelli è ancora da aggiungere.</p>
+      <img id="prev" class="prev" alt="" hidden>
+      <p id="img_n" class="hint"></p>
+    </div>
+    <button type="button" id="invia" disabled>Invia</button>
+    <button type="button" class="sec" id="annulla" disabled>Annulla</button>
+    <div id="inviomsg" aria-live="polite"></div>
+    <progress id="barra" max="100" value="0" hidden></progress>
+  </section>
+
+  <section>
+    <h2>4. Ricevuti dalla radio</h2>
+    <p class="hint">Quello che arriva dalla radio mentre il telefono è collegato. Senza telefono collegato la scheda non accetta oggetti: chi li manda li ripete quando il telefono c'è.</p>
+    <div id="ricevuti"><p class="muted">Niente per ora.</p></div>
+  </section>
+
+  <section>
+    <h2>Registro</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+'use strict';
+// Servizio BLE della specifica docs/ble-telefono.md (UUID scelti a caso il 26/11/2026)
+const SERVICE = 'c49a1433-9f1b-4af8-9826-951953e47edb';
+const CHARS = { cmd: 'c49a1434-9f1b-4af8-9826-951953e47edb', data_in: 'c49a1435-9f1b-4af8-9826-951953e47edb', evt: 'c49a1436-9f1b-4af8-9826-951953e47edb', data_out: 'c49a1437-9f1b-4af8-9826-951953e47edb' };
+const C = { HELLO: 0x01, POSITION: 0x02, BEGIN: 0x10, CANCEL: 0x12, RESUME: 0x13, RX_ACK: 0x14 };
+const E = { INFO: 0x80, BEGIN_OK: 0x81, ERR: 0x82, PROGRESS: 0x85, DONE: 0x86, RX: 0x87, PULL: 0x89 };
+const KIND = { testo: 0, file: 1, img: 2 };
+const ERRORI = { 1: 'la scheda è occupata con un altro oggetto', 2: 'oggetto troppo grande (testo 1 kB, oggetto 64 kB)', 3: 'memoria', 4: 'manca la posizione: impostala qui sopra', 5: 'comando non valido', 6: 'CRC', 7: 'tipo di oggetto non valido', 8: 'oggetto sconosciuto (la sessione è scaduta)', 9: 'la scheda non ha il nominativo' };
+const MAX_TEXT = 1024, MAX_OBJECT = 65536;
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+
+// ---------------------------------------------------------------- codec
+const crcTable = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcTable[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+const u16 = v => [(v >> 8) & 255, v & 255], u24 = v => [(v >> 16) & 255, (v >> 8) & 255, v & 255], u32 = v => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+const rd = (b, o, n) => { let v = 0; for (let i = 0; i < n; i++) v = v * 256 + b[o + i]; return v; };
+function packPos(p) {      // 7 byte, come tools/frame_mesh.pack_pos
+  if (p.lat !== undefined) {
+    const q = (v, lo, span) => Math.min(Math.max(Math.round((v - lo) / span * 16777216), 0), 16777215);
+    return [1, ...u24(q(p.lat, -90, 180)), ...u24(q(p.lon, -180, 360))];
+  }
+  return [0, ...Array.from(enc.encode(p.loc))];
+}
+function utf8Cut(s, max) { let b = enc.encode(s); if (b.length <= max) return b; while (b.length > max) { s = s.slice(0, -1); b = enc.encode(s); } return b; }
+function encBegin(obj, kind, data, dest, name, w, h) {
+  const d = enc.encode(dest.slice(0, 12)), n = utf8Cut(name || '', 40);
+  return new Uint8Array([C.BEGIN, ...u16(obj), kind, ...u24(data.length), ...u32(crc32(data)), ...u16(w || 0), ...u16(h || 0), 0, d.length, ...d, n.length, ...n]);
+}
+const cmdObj = (code, obj) => new Uint8Array([code, ...u16(obj)]);
+function decEvent(b) {
+  const c = b[0];
+  const need = { [E.BEGIN_OK]: 9, [E.ERR]: 4, [E.PROGRESS]: 8, [E.DONE]: 4, [E.PULL]: 8 }[c];
+  if (c === E.INFO) { if (b.length < 13 || b.length < 13 + b[12]) return null; return { c, version: b[1], chip: b[2] ? 'SX1262' : 'SX1278', mask: rd(b, 3, 2), block: rd(b, 5, 3), maxObj: rd(b, 8, 3), posKnown: !!b[11], call: dec.decode(b.slice(13, 13 + b[12])) }; }
+  if (c === E.RX) { if (b.length < 12 || b.length < 12 + b[11]) return null; return { c, obj: rd(b, 1, 2), kind: b[3], size: rd(b, 4, 3), crc: rd(b, 7, 4), from: dec.decode(b.slice(12, 12 + b[11])) }; }
+  if (!need || b.length !== need) return null;
+  const obj = rd(b, 1, 2);
+  if (c === E.BEGIN_OK) return { c, obj, eta: rd(b, 3, 3), rung: b[6], block: rd(b, 7, 2) };
+  if (c === E.ERR) return { c, obj, code: b[3] };
+  if (c === E.PROGRESS) return { c, obj, pct: b[3], rung: b[4], eta: rd(b, 5, 3) };
+  if (c === E.DONE) return { c, obj, status: b[3] };
+  return { c, obj, off: rd(b, 3, 3), len: rd(b, 6, 2) };
+}
+
+// ---------------------------------------------------------------- stato
+const S = { dev: null, ch: {}, connected: false, info: null, pos: null, tx: null, pulls: [], serving: false, chunk: 240, rx: {}, wanted: true, tab: 'testo', payload: null, reconnecting: false };
+window.__tel = S;
+function log(m) { const l = $('log'); l.textContent = (new Date().toLocaleTimeString() + ' ' + m + '\n' + l.textContent).slice(0, 6000); }
+function setStato(t, cls) { const e = $('stato'); e.textContent = t; e.className = cls || 'muted'; }
+function refreshButtons() {
+  const busy = S.tx && !['done', 'error'].includes(S.tx.state);
+  $('invia').disabled = !(S.connected && S.payload && !busy);
+  $('annulla').disabled = !busy;
+  $('scollega').disabled = !S.connected;
+  $('connetti').disabled = S.connected || !navigator.bluetooth;
+}
+
+// ---------------------------------------------------------------- BLE
+async function writeCmd(bytes) { await S.ch.cmd.writeValue(bytes); }
+async function writeData(bytes) { if (S.ch.data_in.writeValueWithoutResponse) await S.ch.data_in.writeValueWithoutResponse(bytes); else await S.ch.data_in.writeValue(bytes); }
+async function attach(server) {
+  const svc = await server.getPrimaryService(SERVICE);
+  for (const k of Object.keys(CHARS)) S.ch[k] = await svc.getCharacteristic(CHARS[k]);
+  S.ch.evt.addEventListener('characteristicvaluechanged', e => onEvt(new Uint8Array(e.target.value.buffer, e.target.value.byteOffset, e.target.value.byteLength)));
+  S.ch.data_out.addEventListener('characteristicvaluechanged', e => onDataOut(new Uint8Array(e.target.value.buffer, e.target.value.byteOffset, e.target.value.byteLength)));
+  await S.ch.evt.startNotifications();
+  await S.ch.data_out.startNotifications();
+}
+async function connetti() {
+  try {
+    if (!S.dev) S.dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE] }] });
+    if (!S.listening) { S.dev.addEventListener('gattserverdisconnected', onDisconnect); S.listening = true; }
+    setStato('Mi collego a ' + (S.dev.name || 'scheda') + '…');
+    const server = await S.dev.gatt.connect();
+    await attach(server);
+    S.connected = true; S.wanted = true;
+    setStato('Collegato a ' + (S.dev.name || 'scheda') + '.', 'ok');
+    await writeCmd(new Uint8Array([C.HELLO, 1]));
+    if (S.pos) await sendPos();
+    if (S.tx && ['begin', 'sending'].includes(S.tx.state)) await writeCmd(cmdObj(C.RESUME, S.tx.obj));   // dopo un'interruzione la scheda richiede i blocchi che le servono
+  } catch (e) { setStato('Collegamento non riuscito: ' + (e && e.message || e), 'err'); log('errore: ' + e); }
+  refreshButtons();
+}
+function onDisconnect() {
+  S.connected = false; S.pulls.length = 0; refreshButtons();
+  log('collegamento caduto');
+  if (!S.wanted) { setStato('Scollegato.'); return; }
+  setStato('Collegamento caduto: mi ricollego…', 'err');
+  riprova(0);
+}
+async function riprova(n) {
+  if (S.reconnecting || !S.wanted) return;
+  S.reconnecting = true;
+  const attese = [300, 1000, 2000, 4000, 8000, 8000, 8000, 8000, 8000, 8000];
+  for (let i = n; i < attese.length && S.wanted && !S.connected; i++) {
+    await new Promise(r => setTimeout(r, window.__telFast ? 20 : attese[i]));
+    try { await connetti(); } catch (e) { /* si riprova */ }
+    if (S.connected) break;
+  }
+  S.reconnecting = false;
+  if (!S.connected && S.wanted) setStato('Non riesco a ricollegarmi: premi "Collega la scheda".', 'err');
+  refreshButtons();
+}
+async function scollega() { S.wanted = false; if (S.dev && S.dev.gatt && S.dev.gatt.connected) S.dev.gatt.disconnect(); S.connected = false; refreshButtons(); setStato('Scollegato.'); }
+
+// ---------------------------------------------------------------- eventi dalla scheda
+function onEvt(b) {
+  let ev;
+  try { ev = decEvent(b); } catch (e) { ev = null; }
+  if (!ev) { log('evento non valido scartato'); return; }
+  if (ev.c === E.INFO) {
+    S.info = ev; $('info').hidden = false;
+    $('info').textContent = `Scheda ${ev.chip}, nominativo ${ev.call || '(non impostato)'}, ${ev.posKnown ? 'posizione nota' : 'posizione non nota'}, blocco ${ev.block} byte.`;
+    log('INFO ' + ev.chip + ' ' + ev.call);
+    return;
+  }
+  if (ev.c === E.RX) { riceviOfferta(ev); return; }
+  const t = S.tx;
+  if (!t || ev.obj !== t.obj) { log('evento per un oggetto che non conosco: ' + ev.obj); return; }
+  if (ev.c === E.BEGIN_OK) { t.state = 'sending'; t.eta = ev.eta; t.rung = ev.rung; msg(`Invio in corso. Tempo di radio stimato: circa ${fmtS(ev.eta)} al gradino R${ev.rung}.`); }
+  else if (ev.c === E.PULL) { if (ev.off + ev.len > t.data.length || ev.len === 0) { log('richiesta fuori dall\'oggetto scartata'); return; } S.pulls.push([ev.off, ev.len]); servi(); }
+  else if (ev.c === E.PROGRESS) { $('barra').hidden = false; $('barra').value = ev.pct; msg(`In radio: ${ev.pct}%, mancano circa ${fmtS(ev.eta)} (R${ev.rung}).`); }
+  else if (ev.c === E.ERR) { t.state = 'error'; msg(`Rifiutato dalla scheda: ${ERRORI[ev.code] || 'errore ' + ev.code}.`, 'err'); S.pulls.length = 0; }
+  else if (ev.c === E.DONE) {
+    t.state = 'done'; $('barra').hidden = false; $('barra').value = ev.status === 0 ? 100 : $('barra').value;
+    msg(ev.status === 0 ? 'Consegnato in radio.' : ev.status === 2 ? 'Annullato.' : 'Trasmissione radio fallita.', ev.status === 0 ? 'ok' : 'err');
+  }
+  refreshButtons();
+}
+function fmtS(s) { return s < 90 ? s + ' s' : s < 5400 ? Math.round(s / 60) + ' min' : (s / 3600).toFixed(1) + ' h'; }
+function msg(t, cls) { const e = $('inviomsg'); e.textContent = t; e.className = cls || ''; }
+
+// il telefono risponde alle richieste della scheda, a pacchetti, con un passo piu' piccolo se il collegamento rifiuta
+async function servi() {
+  if (S.serving) return;
+  S.serving = true;
+  try {
+    while (S.pulls.length && S.connected && S.tx) {
+      const [off, len] = S.pulls[0];
+      let sent = 0;
+      while (sent < len) {
+        const n = Math.min(S.chunk - 5, len - sent);
+        const pkt = new Uint8Array([...u16(S.tx.obj), ...u24(off + sent), ...S.tx.data.subarray(off + sent, off + sent + n)]);
+        try { await writeData(pkt); sent += n; }
+        catch (e) {
+          if (!S.connected) { S.pulls.length = 0; return; }
+          if (S.chunk > 20) { S.chunk = S.chunk > 100 ? 100 : 20; log('pacchetti piu\' piccoli: ' + S.chunk); } else { log('errore di scrittura: ' + e); S.pulls.length = 0; return; }
+        }
+      }
+      S.pulls.shift();
+    }
+  } finally { S.serving = false; }
+}
+
+// ---------------------------------------------------------------- ricezione dalla radio
+function riceviOfferta(ev) {
+  S.rx[ev.obj] = { ...ev, buf: new Uint8Array(ev.size), got: 0, el: null };
+  const box = $('ricevuti'); if (box.querySelector('p.muted')) box.innerHTML = '';
+  const el = document.createElement('div'); el.className = 'rx'; el.textContent = `Da ${ev.from}: in arrivo (${ev.size} byte)…`; box.prepend(el);
+  S.rx[ev.obj].el = el;
+}
+function onDataOut(b) {
+  if (b.length <= 5) return;
+  const obj = rd(b, 0, 2), off = rd(b, 2, 3), r = S.rx[obj];
+  if (!r || off !== r.got || off + b.length - 5 > r.size) return;
+  r.buf.set(b.subarray(5), off); r.got += b.length - 5;
+  if (r.got === r.size) finisciRx(r);
+}
+function finisciRx(r) {
+  const ok = crc32(r.buf) === r.crc;
+  r.el.textContent = ''; const h = document.createElement('div');
+  h.textContent = `Da ${r.from} (${r.size} byte): ${ok ? 'CRC giusto' : 'CRC SBAGLIATO'}`; h.className = ok ? 'ok' : 'err'; r.el.append(h);
+  if (ok) {
+    if (r.kind === KIND.testo) { const p = document.createElement('pre'); p.textContent = dec.decode(r.buf); r.el.append(p); }
+    else if (r.kind === KIND.img) { const i = document.createElement('img'); i.className = 'prev'; i.alt = 'immagine ricevuta'; i.src = URL.createObjectURL(new Blob([r.buf], { type: 'image/jpeg' })); r.el.append(i); }
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([r.buf])); a.download = 'ricevuto-' + r.obj + '.bin'; a.textContent = 'Scarica il file'; r.el.append(a); }
+  }
+  writeCmd(cmdObj(C.RX_ACK, r.obj)).catch(() => {});
+}
+
+// ---------------------------------------------------------------- posizione
+async function sendPos() { if (S.pos && S.connected) await writeCmd(new Uint8Array([C.POSITION, ...packPos(S.pos)])); }
+function setPos(p, txt) { S.pos = p; $('pos').textContent = 'Posizione: ' + txt; $('pos').className = 'ok'; sendPos().catch(e => log('posizione: ' + e)); }
+$('gps').addEventListener('click', () => {
+  if (!navigator.geolocation) { $('pos').textContent = 'Il telefono non offre la posizione.'; $('pos').className = 'err'; return; }
+  $('pos').textContent = 'Cerco la posizione…'; $('pos').className = 'muted';
+  navigator.geolocation.getCurrentPosition(p => setPos({ lat: p.coords.latitude, lon: p.coords.longitude }, `${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)} (GPS assoluta)`),
+    e => { $('pos').textContent = 'GPS non disponibile (' + e.message + '). Scrivi il locatore.'; $('pos').className = 'err'; }, { enableHighAccuracy: true, timeout: 20000 });
+});
+$('usaloc').addEventListener('click', () => {
+  const v = $('loc').value.trim();
+  if (!/^[A-Ra-r]{2}[0-9]{2}[A-Xa-x]{2}$/.test(v)) { $('pos').textContent = 'Locatore non valido: due lettere, due cifre, due lettere (per esempio JN53ab).'; $('pos').className = 'err'; return; }
+  const l = v.slice(0, 2).toUpperCase() + v.slice(2, 4) + v.slice(4).toLowerCase();
+  setPos({ loc: l }, l + ' (locatore)');
+});
+
+// ---------------------------------------------------------------- scelta dell'oggetto
+function setTab(t) {
+  S.tab = t; S.payload = null;
+  for (const k of ['testo', 'file', 'img']) { $('p_' + k).hidden = k !== t; $('t_' + k).classList.toggle('on', k === t); }
+  if (t === 'testo') aggiornaTesto();
+  refreshButtons();
+}
+for (const k of ['testo', 'file', 'img']) $('t_' + k).addEventListener('click', () => setTab(k));
+function aggiornaTesto() {
+  const b = enc.encode($('testo').value); $('testo_n').textContent = b.length;
+  S.payload = b.length && b.length <= MAX_TEXT ? { kind: KIND.testo, data: b, name: '', w: 0, h: 0 } : null; refreshButtons();
+}
+$('testo').addEventListener('input', aggiornaTesto);
+$('file').addEventListener('change', async () => {
+  const f = $('file').files[0]; S.payload = null;
+  if (!f) { $('file_n').textContent = ''; refreshButtons(); return; }
+  if (f.size > MAX_OBJECT) { $('file_n').textContent = `Troppo grande: ${f.size} byte, il massimo è ${MAX_OBJECT}.`; $('file_n').className = 'err'; refreshButtons(); return; }
+  const data = new Uint8Array(await f.arrayBuffer());
+  S.payload = { kind: KIND.file, data, name: f.name, w: 0, h: 0 }; $('file_n').className = 'hint'; $('file_n').textContent = `${f.name}: ${f.size} byte.`; refreshButtons();
+});
+async function comprimi(file, target) {
+  const bmp = await createImageBitmap(file);
+  const cv = document.createElement('canvas'), cx = cv.getContext('2d');
+  for (const lato of [320, 256, 192, 160, 128, 96, 64, 48, 32]) {
+    const s = Math.min(1, lato / Math.max(bmp.width, bmp.height)), w = Math.max(1, Math.round(bmp.width * s)), h = Math.max(1, Math.round(bmp.height * s));
+    cv.width = w; cv.height = h; cx.drawImage(bmp, 0, 0, w, h);
+    for (const q of [0.8, 0.6, 0.45, 0.3, 0.2]) {
+      const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', q));
+      if (blob && blob.size <= target) return { blob, w, h };
+    }
+  }
+  return null;
+}
+async function aggiornaImmagine() {
+  const f = $('img').files[0]; S.payload = null; $('prev').hidden = true;
+  if (!f) { $('img_n').textContent = ''; refreshButtons(); return; }
+  $('img_n').className = 'hint'; $('img_n').textContent = 'Comprimo…';
+  try {
+    const r = await comprimi(f, parseInt($('target').value, 10));
+    if (!r) { $('img_n').className = 'err'; $('img_n').textContent = 'Non riesco a farla stare in questa dimensione: scegli un limite più alto.'; refreshButtons(); return; }
+    const data = new Uint8Array(await r.blob.arrayBuffer());
+    S.payload = { kind: KIND.img, data, name: f.name.replace(/\.[^.]*$/, '') + '.jpg', w: r.w, h: r.h };
+    $('prev').src = URL.createObjectURL(r.blob); $('prev').hidden = false;
+    $('img_n').textContent = `${r.w}×${r.h} pixel, ${data.length} byte.`;
+  } catch (e) { $('img_n').className = 'err'; $('img_n').textContent = 'Immagine non leggibile.'; }
+  refreshButtons();
+}
+$('img').addEventListener('change', aggiornaImmagine);
+$('target').addEventListener('change', aggiornaImmagine);
+
+// ---------------------------------------------------------------- invio
+$('invia').addEventListener('click', async () => {
+  const p = S.payload; if (!p) return;
+  const dest = $('dest').value.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, '');
+  if (!dest) { msg('Scrivi il destinatario (o CQ).', 'err'); return; }
+  if (!S.pos && !(S.info && S.info.posKnown)) { msg('Imposta prima la posizione (GPS o locatore): ogni collegamento la porta.', 'err'); return; }
+  const obj = 1 + Math.floor(Math.random() * 65534);
+  S.tx = { obj, data: p.data, state: 'begin', kind: p.kind };
+  S.pulls.length = 0; $('barra').hidden = true; $('barra').value = 0;
+  msg('Chiedo alla scheda…'); refreshButtons();
+  try { await writeCmd(encBegin(obj, p.kind, p.data, dest, p.name, p.w, p.h)); log('BEGIN ' + obj + ' ' + p.data.length + ' byte'); }
+  catch (e) { S.tx.state = 'error'; msg('Invio non riuscito: ' + e, 'err'); refreshButtons(); }
+});
+$('annulla').addEventListener('click', async () => { if (S.tx) { try { await writeCmd(cmdObj(C.CANCEL, S.tx.obj)); } catch (e) { log(String(e)); } S.pulls.length = 0; } });
+$('connetti').addEventListener('click', () => { S.wanted = true; connetti(); });
+$('scollega').addEventListener('click', scollega);
+if (!navigator.bluetooth) { $('nobt').hidden = false; $('connetti').disabled = true; }
+setTab('testo');
+refreshButtons();
+</script>
+</body>
+</html>

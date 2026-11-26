@@ -13,7 +13,7 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 
 rm -rf "$out"
 mkdir -p "$out/firmware"
-cp "$here/site/index.html" "$here/site/nodo.html" "$out/"
+cp "$here/site/index.html" "$here/site/nodo.html" "$here/site/telefono.html" "$out/"
 touch "$out/.nojekyll"
 
 for pair in "t3:firmware-t3" "tbeam1262:firmware-tbeam1262"; do
