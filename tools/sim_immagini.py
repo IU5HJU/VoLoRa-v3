@@ -298,7 +298,7 @@ class Result:
 class Simulator:
     def __init__(self, obj_size=20000, layers=(0.2, 0.5, 1.0), channel=None, chip_a="SX1278", chip_b="SX1278", budget_s=600.0, seed=1,
                  call_a="IU5HJU", call_b="IK5XYZ", trace=False, window=WINDOW_FRAMES, max_time_s=4 * 3600.0, ricerca="calendario",
-                 incontro="hello", probes_r10=PROBE_COUNT, tcxo_a=False, tcxo_b=False):
+                 incontro="hello", probes_r10=PROBE_COUNT, tcxo_a=False, tcxo_b=False, data=None, layer_pieces=None):
         self.ricerca = ricerca
         self.incontro = incontro            # "hello": la risposta all'HELLO porta la misura; "probe": raffica di PROBE a R10 (vecchio)
         self.probes_r10 = probes_r10
@@ -318,10 +318,13 @@ class Simulator:
         self.sess = self.rng.randrange(1, 65535)
         # oggetto sintetico a livelli (frazioni cumulative della dimensione)
         prng = random.Random(seed + 7)
-        self.obj = bytes(prng.getrandbits(8) for _ in range(obj_size))
+        self.obj = bytes(data) if data is not None else bytes(prng.getrandbits(8) for _ in range(obj_size))   # data: un oggetto vero (per esempio un JPEG progressivo)
+        obj_size = len(self.obj)
         self.npieces = math.ceil(obj_size / pi.PIECE)
         self.layer_ends = [max(1, min(self.npieces, math.ceil(self.npieces * f))) for f in layers]
         self.layer_ends[-1] = self.npieces
+        if layer_pieces is not None:        # confini dei livelli gia' in pezzi (immagine vera: tools/immagine_livelli.pezzi)
+            self.layer_ends = list(layer_pieces)
         # ricevitore
         self.r_have = [None] * self.npieces
         self.r_info = None
