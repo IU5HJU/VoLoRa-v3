@@ -92,6 +92,37 @@ jobs:
           python3 tools/misura.py scala --simulate --modes L4,F3 --att 100,110 --out "$RUNNER_TEMP/sim.csv" --count 50
           python3 tools/misura.py analizza "$RUNNER_TEMP/sim.csv"
 
+  firmware-v3:
+    name: Firmware V3 mobile ${{ matrix.board }} (compila)
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: t3
+            board: T3 V1.6.1
+          - env: tbeam1262
+            board: T-Beam V1.2 SX1262
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cache di PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-v3-${{ runner.os }}-${{ hashFiles('firmware/v3/platformio.ini') }}
+      - name: Installa PlatformIO
+        run: pip install platformio==6.1.19
+      - name: Compila (guscio BLE + nucleo; la radio e' simulata)
+        working-directory: firmware/v3
+        run: pio run -e ${{ matrix.env }}
+
   firmware:
     name: Firmware ${{ matrix.board }}
     runs-on: ubuntu-latest
