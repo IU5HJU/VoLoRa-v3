@@ -48,7 +48,30 @@ Decisioni dell'autore: **canale di incontro 433,700 MHz** (125 kHz) e **canale d
 - **Il canale di servizio a 2 m, 144,850 MHz,** non è nelle schermate del piano che ho visto (compare solo 145,794-146,000 MHz): **da controllare sul piano dei 2 m**. La **terza armonica** (434,550 MHz) cade in 70 cm a circa 0,6 MHz dal canale 2: filtro passa-basso sulla radio a 2 m.
 - **A 433,700 MHz il piano indica la frequenza FAX** (attività stretta): ascolto prima di trasmettere.
 
-## 4. 13 cm e 23 cm
+## 3b. Il 2 m (144-146 MHz) e il canale del voto (schermate del 26/11/2026)
+| MHz | Larghezza | Modo | Note |
+|---|---|---|---|
+| 144,000-144,025 | 2,7 kHz | tutti i modi | satellite (solo downlink) |
+| 144,025-144,150 | 500 Hz | CW, CW/MGM | EME 144,000-144,160; centro CW 144,050; Random MS 144,100 |
+| 144,150-144,400 | 2,7 kHz | CW/SSB/MGM | Random MS SSB 144,195-144,205; centro SSB 144,300 |
+| 144,400-144,490 | 500 Hz | CW/MGM | finestra esclusiva beacon |
+| 144,491-144,493 | 500 Hz | EMGM | modi digitali sperimentali |
+| 144,500-144,794 | 20 kHz | tutti i modi | 144,500 immagini (SSTV, fax); 144,600 dati (RTTY, MGM); 144,750 ATV (solo audio) |
+| **144,794-144,9625** | **12 kHz** | **MGM** (modi generati da macchina) | **144,800 APRS**; **144,8125 / 144,8250 / 144,8375 / 144,8500 / 144,8625: gateway Internet per voce digitale** |
+| 144,975-145,194 | 12 kHz | FM/Digital Voice | solo ingressi ripetitori FM (shift 600 kHz, passo 12,5 kHz) |
+| 145,194-145,206 | 12 kHz | FM/Digital Voice | comunicazioni spaziali (ISS) |
+| 145,206-145,5625 | 12 kHz | FM/Digital Voice | gateway FM 145,2375, 145,2875, 145,3375; **chiamata Digital Voice 145,375**; chiamata FM 145,500 |
+| 145,575-145,7935 | 12 kHz | FM/Digital Voice | solo uscite ripetitori FM (shift 600 kHz) |
+| 145,794-145,806 | 12 kHz | FM/Digital Voice | ISS |
+| 145,806-146,000 | 12 kHz | tutti i modi | finestra esclusiva satellite |
+
+**Cosa risulta per il canale del voto a 144,850 MHz (deciso dall'autore il 26/11/2026):**
+- **144,850 MHz sta nel segmento MGM da 12 kHz** (144,794-144,9625), il segmento giusto per un modo generato da macchina come il nostro voto, e la nostra FSK a 9,6 kHz di banda occupata ci sta.
+- **Ma 144,8500 MHz è uno dei cinque canali dei gateway Internet per voce digitale** (144,8125, 144,8250, 144,8375, **144,8500**, 144,8625): ci trasmette voce digitale (hotspot e gateway), anche continua. I nostri VOTI da 35 ms si sovrapporrebbero a quelle trasmissioni e le sentiremmo disturbare.
+- **Liberi nel segmento** (passo 12,5 kHz): da **144,8750 a 144,9500 MHz** (sette canali). Il centro 144,9000 MHz dista circa 27 kHz dal gateway 144,8625 ed è lontano dal 144,800 APRS.
+- La **terza armonica** di 144,9000 MHz è 434,700 MHz (non ho il piano di 434-435 MHz).
+
+
 - **13 cm:** tutta la fascia 2400-2450 MHz è "Satellite" nel piano attuale; ATV in 2427-2443 MHz se non c'è traffico satellitare; i segmenti digitali (2355-2365 e 2392-2400 MHz) sono sotto il campo del modulo. Dettagli e canali candidati in [modulo-2g4-uart.md](modulo-2g4-uart.md), punto 9.
 - **23 cm (1,296994-1,298 GHz):** uscite ripetitori con shift 6 MHz, simplex FM, chiamata Digital Voice 1,297725, gateway Internet voce 1,297900-1,297975. Possibile banda "più performante" per voce e dati, da studiare.
 
