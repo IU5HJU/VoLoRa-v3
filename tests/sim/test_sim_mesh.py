@@ -100,5 +100,24 @@ nr1, nr2 = sm.run_nascosti(4, 25.0, scenarios=300, seed=4), sm.run_nascosti(4, 2
 check(nr1 == nr2, "stessa semente, stesso risultato")
 check(nr1["turni"]["efficienza"] == 1.0 and nr1["ascolto"]["efficienza"] < 1.0 and nr1["ascolto"]["completamento"] < nr1["turni"]["completamento"],
       f"con i nascosti l'ascolto rende {nr1['ascolto']['efficienza'] * 100:.0f} % e completa {nr1['ascolto']['completamento'] * 100:.1f} % contro {nr1['turni']['completamento'] * 100:.1f} % dei turni")
+
+# ---- risposte OFFERTA con terminali nascosti ----
+ro = {p: sm.run_offerte(p, 5, scenari=400, seed=7) for p in ("ascolto", "slot_nome", "slot_ascolto", "slot_qualita")}
+check(sm.run_offerte("slot_nome", 5, scenari=400, seed=7) == ro["slot_nome"], "OFFERTE: stessa semente, stesso risultato")
+check(ro["slot_nome"]["tutte_al_primo_giro"] < 0.45, f"con 8 slot dal nominativo e 5 candidati le collisioni sono tante (compleanno): {ro['slot_nome']['tutte_al_primo_giro'] * 100:.0f} % arrivano tutte al primo giro")
+check(ro["slot_ascolto"]["tutte_al_primo_giro"] > ro["ascolto"]["tutte_al_primo_giro"] > ro["slot_nome"]["tutte_al_primo_giro"],
+      f"slot + ascolto ({ro['slot_ascolto']['tutte_al_primo_giro'] * 100:.0f} %) meglio dell'ascolto solo ({ro['ascolto']['tutte_al_primo_giro'] * 100:.0f} %) meglio dei soli slot ({ro['slot_nome']['tutte_al_primo_giro'] * 100:.0f} %)")
+r16 = sm.run_offerte("slot_nome", 5, scenari=400, seed=7, slots=16)
+check(r16["tutte_al_primo_giro"] > ro["slot_nome"]["tutte_al_primo_giro"] and r16["giro_s"] > ro["slot_nome"]["giro_s"], "piu' slot: meno collisioni ma giro piu' lungo")
+check(ro["slot_qualita"]["tempo_top2_mediano_s"] < ro["slot_ascolto"]["tempo_top2_mediano_s"], "slot per qualita': le due offerte migliori arrivano prima")
+check(all(r["top2_entro_3_giri"] > 0.9 for r in ro.values()), "in tutti i casi le due offerte migliori arrivano entro 3 giri nel 90 % dei casi o piu'")
+# ---- errore dell'orologio nei turni ----
+f0, e0 = sm.run_turni(0.02, 10.0, 0.0, cicli=4000)
+f1, e1 = sm.run_turni(0.02, 10.0, 0.2, cicli=4000)
+check(f0 < 0.8 and f1 > 0.99, f"senza guardia i turni si sovrappongono ({f0 * 100:.0f} % utili), con 0,2 s di guardia e orologio NTP no ({f1 * 100:.1f} %)")
+g_ntp, g_gps, g_1s = sm.guardia_minima(0.02, 10.0), sm.guardia_minima(0.4, 10.0), sm.guardia_minima(1.0, 10.0)
+check(g_ntp < g_gps < g_1s and g_1s > 2.0, f"guardia minima per il 98 %: {g_ntp:.2f} s (NTP), {g_gps:.2f} s (GPS Bluetooth), {g_1s:.2f} s (errore di 1 s)")
+e_short, e_long = sm.run_turni(1.0, 2.0, g_1s)[1], sm.run_turni(1.0, 30.0, g_1s)[1]
+check(e_long > e_short + 0.3, f"con orologio a 1 s servono turni lunghi: efficienza {e_short * 100:.0f} % con turni da 2 s, {e_long * 100:.0f} % con turni da 30 s")
 print("simulatore mesh: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

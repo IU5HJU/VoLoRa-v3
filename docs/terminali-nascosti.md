@@ -52,7 +52,7 @@ Succede lo stesso con i ripetitori radioamatoriali: due stazioni che chiamano il
 |---|---|
 | Più ripetitori trasmettono al destinatario | **Turni assegnati dal mittente nel frame GRUPPO** e agganciati all'**orologio** (NTP o GPS, basta un secondo). I membri non devono sentirsi. |
 | Un membro che il destinatario non sente | Il **destinatario decide**: manda **VETO** con il nominativo del membro che non sente al gradino scelto. È l'unico che sa chi arriva davvero. |
-| Le risposte alla RICHIESTA-RIPETITORI si sovrappongono | I candidati rispondono nel **proprio slot** (ricavato dal nominativo), non a caso. *Non ancora simulato.* |
+| Le risposte alla RICHIESTA-RIPETITORI si sovrappongono | **Slot dal nominativo più ascolto** (chi sente uno già in onda aspetta il primo slot libero). Simulato: 98 % delle OFFERTE arrivano al primo giro con 8 slot, contro il 28 % dei soli slot e il 78 % dell'ascolto da solo ([simulatore-mesh.md](simulatore-mesh.md)). |
 | Due nodi sentono insieme la stessa mobile | **Voto via radio** su un canale di servizio fra i nodi (frame VOTO, vince il margine migliore): [voting-isofrequenza.md](voting-isofrequenza.md) |
 | Beacon di molte stazioni | **Slot dall'orologio** e slot adattivo: l'ascolto da solo non basta. |
 | Resta qualche collisione | **Fontana:** ogni simbolo ha un ESI diverso (contatore × M + posizione), quindi un simbolo perso non fa mancare un pezzo preciso: ne basta un altro. |
@@ -83,5 +83,5 @@ Per provare a mano: in `tools/sim_mesh.py` la funzione `Scenario.hears(a, b, rid
 ## 8. Limiti
 - Gli stessi di [simulatore-mesh.md](simulatore-mesh.md): collegamenti stimati e ombreggiamento casuale, **non misure**. Il numero di coppie nascoste in una zona vera dipende dal terreno.
 - Nel gruppo si simula l'ascolto con una regola semplice (parla chi non sente nessuno di quelli già partiti; gli altri collidono); l'ascolto vero dei moduli LoRa ha una finestra di rilevamento di due simboli (modellata solo nei beacon).
-- Le risposte alle richieste (OFFERTA) con terminali nascosti **non sono ancora simulate**.
+- Le risposte OFFERTA con terminali nascosti sono simulate (26/11/2026); l'errore dell'orologio nei turni anche. La fase 1 (mittente verso i membri) non ha il problema: trasmette solo il mittente.
 - Non è provato su schede.

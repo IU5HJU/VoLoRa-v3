@@ -304,6 +304,136 @@ def run_tara(n_relays, dist_km, combos, size=20000, scenarios=2000, p_fail=0.15,
     return {c: (statistics.median(v["t"]), statistics.mean(v["p"])) for c, v in acc.items() if v["t"]}
 
 
+# ------------------------------------------------------------------------------------------------- risposte OFFERTA con terminali nascosti
+OFFER_BYTES = 24      # frame_mesh.enc_offer_relay
+SLOTS = 8             # slot della finestra di risposta
+GUARD_S = 0.15
+
+
+def _overlaps(iv, i, j):
+    return iv[i][0] < iv[j][1] and iv[j][0] < iv[i][1]
+
+
+def _round(policy, cands, sc, rng, t_o, vuln=0.05, slots=SLOTS, attempt=0):
+    """Un giro di risposte OFFERTA al mittente. cands = nomi dei candidati ancora senza conferma. Ritorna {nome: istante di fine} per chi arriva integro."""
+    iv = {}
+    if policy == "ascolto":
+        wend = slots * (t_o + GUARD_S)
+        q = sorted((rng.uniform(0, wend - t_o), c) for c in cands)
+        tx = []
+        while q:
+            q.sort()
+            s, c = q.pop(0)
+            heard = [e for (a, e, o) in tx if sc.hears(c, o, 10) and a <= s < e and s - a >= vuln]
+            if heard:
+                q.append((max(heard) + rng.uniform(0, t_o), c))
+                continue
+            tx.append((s, s + t_o, c))
+            iv[c] = (s, s + t_o)
+    elif policy == "slot_ascolto":                              # slot dal nominativo, e chi sente un altro in corso aspetta il primo slot libero dopo
+        step = t_o + GUARD_S
+        q = sorted((rng.randrange(slots) * step, c) for c in cands)
+        tx = []
+        while q:
+            q.sort()
+            s0, c = q.pop(0)
+            heard = [e for (a, e, o) in tx if sc.hears(c, o, 10) and a <= s0 < e]
+            if heard:
+                q.append((math.ceil(max(heard) / step) * step + rng.randrange(0, 2) * step, c))
+                continue
+            tx.append((s0, s0 + t_o, c))
+            iv[c] = (s0, s0 + t_o)
+    else:
+        sens = pi.sensitivity_dbm(10)
+        for c in cands:
+            if policy == "slot_nome":
+                slot = rng.randrange(slots)                     # slot dal nominativo (e dal numero del tentativo)
+            else:                                               # slot_qualita: 3 dB per slot, il migliore parte per primo; ai tentativi successivi si aggiunge un sorteggio
+                m = sc.prx(c, "S") - sens + rng.gauss(0, 1.0)
+                slot = min(slots - 1, max(0, int((30.0 - m) // 3.0)) + (rng.randrange(0, 3) if attempt else 0))
+            iv[c] = (slot * (t_o + GUARD_S), slot * (t_o + GUARD_S) + t_o)
+    ok = {}
+    for c in iv:
+        others = [o for o in iv if o != c and _overlaps(iv, c, o)]
+        if not others:
+            ok[c] = iv[c][1]
+        else:                                                   # cattura: il piu' forte di 6 dB al mittente sopravvive
+            pc = sc.prx(c, "S")
+            if all(pc - sc.prx(o, "S") >= CAPTURE_DB for o in others):
+                ok[c] = iv[c][1]
+    return ok
+
+
+def run_offerte(policy, n_relays=5, dist_km=25.0, extra_db=25.0, scenari=1500, seed=1, giri=3, slots=SLOTS):
+    """Risposte OFFERTA alla RICHIESTA-RIPETITORI: tutti i candidati che sentono il mittente rispondono insieme. Quanti arrivano al primo giro, e in quanto tempo il mittente
+    ha le due offerte migliori (quelle che la regola sceglierebbe). I candidati senza conferma ripetono al giro dopo."""
+    rng = random.Random(seed)
+    sens = pi.sensitivity_dbm(10)
+    t_o = pi.frame_airtime_s(10, OFFER_BYTES)
+    wend = slots * (t_o + GUARD_S)
+    n = tutte = 0
+    frac = []
+    top2_ok = 0
+    tempi = []
+    nasc = 0
+    for _ in range(scenari):
+        sc = Scenario(rng, n_relays, dist_km, extra_db=extra_db)
+        cands = [r for r in sc.relays if sc.hears("S", r, 10)]
+        if len(cands) < 2:
+            continue
+        n += 1
+        if any(not sc.hears(a, b, 10) for a in cands for b in cands if a < b):
+            nasc += 1
+        top2 = sorted(cands, key=lambda c: -sc.prx(c, "S"))[:2]
+        pending, got = list(cands), {}
+        for g in range(giri):
+            ok = _round(policy, pending, sc, rng, t_o, slots=slots, attempt=g)
+            for c, e in ok.items():
+                got[c] = g * wend + e
+            pending = [c for c in pending if c not in ok]
+            if g == 0:
+                frac.append(len(ok) / len(cands))
+                tutte += 1 if not pending else 0
+            if all(c in got for c in top2):
+                break
+        if all(c in got for c in top2):
+            top2_ok += 1
+            tempi.append(max(got[c] for c in top2))
+    return {"scenari": n, "con_coppia_nascosta": nasc / n if n else float("nan"), "primo_giro": statistics.mean(frac), "tutte_al_primo_giro": tutte / n,
+            "top2_entro_3_giri": top2_ok / n, "tempo_top2_mediano_s": statistics.median(tempi) if tempi else float("nan"), "giro_s": wend}
+
+
+# ----------------------------------------------------------------------------------------------------- errore dell'orologio nei turni
+def run_turni(sigma_s, turn_s, guard_s, membri=3, cicli=20000, seed=1):
+    """Turni consecutivi dei membri del gruppo: ognuno parte all'ora del proprio orologio, sbagliata di un errore gaussiano (sigma_s). Fra due turni c'e' la guardia.
+    Un turno e' rovinato se si sovrappone a quello vicino. Ritorna (frazione di turni utili, efficienza = utili x turno / (turno + guardia))."""
+    rng = random.Random(seed)
+    utili = tot = 0
+    for _ in range(cicli):
+        e = [rng.gauss(0.0, sigma_s) for _ in range(membri)]
+        starts = [i * (turn_s + guard_s) + e[i] for i in range(membri)]
+        for i in range(membri):
+            tot += 1
+            bad = False
+            if i > 0 and starts[i - 1] + turn_s > starts[i]:
+                bad = True
+            if i < membri - 1 and starts[i] + turn_s > starts[i + 1]:
+                bad = True
+            utili += 0 if bad else 1
+    f = utili / tot
+    return f, f * turn_s / (turn_s + guard_s)
+
+
+def guardia_minima(sigma_s, turn_s, soglia=0.98):
+    """Guardia piu' piccola (a passi di 0,05 s) per cui almeno `soglia` dei turni sono utili."""
+    g = 0.0
+    while g < 20 * max(sigma_s, 0.05):
+        if run_turni(sigma_s, turn_s, g, cicli=4000)[0] >= soglia:
+            return g
+        g += 0.05
+    return g
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -327,6 +457,11 @@ def main():
     g.add_argument("--guasto", type=float, default=0.15, help="probabilita' che un ripetitore cada durante il trasferimento")
     g.add_argument("--extra", type=float, default=25.0, help="perdita extra media (ostacoli), dB")
     g.add_argument("--seed", type=int, default=1)
+    o = sub.add_parser("offerte", help="risposte OFFERTA alla richiesta di ripetitori con i terminali nascosti")
+    o.add_argument("--ripetitori", type=int, default=5)
+    o.add_argument("--scenari", type=int, default=1500)
+    o.add_argument("--seed", type=int, default=1)
+    tu = sub.add_parser("turni", help="errore dell'orologio nei turni del gruppo di ripetitori")
     h = sub.add_parser("nascosti", help="gruppo di ripetitori: turni dall'orologio contro ascolto prima di parlare, con i terminali nascosti")
     h.add_argument("--ripetitori", type=int, default=4)
     h.add_argument("--distanza", type=float, default=25.0)
@@ -334,6 +469,28 @@ def main():
     h.add_argument("--scenari", type=int, default=1000)
     h.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
+    if a.cmd == "offerte":
+        print(f"{a.ripetitori} ripetitori sparsi, 25 km, OFFERTA da {OFFER_BYTES} byte a R10 ({pi.frame_airtime_s(10, OFFER_BYTES):.2f} s), 3 giri al massimo")
+        print("| come rispondono | slot | al primo giro | tutte al primo giro | le 2 migliori entro 3 giri | tempo mediano per le 2 migliori | durata del giro |")
+        print("|---|---|---|---|---|---|---|")
+        for pol, nome, sl in (("ascolto", "ascolto e ritardo casuale", 8), ("slot_nome", "slot dal nominativo", 8), ("slot_nome", "slot dal nominativo", 16), ("slot_nome", "slot dal nominativo", 32),
+                              ("slot_qualita", "slot per qualità (il migliore per primo)", 8), ("slot_ascolto", "slot dal nominativo + ascolto", 8), ("slot_ascolto", "slot dal nominativo + ascolto", 16)):
+            r = run_offerte(pol, a.ripetitori, scenari=a.scenari, seed=a.seed, slots=sl)
+            print(f"| {nome} | {sl} | {100 * r['primo_giro']:.0f} % | {100 * r['tutte_al_primo_giro']:.0f} % | {100 * r['top2_entro_3_giri']:.0f} % | {r['tempo_top2_mediano_s']:.1f} s | {r['giro_s']:.0f} s |")
+        print(f"(scenari con almeno una coppia di candidati nascosti: {100 * r['con_coppia_nascosta']:.0f} %; giro = {r['giro_s']:.1f} s)")
+        return
+    if a.cmd == "turni":
+        print("Errore dell'orologio nei turni (3 membri). Guardia minima per il 98 % dei turni utili, e efficienza risultante:")
+        print("| errore dell'orologio (sigma) | turno 2 s | turno 5 s | turno 10 s | turno 30 s |")
+        print("|---|---|---|---|---|")
+        for sg, nome in ((0.02, "NTP, 20 ms"), (0.1, "100 ms"), (0.4, "GPS Bluetooth, 400 ms"), (1.0, "1 s")):
+            celle = []
+            for tl in (2.0, 5.0, 10.0, 30.0):
+                g = guardia_minima(sg, tl)
+                _, eff = run_turni(sg, tl, g)
+                celle.append(f"g = {g:.2f} s, {100 * eff:.0f} %")
+            print(f"| {nome} | " + " | ".join(celle) + " |")
+        return
     if a.cmd == "nascosti":
         r = run_nascosti(a.ripetitori, a.distanza, scenarios=a.scenari, seed=a.seed, extra_db=a.extra)
         print(f"{a.ripetitori} ripetitori, {a.distanza:g} km, perdita extra {a.extra:g} dB, regola 2/1, {r['scenari']} scenari con un gruppo; "

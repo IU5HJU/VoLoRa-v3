@@ -114,10 +114,42 @@ Spiegazione per chi non li conosce: [terminali-nascosti.md](terminali-nascosti.m
 
 ## Limiti del modello
 - **Tutto stimato:** sensibilità, perdita extra e ombreggiamento. I numeri relativi (la regola contro tutti i candidati) sono più affidabili di quelli assoluti.
-- **Un canale.** I terminali nascosti sono simulati nei beacon e nella fase 2 del gruppo (tra i membri), **non** nelle risposte OFFERTA e non nella fase 1. I turni sono considerati perfetti (errore di orologio nullo).
+- **Un canale.** I terminali nascosti sono simulati nei beacon, nella fase 2 del gruppo (tra i membri) e nelle risposte OFFERTA; **non** nella fase 1. L'errore dell'orologio è simulato a parte (punto sotto), non nel Monte Carlo del gruppo, dove i turni restano perfetti.
 - **Due fasi in sequenza** (mittente ai ripetitori, poi ai destinatari), senza sovrapposizione. Un'implementazione che passa i pezzi ai ripetitori mentre li rilancia sarebbe più veloce.
 - **Caduta dei ripetitori** indipendente e uguale per tutti.
 - **La fontana** nel Monte Carlo è ancora un costo di tempo (1,25 %), ma quel valore ora viene dal codice vero ([`tools/fontana.py`](../tools/fontana.py): combinazioni casuali su GF(2), decodifica con eliminazione di Gauss, ESI = contatore × M + indice, prova con tre membri e perdita 50 %). Non è provato su schede.
 
+## Risultati: le risposte OFFERTA con terminali nascosti (26/11/2026)
+Programma: `python3 tools/sim_mesh.py offerte`. La RICHIESTA-RIPETITORI arriva a tutti; ogni candidato che sente il mittente risponde con un'OFFERTA da 24 byte a R10 (1,48 s). Cinque ripetitori sparsi, 25 km, i candidati si sentono o no secondo il collegamento (nel 38 % degli scenari almeno una coppia è nascosta). Chi non è stato sentito ripete al giro dopo (massimo 3 giri); alla collisione sopravvive il segnale più forte di 6 dB.
+
+| Come rispondono | Slot | Al primo giro | Tutte al primo giro | Le 2 migliori entro 3 giri | Tempo mediano per le 2 migliori | Durata del giro |
+|---|---|---|---|---|---|---|
+| ascolto e ritardo casuale | 8 | 93 % | 78 % | 100 % | 11,0 s | 13 s |
+| slot dal nominativo | 8 | 73 % | 28 % | 99 % | 11,3 s | 13 s |
+| slot dal nominativo | 16 | 85 % | 54 % | 100 % | 21,1 s | 26 s |
+| slot dal nominativo | 32 | 92 % | 73 % | 100 % | 39,0 s | 52 s |
+| slot per qualità (il migliore per primo) | 8 | 60 % | 24 % | 94 % | 8,0 s | 13 s |
+| **slot dal nominativo + ascolto** | 8 | **98 %** | **93 %** | 100 % | 11,3 s | 13 s |
+| slot dal nominativo + ascolto | 16 | 99 % | 97 % | 100 % | 19,4 s | 26 s |
+
+- **I soli slot dal nominativo vanno male con pochi slot:** con 5 candidati e 8 slot due scelgono quasi sempre lo stesso (problema dei compleanni): solo il 28 % arriva intero al primo giro. Servirebbero 32 slot, e il giro durerebbe 52 s.
+- **L'ascolto da solo regge** (78 % al primo giro intero) perché solo una parte delle coppie è nascosta.
+- **La combinazione vince:** slot dal nominativo **più ascolto** (chi sente uno già in onda aspetta il primo slot libero) dà il 98 % al primo giro con 8 slot e 13 s per giro. È la **proposta** per le OFFERTE; il simulatore lo conferma, non l'ho ancora fissato come decisione.
+- **Gli slot per qualità** danno le due migliori offerte prima (8 s) ma perdono più offerte (94 % entro 3 giri): utili se basta avere le prime due; ai tentativi successivi si aggiunge un sorteggio altrimenti si ripetono le stesse collisioni.
+
+## Risultati: l'errore dell'orologio nei turni (26/11/2026)
+Programma: `python3 tools/sim_mesh.py turni`. Tre membri trasmettono a turno; ognuno parte all'ora del proprio orologio, sbagliata di un errore gaussiano. Un turno si perde se si sovrappone al vicino. **Guardia minima per il 98 % di turni utili** e **efficienza** (turni utili × turno / (turno + guardia)):
+
+| Errore dell'orologio (σ) | Turno 2 s | Turno 5 s | Turno 10 s | Turno 30 s |
+|---|---|---|---|---|
+| NTP, 20 ms | guardia 0,10 s, 95 % | 0,10 s, 98 % | 0,10 s, 99 % | 0,10 s, 100 % |
+| 100 ms | 0,35 s, 84 % | 0,35 s, 93 % | 0,35 s, 96 % | 0,35 s, 98 % |
+| GPS Bluetooth, 400 ms | 1,25 s, 60 % | 1,25 s, 79 % | 1,25 s, 87 % | 1,25 s, 94 % |
+| 1 s | 3,10 s, 38 % | 3,10 s, 61 % | 3,10 s, 75 % | 3,10 s, 89 % |
+
+- **La guardia serve circa 5σ.** Senza guardia, con orologio NTP, solo il 39 % dei turni è utile; con 0,2 s di guardia il 100 %.
+- **La regola "basta un secondo" (applicazione.md) regge, ma i turni devono essere lunghi:** con errore di 1 s un turno da 2 s rende il 38 %, uno da 30 s l'89 %. Un turno non è un frame: è una raffica di frame, per esempio 10-30 s. Con NTP basta qualunque turno da qualche secondo.
+- **Conseguenza per il GRUPPO:** la durata del turno e la guardia vanno scelte dalla qualità dell'orologio dei membri (incertezza che l'applicazione già calcola per ogni sorgente); proposta: guardia = 5σ del peggiore dei membri e turno almeno 10 volte la guardia.
+
 ## Prossimi passi
-Simulare i terminali nascosti nelle risposte OFFERTA, un errore dell'orologio nei turni, una sovrapposizione fra le due fasi e la perdita dei pacchetti dentro le fasi; poi collegare la scelta del gruppo ai frame di [mesh-v3.md](mesh-v3.md) (RICHIESTA-RIPETITORI, OFFERTA, GRUPPO).
+Una sovrapposizione fra le due fasi del gruppo e la perdita dei pacchetti dentro le fasi; poi collegare la scelta del gruppo ai frame di [mesh-v3.md](mesh-v3.md) (RICHIESTA-RIPETITORI, OFFERTA, GRUPPO).
