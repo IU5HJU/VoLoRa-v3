@@ -86,7 +86,29 @@ Tutto questo è codificato in [`tools/ebyte_e28.py`](../tools/ebyte_e28.py) e pr
 6. **Portata** e perdita contro distanza.
 7. Tempo di cambio di modo con AUX.
 
-## 9. Il band plan 13 cm (documento ARI Milano, U/SHF Bandplan rev. 4.1.2, maggio 2004)
+## 9. Il band plan 13 cm
+
+### 9a. Piano attuale: ari.it/bandplan.html (schermata dell'autore, 26/11/2026)
+**Questo è il riferimento; sostituisce la versione del 2004 qui sotto dove i due differiscono.** È una schermata parziale: si vedono il 23 cm (in alto), il 13 cm e l'inizio del 5 cm; il 70 cm non c'è.
+
+| 13 cm (colonne: GHz, larghezza a −6 dB, modo, note) | |
+|---|---|
+| 2,300 | 20 kHz, tutti i modi; finestre SSB/CW 2,304-2,306 e 2,308-2,310 "per i paesi in cui…" (testo tagliato) |
+| 2,320-2,322 | "il segmento 2,320-2,322 non è permesso" |
+| 2,320 | 500 Hz, CW esclusivo; 2,320-2,320025 finestra EME |
+| 2,320150 | 2,7 kHz, CW/SSB; PSK31 a 2,320138; centro SSB 2,320200 |
+| 2,320750-2,320800 | beacon locali (10 W ERP max); poi CW/MGM, finestra beacon esclusiva |
+| 2,321-2,322 | 20 kHz, FM/Digital Voice, FM simplex o via ripetitore |
+| 2,322-2,400 | tutti i modi: 2,322-2,355 ATV; **2,355-2,365 comunicazioni digitali**; 2,365-2,370 ripetitori; 2,370-2,392 ATV; **2,392-2,400 comunicazioni digitali** |
+| **2,400-2,450** | **Satellite**; nota: **2,427-2,443 è permessa l'ATV se non c'è attività via satellite** |
+
+- **Chiarisce l'ambiguità del 2004:** l'intera fascia **2400-2450 MHz è assegnata ai satelliti** nel piano attuale. Non ci sono segmenti per i dati fra 2400 e 2450 MHz; l'ATV può usare 2427-2443 MHz quando non c'è traffico satellitare.
+- **Il 5 cm** (5,650-5,668 GHz): "Satellite e All Mode", uplink satellitari, e la nota **"è permessa attività WiFi"**. Utile per un eventuale profilo a 5 GHz (non con SX1280).
+- **Il 23 cm** in alto (1,296994-1,298 GHz): uscita ripetitori con spaziatura 25 kHz e shift 6 MHz (RM0 1,297000 … RM19 1,297475), canali FM simplex 1,297500-1,297975, **frequenza di chiamata Digital Voice 1,297725**, gateway Internet di voce 1,297900-1,297975. Un possibile profilo "più performante" per la voce o i dati, da studiare.
+
+**Per il modulo (campo 2400-2500 MHz):** i dati cadono tutti nella fascia satellite. Scelte coerenti con lo spirito radioamatoriale: trasmissioni **brevi**, **LBT** attivo, **scansione RSSI** prima del canale, **canali sotto 2427 MHz** (fuori dalla finestra ATV): **CHAN 22-26 a 1 MHz di passo (2422-2426 MHz)**, cioè lo spazio fra i canali Wi-Fi 1 e 6, che contiene il valore di fabbrica 2424 MHz. Le frequenze reali dei satelliti radioamatoriali in 2400-2450 MHz non le ho verificate: da controllare (per esempio su AMSAT) prima di prove lunghe.
+
+### 9b. Il documento ARI Milano del 2004 (U/SHF Bandplan rev. 4.1.2, maggio 2004)
 Fonte: il PDF fornito dall'autore il 26/11/2026. È del **maggio 2004** (D.M. 8-07-2002, raccomandazioni IARU Regione 1 di San Marino 2002), pubblicato dalla sezione ARI di Milano: **datato, da confrontare con il piano attuale**. Lo studio non lo prende come vincolo (come per i 430-440 MHz); serve a scegliere bene i canali.
 
 **13 cm, 2300-2450 MHz, statuto secondario** (testo del documento):
@@ -99,15 +121,15 @@ Fonte: il PDF fornito dall'autore il 26/11/2026. È del **maggio 2004** (D.M. 8-
 | **2322-2400 MHz** | **permessa la trasmissione in tutti i modi** |
 | ATV | 2322-2355 e 2370-2392 MHz |
 | **Comunicazioni digitali** | **2355-2365 e 2392-2400 MHz** |
-| **Satellite** | **2440-2450 MHz** (nel disegno l'intera fascia 2400-2450 è colorata come satellite: testo e disegno non coincidono) |
+| **Satellite** | **2440-2450 MHz** nel testo; nel disegno l'intera fascia 2400-2450 è colorata come satellite (**il piano attuale conferma 2400-2450 MHz satellite**, vedi 9a) |
 Per 2400-2440 MHz il documento non dice nulla di specifico.
 
 **Wi-Fi nel documento:** non è nominato. Il piano fotografa solo la ripartizione radioamatoriale.
 
 ### Cosa significa per il modulo (campo 2400-2500 MHz, CHAN × passo)
 - **I segmenti "digitali" e "tutti i modi" stanno sotto 2400 MHz**, fuori dal campo del modulo (canale 0 = 2400 MHz esatti, sul bordo): con questi moduli non si arriva a 2322-2400.
-- Dentro 2400-2450 MHz il documento non assegna segmenti per i dati veloci; la fascia 2440-2450 è dei satelliti (testo): **meglio evitare CHAN 40-50 a 1 MHz di passo** (e i canali equivalenti con passo maggiore).
-- **Il Wi-Fi occupa quasi tutta la fascia** (punto 6 delle risposte precedenti: canali da 20 MHz con centro 2407 + 5·n): i soli spazi fra i canali 1, 6 e 11 sono circa **2422-2427 MHz** e **2447-2452 MHz**. Quest'ultimo cade nella fascia satellite. Candidati a 1 MHz di passo: **CHAN 22-27 (2422-2427 MHz)**, che contengono il valore di fabbrica **CHAN 24 = 2424 MHz**; e **CHAN 0-1** (2400-2401 MHz, bordo basso). La **scansione RSSI** (modo 1) decide comunque: i router in zona possono usare altri canali.
+- Dentro 2400-2450 MHz il documento non assegna segmenti per i dati veloci; il **piano attuale (9a)** assegna tutta la fascia ai satelliti, con l'ATV in 2427-2443 MHz se non c'è traffico satellitare.
+- **Il Wi-Fi occupa quasi tutta la fascia** (punto 6 delle risposte precedenti: canali da 20 MHz con centro 2407 + 5·n): i soli spazi fra i canali 1, 6 e 11 sono circa **2422-2427 MHz** e **2447-2452 MHz**. Quest'ultimo cade nella fascia satellite. Candidati a 1 MHz di passo: **CHAN 22-26 (2422-2426 MHz)**, che contengono il valore di fabbrica **CHAN 24 = 2424 MHz** e restano sotto la finestra ATV; e **CHAN 0-1** (2400-2401 MHz, bordo basso). La **scansione RSSI** (modo 1) decide comunque: i router in zona possono usare altri canali.
 - Con velocità d'aria alta (50k e 100k: passo di 2 MHz; 1M: 3 MHz; 2M: 5 MHz) i canali sono più radi: **CHAN 12 a 2 MHz = 2424 MHz**, **CHAN 8 a 3 MHz = 2424 MHz**, **CHAN 5 a 5 MHz = 2425 MHz**. La larghezza di banda occupata dal modulo a 1M e 2M non è nel manuale: a 2 Mbps può superare i 2 MHz, e uno spazio fra due canali Wi-Fi da 5 MHz potrebbe non bastare.
 - Altre bande dello stesso documento, per eventuali profili futuri: 5 cm (5650-5850 MHz, secondario, con segmenti "non assegnati in Italia"), 3 cm (10300-10500 MHz secondario), 1,5 cm (24000-24050 MHz esclusivo), 7 mm (47000-47200 MHz esclusivo). Da rileggere sul piano attuale.
 
