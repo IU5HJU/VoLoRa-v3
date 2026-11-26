@@ -22,6 +22,9 @@ La regola che tiene insieme i due mondi: **il nucleo C++ deve riprodurre il rife
 | `firmware/v3/tests/test_frames.cpp`, `test_limits.cpp` | Conformità di codec e limiti al riferimento Python. |
 | `firmware/v3/src/img_proto.h` | **Il protocollo immagini**: `Link` (gradino, silenzio, ricerca a calendario), `Receiver` (risponde ai frame, compone STATUS e PROBE-REPORT) e `Sender` (il mittente, un processo che chiede azioni al mezzo). Porta di `tools/img_proto.py`. |
 | `firmware/v3/tests/test_protocol.cpp` | Rifa' ogni scenario del simulatore, stazione per stazione, con le tracce registrate dal Python (`tools/gen_tracce_protocollo.py`). |
+| `firmware/v3/src/medium.h` | **Il mezzo della scheda**: `Radio` (interfaccia) e `Station` (collegamento + ricevitore che risponde da solo + mittente le cui azioni diventano trasmissioni e attese). |
+| `firmware/v3/src/radio_board.h`, `main_bench.cpp` | Driver radio RadioLib per T3 (SX1278) e T-Beam (SX1262) e il firmware di **prova a banco** fra due schede. Compilano in CI; mai eseguiti. |
+| `firmware/v3/tests/test_medium.cpp` | Due stazioni con canale con perdite, confrontate con il riferimento Python (`tools/gen_riferimento_medio.py`). |
 | `tests/sim/test_vettori_firmware.py` | Controlla che i vettori nel repository siano quelli che il Python genera oggi (se si cambia il riferimento, si rigenerano e si rifa la prova del C++). |
 
 **Conformità provata sul PC (ponte):** 30566 controlli, 0 falliti, su 14 scenari: testo, file da 20 kB e da 64 kB, ritrasmissione selettiva, due interruzioni del BLE, telefono sparito oltre 60 s, annullamento, nessuna posizione, radio fallita, SX1262 a R10, FSK a R1, 26 ingressi sbagliati o strani, oggetto dalla radio al telefono, e **4000 frame casuali**: stesse notifiche byte per byte e stesse statistiche (richieste, richieste ripetute, blocchi, RAM massima). Più 210 combinazioni di stima del tempo (chip × gradino × dimensione). Per verificare che la prova sappia accorgersi di una differenza ho cambiato di proposito, uno alla volta, il ritardo delle ritrasmissioni, l'intervallo dell'avanzamento e il tempo di abbandono: la prova li ha trovati tutti.
@@ -69,20 +72,56 @@ make -C firmware/v3 test     # genera le tracce con il Python e le riproduce in 
 python3 tests/sim/test_golden_sim_immagini.py     # il simulatore rifatto da' i risultati di prima
 ```
 
-**Semplificazioni del simulatore che il firmware dovra' risolvere (non sono ancora protocollo vero):**
-1. **Il numero di frame di una finestra.** `Receiver.status(frame_inviati, k)` riceve dal mittente quanti frame ha mandato (serve per la percentuale di perdita). Nel protocollo vero il ricevitore deve ricavarlo dai frame (per esempio un contatore nel frame con il flag di ultima finestra): **da aggiungere al formato dei frame**.
-2. **Il PROBE-REPORT e lo STATUS "a timer".** Il mezzo chiede al ricevitore il report dopo la raffica e lo STATUS dopo la finestra; sulla scheda li dovrà generare il ricevitore da solo (a timer o al frame con il flag di ultima finestra).
-3. **`oracle`:** se il DONE non è confermato il mittente non sa se è arrivato; il simulatore lo chiede al ricevitore. Sulla scheda serve una regola (per esempio ripetere o considerare fallito).
-4. **Il nominativo e i livelli** hanno limiti più stretti nel C++ (31 byte e 16 livelli); il **mezzo vero** (radio, tempi di commutazione, ascolto prima di parlare) non c'è ancora.
+**Tre semplificazioni del simulatore risolte (26/11/2026), prima di scrivere il mezzo:**
+1. **Quanti frame ha mandato il mittente in una finestra.** Il ricevitore non lo deve più ricevere dal mittente: nei frame DATA i **4 bit alti del campo del primo pezzo** portano l'**indice del frame nella finestra** (0-15); il primo pezzo resta a 12 bit, cioè oggetti fino a **4096 pezzi = 64 kB**, il tetto del progetto. Il ricevitore ricava i frame partiti dal frame con il flag di ultima finestra, o dal più alto indice sentito. L'intestazione non si allunga e le stime dei tempi non cambiano. Inoltre il ricevitore impara da solo `k` (pezzi per frame) dal HELLO e dal MODE-SET. La finestra ha al massimo 16 frame.
+2. **Il DONE senza oracolo.** Se il DONE non è confermato dopo 4 tentativi il mittente dichiara "non confermato" (non sa se è arrivato); il simulatore lo segna a parte (`unconfirmed`).
+3. **Il ricevitore risponde da solo** (vedi il mezzo qui sotto).
+Effetto sul simulatore: su 134 scenari ne cambiano 8, di pochi secondi, **nessun esito** (stessi 90 riusciti): il riferimento è stato rigenerato e il C++ lo riproduce.
 
-**Cosa non è collegato:** il guscio `main.cpp` stampa solo le dimensioni di Sender, Receiver e Link; non li usa, perché manca il **driver radio** (RadioLib) che sia il "mezzo" della scheda.
+## Fatto: il mezzo della scheda (`medium.h`) e il driver radio
+Il **mezzo** è ciò che porta le azioni del mittente sulla radio e sui timer. Sul simulatore lo faceva `Simulator` con un canale finto; sulla scheda lo fa `Station`.
+
+| Pezzo | Cosa fa |
+|---|---|
+| `Radio` (interfaccia) | `setRung`, `transmit` (non bloccante), `random`. La implementano `BoardRadio` (scheda) e il simulatore del banco di prova (PC). |
+| `Station` | Una stazione: **collegamento + ricevitore + mittente**. Si pilota con tre eventi: `onRx` (frame sentito), `onTxDone` (trasmissione finita), `poll` (il tempo passa). Mezzo duplex. Nessuna memoria dinamica. |
+| `BoardRadio` (`radio_board.h`) | RadioLib: ogni gradino è un modo LoRa (banda, SF, CR 4/5) o FSK (bit rate, deviazione, filtro: **banda laterale singola** sull'SX1278, doppia sull'SX1262, scelto con l'errore di due quarzi da 10 ppm); interrupt di fine trasmissione e ricezione; RSSI e SNR. 433,700 MHz, +17 dBm, parola di sincronismo 0x5D. |
+
+**Il ricevitore risponde da solo** (era il mezzo, a richiesta del mittente): ai frame di richiesta (HELLO, MODE-SET, OFFER, DONE) dopo una commutazione; manda lo **STATUS** appena sente il frame con il flag di ultima finestra, **oppure dopo un silenzio** (un frame lungo più la commutazione) se ha sentito qualche DATA; il **PROBE-REPORT** appena sente l'ultimo PROBE, oppure dopo un silenzio; dopo il MODE-ACK passa al nuovo gradino, sia che il mittente lo senta o no. **Il mittente aspetta** la risposta fino a un tempo limite (due commutazioni più il tempo in aria della risposta, più il silenzio del ricevitore dove serve); scaduto ritenta o riporta "nessuna risposta" al protocollo, che decide.
+
+**Prova sul PC (`tests/test_medium.cpp`).** Due stazioni, un canale con perdite (lo stesso modello del simulatore Python, con affievolimento casuale) e un orologio a eventi; 9 scenari × 8 semi; il riferimento Python è generato da `tools/gen_riferimento_medio.py`. **Non è un confronto bit per bit** (qui i tempi di risposta sono veri, nel Python sono modellati), ma di comportamento:
+
+| Scenario | Consegnati C++ / Python | Tempo mediano C++ / Python |
+|---|---|---|
+| vicino, -100 dBm, 5 kB | 8/8 e 8/8 | 8 s / 9 s |
+| medio, -118 dBm | 8/8 e 8/8 | 12 s / 13 s |
+| in degrado, -122 dBm | 8/8 e 8/8 | 29 s / 30 s |
+| gradino di -11 dB, SX1262 | 7/8 e 8/8 | 509 s / 460 s |
+| oscillante, -125 dBm | 8/8 e 8/8 | 502 s / 447 s |
+| SX1278 con SX1262, -120 dBm | 8/8 e 8/8 | 17 s / 18 s |
+| con TCXO, -136 dBm | 8/8 e 8/8 | 255 s / 251 s |
+| budget di 2 minuti, 30 kB | 8/8 e 8/8 | 1499 s / 1372 s |
+| nessun collegamento, -150 dBm | 0/8 e 0/8 | — |
+
+**In ogni consegna l'oggetto arriva identico, byte per byte.** Il budget breve ferma il trasferimento a un livello intermedio. Un gradino che la radio non sa fare (R3 sull'SX1278) non si annuncia e non si usa: con R3 permesso la negoziazione lo sceglie, senza passa a R4 (4/4 consegne). Il C++ del mezzo è compilato con `-Wall -Wextra`, ASan e UBSan.
+
+**Cosa NON è stato provato:** il driver radio e il mezzo **non sono mai girati su una scheda**; il canale del banco di prova è un modello. Il comportamento reale (tempi di commutazione della radio, ascolto prima di parlare, collisioni, interferenze) può cambiare i tempi limite.
+
+### Prova a banco fra due schede (`main_bench.cpp`, da fare tu)
+Firmware senza Bluetooth che usa il mezzo e il driver radio: **una scheda manda un oggetto di prova, l'altra lo riceve**. Compila in CI per T3 e T-Beam.
+```bash
+cd firmware/v3
+pio run -e bench_t3 -t upload              # oppure bench_tbeam1262
+pio device monitor -b 115200
+```
+Su **due schede uguali**, con l'antenna (meglio un attenuatore se sono vicine: saturazione del ricevitore, vedi [piano-misure.md](piano-misure.md)): sulla seriale di ciascuna `CALL IU5HJU` e `CALL IK5XYZ`; poi su una `SEND 5000`. Si vede il gradino cambiare (`gradino R10`...), poi sulla scheda che invia `INVIO FINITO: 3 livelli, 5000 byte consegnati` e sull'altra `OGGETTO RICEVUTO: ... CRC GIUSTO`. `STATO` mostra gradino, ricerca e errori di ricezione. L'oggetto è al massimo di 32 kB (RAM). **Cosa si guarda:** parte la radio? gli HELLO si sentono a R10? la negoziazione sale di gradino? il CRC torna giusto? Quanti secondi? Dimmi cosa vedi: i tempi limite del mezzo si regolano sulla prova vera.
 
 ## Da fare, in ordine
 1. ~~**Guscio per la scheda del mobile**~~ **Scritto e compilato dalla CI** (vedi la sezione sotto). Non provato su una scheda.
 2. ~~**Codec dei frame del protocollo immagini**~~ **Fatto** (`frames.h`).
 3. ~~**Macchina a stati del protocollo immagini** in C++~~ **Fatta** (vedi la sezione sotto). Il piano seguito: **prima separata nel Python**: oggi il simulatore è un blocco unico in cui le due stazioni, il canale e il tempo sono intrecciati (`Simulator.exchange`, `phase_hello`, `phase_transfer`...). Il piano: (a) estrarre nel Python due classi indipendenti, **mittente** e **ricevitore**, che ricevono un frame o un tick e restituiscono frame da trasmettere, senza sapere nulla del canale; (b) far girare il simulatore sopra queste due classi senza cambiare i suoi risultati (le prove esistenti devono passare identiche); (c) registrare ingressi e uscite di ciascuna classe come per il ponte e portarle in C++ con gli stessi vettori. Incontro a R10, salita e discesa dei gradini, finestre, ritrasmissione selettiva, budget di tempo, ricerca dopo la perdita del collegamento.
 4. **Driver radio** (RadioLib): modi LoRa e FSK dei 15 gradini, potenza, **BOOST** ([boost.md](boost.md)); la maschera dei gradini c'è già (`limits.h`). Qui servono le **misure** della fase 1 (tempi in aria reali, sensibilità, rendimento delle schede) prima di fidarsi dei numeri.
-5. **Il mezzo della scheda** (collega le azioni del mittente alla radio e ai timer, e risolve le semplificazioni qui sopra) e il ruolo **mobile con radio**: lo si può provare prima sul PC con due schede finte.
+5. ~~**Il mezzo della scheda**~~ **Scritto e provato sul PC** (sopra); manca la **prova sulle schede** (`bench_t3`), il **BOOST** (+20 dBm) nel driver, **R3 sull'SX1278** (intestazione implicita), il **TCXO letto dalla scheda**, la **frequenza configurabile** e il **collegamento con il ponte Bluetooth**: oggi il mittente del mezzo vuole l'oggetto intero in memoria, mentre la scheda mobile tiene solo 3 kB e il resto sta nel telefono (la finestra da 16 frame di 15 pezzi vuole circa 3,8 kB): va ripensata o la finestra, o la cache, o il modo di dare i pezzi al mittente.
 6. **Ruoli dei nodi e dei ripetitori**: ascolto a turni, configurazione del sysop ([configurazione-nodo.md](configurazione-nodo.md)), microSD (solo nodi e ripetitori), voto, rete mesh.
 7. **Gateway Internet** verso il reflector V3 (reflector già pronto in C++).
 

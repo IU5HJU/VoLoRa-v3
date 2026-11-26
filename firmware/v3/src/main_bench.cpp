@@ -32,7 +32,8 @@ static uint32_t sendStartMs = 0;
 static void makeStation() {
   delete station;
   const size_t n = strlen(call);
-  station = new Station(reinterpret_cast<const uint8_t*>(call), n, kBoardSx1262, false, &radio, &store);
+  station = new Station(reinterpret_cast<const uint8_t*>(call), n, kBoardSx1262, false, &radio, &store, kWindowFrames, true,
+                       kBoardSx1262 ? 0 : static_cast<uint16_t>(1u << 3));     // R3 (LoRa 500/SF6) sull'SX1278 vuole l'intestazione implicita: il driver non lo fa
 }
 
 static void handleLine(const char* line) {

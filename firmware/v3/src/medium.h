@@ -29,8 +29,9 @@ struct Radio {
 
 class Station {
  public:
-  Station(const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, Radio* radio, Store* store, int window = kWindowFrames, bool helloWithMeasure = true)
-      : radio_(radio), sx1262_(sx1262), tcxo_(tcxo), window_(window), rx_(call, callLen, sx1262, tcxo, window, helloWithMeasure, store) {
+  // `unsupported`: gradini che la radio non sa fare (per esempio R3 sull'SX1278): non si annunciano, quindi non si usano
+  Station(const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, Radio* radio, Store* store, int window = kWindowFrames, bool helloWithMeasure = true, uint16_t unsupported = 0)
+      : radio_(radio), sx1262_(sx1262), tcxo_(tcxo), window_(window), unsupported_(unsupported), rx_(call, callLen, sx1262, tcxo, window, helloWithMeasure, store, unsupported) {
     callLen_ = callLen > static_cast<size_t>(kMaxCall) ? static_cast<size_t>(kMaxCall) : callLen;
     memcpy(call_, call, callLen_);
     radio_->setRung(link_.rung);
@@ -44,7 +45,7 @@ class Station {
   bool startSend(const uint8_t* obj, size_t len, const uint16_t* layerEnds, int nl, double budgetS, uint16_t sess, int probesR10 = kProbeCount) {
     if ((snd_ && !snd_->finished()) || len == 0 || len > 65536 || nl < 1 || nl > kMaxLayers) return false;
     if (snd_) snd_->~Sender();
-    snd_ = new (sndMem_) Sender(sess, call_, callLen_, sx1262_, tcxo_, obj, len, layerEnds, nl, budgetS, window_, probesR10);
+    snd_ = new (sndMem_) Sender(sess, call_, callLen_, sx1262_, tcxo_, obj, len, layerEnds, nl, budgetS, window_, probesR10, unsupported_);
     ex_ = Exec();
     ex_.st = Exec::Resume;
     ans_ = Answer();
@@ -234,6 +235,7 @@ class Station {
   Radio* radio_;
   bool sx1262_, tcxo_;
   int window_;
+  uint16_t unsupported_;
   uint8_t call_[kMaxCall + 1];
   size_t callLen_ = 0;
   Link link_;

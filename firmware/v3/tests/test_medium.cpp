@@ -33,7 +33,8 @@ struct SimRadio : Radio {
   World* w = nullptr;
   int id = 0, rung = kRendezvous;
   double txStart = -1, txEnd = -1;
-  void setRung(int r) override { rung = r; }
+  unsigned used = 0;
+  void setRung(int r) override { rung = r; used |= 1u << r; }
   bool transmit(const uint8_t* f, size_t n) override;
   double random() override;
 };
@@ -104,11 +105,12 @@ struct Result { bool delivered = false, unconfirmed = false; double time = 0; in
 
 static bool senderDone(World& w) { return w.st[0]->sendFinished(); }
 
-static Result runOne(const std::string& chipA, const std::string& chipB, const ChannelParams& cp, int size, bool tcxo, double budget, uint64_t seed, const std::vector<double>& fractions) {
+static unsigned g_usedRungs = 0;
+static Result runOne(const std::string& chipA, const std::string& chipB, const ChannelParams& cp, int size, bool tcxo, double budget, uint64_t seed, const std::vector<double>& fractions, uint16_t unsupported = 0) {
   World w(seed, cp);
   MemStore storeA, storeB;
   const uint8_t callA[] = {'I', 'U', '5', 'H', 'J', 'U'}, callB[] = {'I', 'K', '5', 'X', 'Y', 'Z'};
-  Station a(callA, 6, chipA == "SX1262", tcxo, &w.radio[0], &storeA), b(callB, 6, chipB == "SX1262", tcxo, &w.radio[1], &storeB);
+  Station a(callA, 6, chipA == "SX1262", tcxo, &w.radio[0], &storeA, kWindowFrames, true, unsupported), b(callB, 6, chipB == "SX1262", tcxo, &w.radio[1], &storeB, kWindowFrames, true, unsupported);
   w.st[0] = &a; w.st[1] = &b;
   std::mt19937_64 orng(seed + 7);
   std::vector<uint8_t> obj(size);
@@ -120,6 +122,7 @@ static Result runOne(const std::string& chipA, const std::string& chipB, const C
   const uint16_t sess = static_cast<uint16_t>(1 + (seed * 7919) % 65000);
   a.startSend(obj.data(), obj.size(), ends.data(), static_cast<int>(ends.size()), budget, sess);
   w.run(6 * 3600.0, senderDone);
+  g_usedRungs |= w.radio[0].used | w.radio[1].used;
   Result r;
   r.time = w.t;
   r.fail = a.sendFailure();
@@ -162,6 +165,19 @@ int main(int argc, char** argv) {
     if (name == "vicino" || name == "medio" || name == "misto") CHECK(ok == nSeeds, "%s: con un buon collegamento devono arrivare tutti (%d/%d)", name.c_str(), ok, nSeeds);
     if (name == "perso") CHECK(ok == 0, "%s: senza collegamento non deve arrivare niente", name.c_str());
     if (name == "budget") CHECK(partial >= 1, "%s: con un budget breve almeno una consegna si ferma a un livello intermedio", name.c_str());
+  }
+  // un gradino che la radio non sa fare (R3 sull'SX1278) non si annuncia e non si usa, anche con un collegamento fortissimo dove la negoziazione lo sceglierebbe
+  {
+    g_usedRungs = 0;
+    int okR3 = 0;
+    for (int seed = 1; seed <= 4; seed++) { const Result r = runOne("SX1278", "SX1278", ChannelParams{-108.0, 0, 0, 1, "costante"}, 20000, false, 600.0, seed, {1.0 / 3, 2.0 / 3, 1.0}, static_cast<uint16_t>(1u << 3)); if (r.delivered && r.intact) okR3++; }
+    const unsigned with3 = g_usedRungs;
+    g_usedRungs = 0;
+    for (int seed = 1; seed <= 4; seed++) runOne("SX1278", "SX1278", ChannelParams{-108.0, 0, 0, 1, "costante"}, 20000, false, 600.0, seed, {1.0 / 3, 2.0 / 3, 1.0}, 0);
+    const unsigned all = g_usedRungs;
+    std::printf("R3 non supportato: consegnati %d/4, gradini usati 0x%04X (con R3 permesso: 0x%04X)\n", okR3, with3, all);
+    CHECK(okR3 == 4, "senza R3 il trasferimento arriva comunque (%d/4)", okR3);
+    CHECK(!(with3 & (1u << 3)) && (all & (1u << 3)), "senza R3 non lo si usa mai; con R3 permesso la negoziazione lo sceglie (0x%04X, 0x%04X)", with3, all);
   }
   std::printf("firmware/v3 mezzo: %d controlli, %d falliti\n", g_checks, g_fails);
   return g_fails ? 1 : 0;
