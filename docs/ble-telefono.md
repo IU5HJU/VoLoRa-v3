@@ -5,9 +5,13 @@
 **Decisione dell'autore (26/11/2026): BLE** (non Bluetooth classico): funziona con Android e con iPhone e costa meno RAM sull'ESP32.
 
 ## 1. Idea
-Il telefono è la **tastiera e la fotocamera** del nodo mobile. La scheda non sa cos'è un'immagine ([protocollo-immagini.md](protocollo-immagini.md), principio 1): riceve **byte** e li manda in radio come oggetto. Il telefono fa tutto il lavoro "intelligente": scrive il testo, sceglie il file, **comprime l'immagine** a pochi kB (livelli, ridimensionamento) e mostra l'avanzamento.
+Il telefono è la **tastiera e la fotocamera** del nodo mobile, e **il suo buffer**. La scheda non sa cos'è un'immagine ([protocollo-immagini.md](protocollo-immagini.md), principio 1): trasporta **byte**. Il telefono scrive il testo, sceglie il file, **comprime l'immagine** a pochi kB (livelli, ridimensionamento), **tiene l'oggetto intero** e mostra l'avanzamento.
 
-Il BLE non è il collo di bottiglia: 20 kB passano dal telefono alla scheda in circa **11 s con l'MTU peggiore (23 byte)** e in meno di 2 s con MTU 185 o più; la radio a R5 ne richiede 19, a R10 oltre 1000 (simulatore). Per questo la scheda tiene **l'intero oggetto in RAM** (o sulla microSD, più avanti) e il telefono lo carica *prima* che parta la radio.
+**Regola dell'autore (26/11/2026): il buffer lo fa il telefono. La microSD è di esclusiva pertinenza dei nodi e dei ripetitori**, perché la configurazione hardware della modalità radio occupa tutti i pin, anche quelli della microSD. Quindi la **scheda mobile non ha la microSD** e ha poca RAM (la T3 non ha PSRAM): non può tenere l'oggetto.
+
+Modello **a richiesta** (pull): la scheda non riceve l'oggetto in blocco, lo **chiede a blocchi da 1 kB** al telefono, quando la radio sta per averne bisogno. Tiene in RAM **al massimo 3 blocchi (3 kB)**: quello in trasmissione e i due successivi, e li libera appena trasmessi. Se la ritrasmissione selettiva ([protocollo-immagini.md](protocollo-immagini.md), principio 4) richiede un blocco già liberato, la scheda lo **richiede di nuovo** al telefono. Così la RAM della scheda non dipende dalla dimensione dell'oggetto (nel simulatore 64 kB passano con 3 kB di RAM), e la scheda non ha bisogno di nessuna memoria di massa.
+
+Il BLE non è il collo di bottiglia: con MTU 23 (il peggiore) la radio a R5 è rimasta ferma ad aspettare il telefono meno dell'1% del tempo; anche a R3 (7 s per 20 kB) con MTU 185 aspetta poco. Se l'MTU è minuscolo e il gradino velocissimo, la radio può attendere un blocco: succede solo ai gradini più veloci.
 
 ## 2. Servizio GATT
 Un solo servizio, **quattro caratteristiche**:
@@ -27,29 +31,29 @@ Un solo servizio, **quattro caratteristiche**:
 ## 3. Frame (tutti i numeri in big-endian)
 **Comandi** (`cmd`): `C_HELLO 0x01` (versione); `C_POSITION 0x02` (7 byte di posizione come in [mesh-v3.md](mesh-v3.md) 8c: locatore o GPS assoluta); `C_BEGIN 0x10`; `C_CANCEL 0x12` (oggetto 2); `C_RESUME 0x13` (oggetto 2); `C_RX_ACK 0x14` (oggetto 2).
 
-**BEGIN** `0x10`: oggetto (2), tipo (1: **0 testo**, **1 file**, **2 immagine**), dimensione (3), CRC32 (4), larghezza (2), altezza (2), numero di livelli (1), fine di ogni livello (3 ciascuno, al massimo 8), destinatario (1 + ASCII, al massimo 12), nome del file (1 + UTF-8, al massimo 40).
+**BEGIN** `0x10`: oggetto (2), tipo (1: **0 testo**, **1 file**, **2 immagine**), dimensione (3), **CRC32 dell'oggetto intero** (4, lo calcola il telefono e la scheda lo passa all'OFFER radio), larghezza (2), altezza (2), numero di livelli (1), fine di ogni livello (3 ciascuno, al massimo 8), destinatario (1 + ASCII, al massimo 12), nome del file (1 + UTF-8, al massimo 40).
 
-**Dati** (`data_in`): oggetto (2), **offset** (3), byte. Solo **in ordine**: la scheda scarta ciò che non è l'offset atteso o supera il credito.
+**Dati** (`data_in`): oggetto (2), **offset** (3), byte: **solo in risposta a un `E_PULL`**. La scheda scarta ciò che non ha richiesto, o fuori ordine.
 
-**Eventi** (`evt`): `E_INFO 0x80` (versione, chip, maschera dei gradini, memoria totale, tetto, posizione nota, nominativo); `E_BEGIN_OK 0x81` (**credito** 3, **tempo stimato di radio** 3 s, gradino 1); `E_ERR 0x82` (codice); `E_CREDIT 0x83` (credito 3, prossimo offset 3); `E_STAGED 0x84` (tutti i byte arrivati e CRC giusto: l'oggetto è in coda per la radio); `E_PROGRESS 0x85` (percento, gradino, secondi che mancano); `E_DONE 0x86` (esito 0 consegnato, 1 fallito, 2 annullato); `E_RX 0x87` (oggetto in arrivo dalla radio: tipo, dimensione, CRC, nominativo del mittente); `E_RESUME 0x88` (prossimo offset, credito).
+**Eventi** (`evt`): `E_INFO 0x80` (versione, chip, maschera dei gradini, **dimensione del blocco**, tetto, posizione nota, nominativo); `E_BEGIN_OK 0x81` (**tempo stimato di radio** 3 s, gradino 1, blocco 2); `E_ERR 0x82` (codice); **`E_PULL 0x89`** (offset 3, lunghezza 2: "mandami questi byte"); `E_PROGRESS 0x85` (percento, gradino, secondi che mancano); `E_DONE 0x86` (esito 0 consegnato, 1 fallito, 2 annullato); `E_RX 0x87` (oggetto in arrivo dalla radio: tipo, dimensione, CRC, nominativo del mittente).
 
-**Errori:** 1 BUSY, 2 TOO_BIG, 3 NO_MEMORY, 4 NO_POSITION, 5 BAD_FRAME, 6 CRC, 7 BAD_KIND, 8 UNKNOWN_OBJ, 9 NO_CALL.
+**Errori:** 1 BUSY, 2 TOO_BIG, 4 NO_POSITION, 5 BAD_FRAME, 7 BAD_KIND, 8 UNKNOWN_OBJ, 9 NO_CALL (3 NO_MEMORY e 6 CRC sono riservati: con questo modello non servono).
 
 ## 4. Come si invia (telefono → radio)
-1. `C_HELLO` → `E_INFO`: il telefono sa chip, gradini, memoria e se la scheda conosce la posizione.
+1. `C_HELLO` → `E_INFO`: il telefono sa chip, gradini e se la scheda conosce la posizione.
 2. **Posizione:** se la scheda non ha un GPS proprio, il telefono manda la **sua** posizione (`C_POSITION`, locatore o GPS assoluta). **Senza posizione la scheda rifiuta (NO_POSITION)**: ogni collegamento porta nominativo, rapporto e posizione ([regole-radioamatoriali.md](regole-radioamatoriali.md)).
-3. `C_BEGIN` → `E_BEGIN_OK` con **credito** e **tempo stimato di radio**: il telefono può mostrare "circa 19 s a R5" e lasciar decidere. Errori subito: troppo grande, memoria, occupato.
-4. Dati a **finestre da 2 kB**: la scheda dà credito, il telefono manda fino al credito, la scheda rinnova (`E_CREDIT`). Serve perché la scrittura senza risposta può perdere pacchetti se la coda della scheda si riempie.
-5. A fine dati la scheda verifica il **CRC32** → `E_STAGED` (o `E_ERR` CRC). Da qui la radio la trasmette con il protocollo immagini e il telefono vede `E_PROGRESS` e `E_DONE`.
-6. **Annullare:** `C_CANCEL`, anche durante la radio: la RAM si libera e niente parte (o la trasmissione si ferma).
+3. `C_BEGIN` → `E_BEGIN_OK` con il **tempo stimato di radio**: il telefono può mostrare "circa 19 s a R5" e lasciar decidere. Errori subito: troppo grande, occupato, nessuna posizione.
+4. La radio parte subito e la scheda manda `E_PULL` per i primi tre blocchi; il telefono risponde con i dati; a ogni blocco trasmesso la scheda chiede il successivo. Se un blocco manca, la radio **aspetta** (non perde la sessione).
+5. A fine oggetto: `E_DONE` (consegnato o fallito). Durante la trasmissione, `E_PROGRESS`.
+6. **Annullare:** `C_CANCEL`, anche durante la radio: la scheda si ferma e libera la RAM.
 
-**Limiti (da misurare):** un oggetto alla volta (il secondo riceve BUSY); **testo fino a 1 kB, oggetto fino a 64 kB**, entro la RAM libera (di partenza **32 kB** per il ponte: la T3 non ha PSRAM; con la microSD si potrà salire); destinatario e nome corti.
+**Limiti:** un oggetto alla volta (il secondo riceve BUSY); **testo fino a 1 kB, oggetto fino a 64 kB** (tetto del ponte: lo decide il tempo di radio, non la RAM della scheda).
 
 ## 5. Interruzioni
-Il BLE si interrompe spesso (telefono in tasca, uscita dal raggio). La scheda tiene la sessione **60 s**; alla riconnessione il telefono manda `C_RESUME` e la scheda risponde con **l'offset da cui riprendere** e un credito nuovo. Si rimandano solo i byte in volo (qualche centinaio), non tutto il file. Se i dati erano già tutti arrivati, `C_RESUME` restituisce `E_STAGED` o l'avanzamento; se la sessione è scaduta, `UNKNOWN_OBJ`.
+Il BLE si interrompe spesso (telefono in tasca, uscita dal raggio). Alla caduta la scheda butta il blocco a metà e **continua la radio con quelli che ha in cache**, poi **aspetta**. Alla riconnessione il telefono manda `C_RESUME`: la scheda richiede i blocchi che le servono e la trasmissione riprende. **Non si rimanda niente di già trasmesso.** Se il telefono manca per **più di 60 s** con la radio ferma in attesa, la scheda abbandona la sessione; l'esito (consegnato, fallito, annullato) resta registrato e `C_RESUME` lo restituisce: così una notifica `E_DONE` persa nell'interruzione si recupera.
 
 ## 6. Ricezione (radio → telefono)
-Un oggetto che arriva dalla radio si offre con `E_RX` e passa per `data_out` a pezzi con offset; il telefono controlla il CRC32 e manda `C_RX_ACK`: la scheda libera la copia. Se il telefono non c'è, l'oggetto resta nella scheda (microSD, quando c'è) e si offre alla prossima connessione: da definire.
+Un oggetto che arriva dalla radio si offre con `E_RX` e passa per `data_out` a pezzi con offset; il telefono controlla il CRC32 e manda `C_RX_ACK`: la scheda libera la copia. **Senza telefono collegato la scheda mobile non accetta oggetti dalla radio** (non ha dove tenerli: niente microSD, poca RAM): chi li manda li ritrasmette quando il telefono c'è. Il "negozio" che tiene gli oggetti per chi non c'è è il lavoro dei **nodi e dei ripetitori**, con la loro microSD.
 
 ## 7. Lato telefono
 - **Pagina web** (Web Bluetooth: Chrome su Android e su computer; **Safari su iPhone non lo supporta**: per iPhone serve un'applicazione, per esempio un pacchetto con un involucro nativo o un browser che lo supporta). Decisione da prendere: pagina web, applicazione nativa o entrambe.
@@ -57,11 +61,11 @@ Un oggetto che arriva dalla radio si offre con `E_RX` e passa per `data_out` a p
 - Mostrare sempre il **tempo stimato** (E_BEGIN_OK) prima di caricare un'immagine: a R10 anche 2 kB richiedono oltre 100 s.
 
 ## 8. Cosa è provato (sul PC) e cosa no
-**Provato nel simulatore (33 controlli):** codec di tutti i frame; testo e file da 20 kB con MTU 23, 100, 185, 247 arrivano identici in radio; il carico sulla scheda è più veloce della radio anche con MTU 23; ETA corretto; il credito è rispettato; due interruzioni del BLE durante l'invio e ripresa dall'offset senza rimandare il file; annullamento prima e durante la radio; errori (nessuna posizione, troppo grande, memoria, occupato, tipo sbagliato, CRC, radio fallita); sessione abbandonata; ricezione dalla radio con CRC; 3000 frame casuali sulla scheda e 2000 sul telefono senza eccezioni.
-**Non provato:** firmware ESP32 (NimBLE), RAM libera con BLE e radio insieme, consumo, MTU reale dei telefoni, perdite reali della scrittura senza risposta, pagina web o applicazione sul telefono, accoppiamento con il codice sullo schermo. Il collegamento BLE del simulatore è affidabile e non perde pacchetti salvo nelle interruzioni.
+**Provato nel simulatore (42 controlli):** codec di tutti i frame; testo e file da 20 kB con MTU 23, 100, 185, 247 arrivano identici in radio **con al massimo 3 kB di RAM sulla scheda**; un oggetto da 64 kB (il tetto) passa con 3 kB; ogni blocco è richiesto una volta sola senza perdite; la radio aspetta il telefono meno del 10% del tempo anche con MTU 23; ritrasmissione selettiva: i blocchi già liberati sono richiesti di nuovo e il telefono rimanda solo quelli; due interruzioni del BLE durante la trasmissione senza riscaricare blocchi già trasmessi; telefono sparito oltre 60 s: la scheda abbandona e libera la RAM, e alla riconnessione il telefono riceve l'esito; annullamento durante la radio; errori (nessuna posizione, troppo grande, occupato, tipo sbagliato, radio fallita); dati non richiesti scartati; ricezione dalla radio con CRC, rifiutata senza telefono; 3000 frame casuali sulla scheda e 2000 sul telefono senza eccezioni.
+**Non provato:** firmware ESP32 (NimBLE), RAM libera con BLE e radio insieme (qui 3 kB di cache più i frame), latenza reale delle richieste sul BLE e quindi quanto aspetta la radio ai gradini veloci, consumo, MTU reale dei telefoni, perdite reali della scrittura senza risposta, pagina web o applicazione sul telefono, accoppiamento con il codice sullo schermo. Il collegamento BLE del simulatore è affidabile e non perde pacchetti salvo nelle interruzioni.
 
 ## 9. Da decidere
 1. **Telefono:** pagina web (Android, computer), applicazione nativa (anche iPhone) o entrambe.
-2. **RAM del ponte:** 32 kB di partenza; sulla T3 con microSD fino a 64 kB o più?
-3. **Più oggetti in coda** (oggi uno solo).
-4. **Ricezione senza telefono collegato:** dove si tiene l'oggetto e per quanto.
+2. **Cache della scheda:** 3 blocchi da 1 kB di partenza; da misurare con RAM e latenza reali (blocchi più grandi se il BLE è lento, o più cache).
+3. **Più oggetti in coda:** oggi uno solo, il resto lo tiene il telefono.
+4. **Ricezione senza telefono collegato:** la scheda mobile rifiuta; si può chiedere a un nodo vicino di tenere l'oggetto (microSD dei nodi), da definire con il protocollo dei nodi.

@@ -24,7 +24,7 @@ Da decidere: se le immagini passano da ripetitore e reflector.
 - Le due radio hanno FIFO diversi (64 e 256 byte circa) e prestazioni diverse in FSK: da verificare sui datasheet e a banco (fase 1).
 
 ## Memoria e microSD (T3)
-La T3 non ha PSRAM ma ha lo slot microSD. Nei ruoli senza audio (nodo immagini, nodo Internet) può servire per frammenti, coda e archivio. Dettagli e cautele in [scheda-sd.md](scheda-sd.md).
+La T3 non ha PSRAM ma ha lo slot microSD. Nei ruoli senza audio (nodo immagini, nodo Internet, ripetitore) può servire per frammenti, coda e archivio; **solo nodi e ripetitori**: le schede mobili non la usano, il buffer lo fa il telefono (regola del 26/11/2026). Dettagli e cautele in [scheda-sd.md](scheda-sd.md).
 
 ## Strati
 1. **Radio**: LoRa e FSK dietro la stessa interfaccia, driver SX1278 e SX1262.

@@ -18,6 +18,8 @@
 - La **T-Beam V1.2** non ha lo slot microSD nei documenti della v2 (ha 8 MB di PSRAM, non usata).
 - Nella v2 il messaggio vocale ricevuto sta in RAM, **uno solo alla volta**.
 
+> **Regola dell'autore (26/11/2026): la microSD è di esclusiva pertinenza dei nodi e dei ripetitori.** La configurazione hardware della modalità radio occupa tutti i pin, anche quelli della microSD. Le schede **mobili** (telefono con BLE) **non usano la microSD**: il buffer lo fa il telefono ([ble-telefono.md](ble-telefono.md)).
+
 ## Perché nella V3 può convenire
 Con **firmware specializzati** la collisione dei pin sparisce nei ruoli che non usano l'audio:
 

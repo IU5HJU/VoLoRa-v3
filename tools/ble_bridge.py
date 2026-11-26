@@ -19,15 +19,16 @@ KIND_TEXT, KIND_FILE, KIND_IMAGE = 0, 1, 2
 # comandi (telefono -> scheda, caratteristica CMD, scrittura con risposta)
 C_HELLO, C_POSITION, C_BEGIN, C_CANCEL, C_RESUME, C_RX_ACK = 0x01, 0x02, 0x10, 0x12, 0x13, 0x14
 # eventi (scheda -> telefono, caratteristica EVT, notifica)
-E_INFO, E_BEGIN_OK, E_ERR, E_CREDIT, E_STAGED, E_PROGRESS, E_DONE, E_RX, E_RESUME = 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88
-# codici di errore
+E_INFO, E_BEGIN_OK, E_ERR, E_PROGRESS, E_DONE, E_RX, E_PULL = 0x80, 0x81, 0x82, 0x85, 0x86, 0x87, 0x89
+# codici di errore (3 = NO_MEMORY e 6 = CRC: riservati, non usati nel modello "il buffer e' il telefono")
 ERR_BUSY, ERR_TOO_BIG, ERR_NO_MEMORY, ERR_NO_POSITION, ERR_BAD_FRAME, ERR_CRC, ERR_BAD_KIND, ERR_UNKNOWN_OBJ, ERR_NO_CALL = 1, 2, 3, 4, 5, 6, 7, 8, 9
 DONE_DELIVERED, DONE_FAILED, DONE_CANCELLED = 0, 1, 2
-WINDOW = 2048            # byte di credito per volta (controllo di flusso: la scrittura senza risposta di NimBLE puo' perdere pacchetti se si esagera)
+BLOCK = 1024             # unita' di richiesta: la scheda chiede al telefono un blocco alla volta, quando la radio ne ha bisogno
+CACHE_BLOCKS = 3         # RAM della scheda per l'oggetto: il blocco in trasmissione e i due successivi (3 kB). Il BUFFER e' il telefono; niente microSD sulle schede mobili
 MAX_TEXT = 1024
-MAX_OBJECT = 65536       # tetto del progetto per questo ponte
-BUFFER_BYTES = 32768     # RAM dedicata (decisione di partenza: la T3 non ha PSRAM; con la microSD si potra' salire)
-RESUME_TIMEOUT_S = 60.0
+MAX_OBJECT = 65536       # tetto del progetto per questo ponte (decide il tempo di radio, non la RAM della scheda)
+STALL_TIMEOUT_S = 60.0   # radio in attesa di un blocco che il telefono non manda: si abbandona
+RETX_DELAY = 4           # una ritrasmissione selettiva torna in coda dopo alcuni blocchi (la mappa del ricevitore arriva a fine finestra): oltre la cache
 DATA_HDR = 5             # oggetto (2) + offset (3)
 CHIP = {"SX1278": 0, "SX1262": 1}
 
@@ -90,21 +91,21 @@ def dec_data(b):
     return struct.unpack(">H", b[:2])[0], int.from_bytes(b[2:5], "big"), bytes(b[5:])
 
 
-def enc_info(chip, rung_mask, buf_total, max_obj, position_known, call):
-    return bytes([E_INFO, VERSION, CHIP[chip]]) + struct.pack(">H", rung_mask) + _u24(buf_total) + _u24(max_obj) + bytes([1 if position_known else 0, len(call)]) + call.encode()
+def enc_info(chip, rung_mask, block, max_obj, position_known, call):
+    return bytes([E_INFO, VERSION, CHIP[chip]]) + struct.pack(">H", rung_mask) + _u24(block) + _u24(max_obj) + bytes([1 if position_known else 0, len(call)]) + call.encode()
 
 
 def dec_info(b):
     ver, chip, mask = struct.unpack(">BBH", b[1:5])
     call_len = b[12]
-    return dict(version=ver, chip="SX1262" if chip else "SX1278", rung_mask=mask, buf_total=int.from_bytes(b[5:8], "big"), max_obj=int.from_bytes(b[8:11], "big"),
+    return dict(version=ver, chip="SX1262" if chip else "SX1278", rung_mask=mask, block=int.from_bytes(b[5:8], "big"), max_obj=int.from_bytes(b[8:11], "big"),
                 position_known=bool(b[11]), call=b[13:13 + call_len].decode())
 
 
 def enc_event(code, obj, *fields):
-    """Eventi con campi numerici: E_BEGIN_OK (credito 3, eta' 3, gradino 1), E_ERR (codice 1), E_CREDIT (credito 3, prossimo offset 3), E_STAGED (-),
-    E_PROGRESS (percento 1, gradino 1, eta' 3), E_DONE (esito 1), E_RESUME (prossimo offset 3, credito 3)."""
-    layout = {E_BEGIN_OK: "331", E_ERR: "1", E_CREDIT: "33", E_STAGED: "", E_PROGRESS: "113", E_DONE: "1", E_RESUME: "33"}
+    """Eventi con campi numerici: E_BEGIN_OK (tempo stimato di radio 3 s, gradino 1, blocco 2), E_ERR (codice 1), E_PROGRESS (percento 1, gradino 1, secondi che mancano 3),
+    E_DONE (esito 1), E_PULL (offset 3, lunghezza 2): la scheda chiede al telefono `lunghezza` byte dell'oggetto da `offset`."""
+    layout = {E_BEGIN_OK: "312", E_ERR: "1", E_PROGRESS: "113", E_DONE: "1", E_PULL: "32"}
     body = b""
     for width, v in zip(layout[code], fields):
         body += int(v).to_bytes(int(width), "big")
@@ -112,7 +113,7 @@ def enc_event(code, obj, *fields):
 
 
 def dec_event(b):
-    layout = {E_BEGIN_OK: (3, 3, 1), E_ERR: (1,), E_CREDIT: (3, 3), E_STAGED: (), E_PROGRESS: (1, 1, 3), E_DONE: (1,), E_RESUME: (3, 3)}
+    layout = {E_BEGIN_OK: (3, 1, 2), E_ERR: (1,), E_PROGRESS: (1, 1, 3), E_DONE: (1,), E_PULL: (3, 2)}
     code = b[0]
     if code not in layout or len(b) != 3 + sum(layout[code]):
         raise BadFrame("evento")
@@ -160,26 +161,58 @@ class BleLink:
 
 # ------------------------------------------------------------------------------------------------------------------ la scheda
 class BleBridge:
-    def __init__(self, call="IU5HJU", chip="SX1278", position=None, rung=5, rung_mask=None, radio_ok=True, buf_total=BUFFER_BYTES):
+    """La scheda NON tiene l'oggetto: il buffer e' il telefono. La radio consuma l'oggetto a blocchi; la scheda chiede al telefono (E_PULL) il blocco in trasmissione e i due
+    successivi, li tiene in RAM (CACHE_BLOCKS) e li rilascia appena trasmessi; se la ritrasmissione selettiva ne richiede uno gia' liberato, lo richiede al telefono."""
+
+    def __init__(self, call="IU5HJU", chip="SX1278", position=None, rung=5, rung_mask=None, radio_ok=True, retx=()):
         self.call, self.chip, self.position, self.rung, self.radio_ok = call, chip, position, rung, radio_ok
         self.rung_mask = rung_mask if rung_mask is not None else (0xFFF if chip == "SX1278" else 0xFFE)
-        self.buf_total = buf_total
-        self.sessions = {}            # obj -> dict
-        self.staged = []              # coda verso la radio (al massimo una, in RAM)
-        self.radio = None             # oggetto in trasmissione
-        self.radio_log = []           # (obj, kind, byte, destinatario, posizione): quello che parte davvero in radio
-        self.out = []                 # eventi (byte) da notificare
-        self.out_data = []            # dati in uscita verso il telefono (oggetti ricevuti)
+        self.retx_plan = set(retx)    # blocchi da ritrasmettere una volta (la mappa del ricevitore li dichiara mancanti): prova della ritrasmissione selettiva
+        self.sess = None
+        self.radio_log = []           # quello che parte davvero in radio
+        self.out, self.out_data = [], []
         self.rx_sessions = {}
+        self.last_done = {}           # esito degli ultimi oggetti: se la notifica DONE si perde nell'interruzione, il RESUME la rida'
+        self.connected = True
         self.t = 0.0
-        self.stats = dict(bad_frames=0, dropped_out_of_order=0)
+        self.stats = dict(bad_frames=0, dropped=0, max_held=0, pulls=0, repulls=0, stalled_s=0.0, blocks_sent=0)
 
-    # -- memoria
-    def used(self):
-        return sum(len(s["buf"]) if s["state"] != "rx" else 0 for s in self.sessions.values())
+    # -- sessione
+    def _nblocks(self):
+        return (self.sess["h"]["size"] + BLOCK - 1) // BLOCK
+
+    def _span(self, k):
+        size = self.sess["h"]["size"]
+        return k * BLOCK, min(BLOCK, size - k * BLOCK)
+
+    def held(self):
+        if not self.sess:
+            return 0
+        return sum(len(v) for v in self.sess["cache"].values()) + sum(len(v) for v in self.sess["partial"].values())
+
+    def _notify(self, frame):
+        """Una notifica a telefono non collegato non esiste: si perde (l'esito resta in last_done e si rida' con RESUME)."""
+        if self.connected:
+            self.out.append(frame)
 
     def _err(self, obj, code):
-        self.out.append(enc_event(E_ERR, obj, code))
+        self._notify(enc_event(E_ERR, obj, code))
+
+    def _done(self, obj, status):
+        self.last_done[obj] = status
+        while len(self.last_done) > 4:
+            self.last_done.pop(next(iter(self.last_done)))
+        self._notify(enc_event(E_DONE, obj, status))
+
+    # -- collegamento BLE
+    def on_disconnect(self):
+        self.connected = False
+        if self.sess:
+            self.sess["partial"].clear()      # un blocco a meta' si butta: lo si richiede intero
+            self.sess["asked"].clear()
+
+    def on_connect(self):
+        self.connected = True
 
     # -- comandi
     def on_command(self, b):
@@ -188,9 +221,8 @@ class BleBridge:
                 raise BadFrame("vuoto")
             c = b[0]
             if c == C_HELLO:
-                self.out.append(enc_info(self.chip, self.rung_mask, self.buf_total, MAX_OBJECT, self.position is not None, self.call))
+                self._notify(enc_info(self.chip, self.rung_mask, BLOCK, MAX_OBJECT, self.position is not None, self.call))
             elif c == C_POSITION:
-                fm.unpack_pos(b[1:8])
                 if len(b) != 8:
                     raise BadFrame("posizione")
                 self.position = fm.unpack_pos(b[1:8])
@@ -217,114 +249,165 @@ class BleBridge:
             return self._err(obj, ERR_NO_POSITION)
         if h["size"] == 0 or h["size"] > MAX_OBJECT or (h["kind"] == KIND_TEXT and h["size"] > MAX_TEXT):
             return self._err(obj, ERR_TOO_BIG)
-        if obj in self.sessions:
+        if self.sess is not None:        # un oggetto alla volta
             return self._err(obj, ERR_BUSY)
-        if len(self.sessions) >= 1:      # un solo oggetto alla volta in RAM
-            return self._err(obj, ERR_BUSY)
-        if h["size"] > self.buf_total - self.used():
-            return self._err(obj, ERR_NO_MEMORY)
-        eta = pi.estimate_seconds(h["size"], self.rung, self.chip)
-        self.sessions[obj] = dict(h=h, buf=bytearray(), state="rx_phone", credit=min(h["size"], WINDOW), last=self.t, next_credit_at=0)
-        self.out.append(enc_event(E_BEGIN_OK, obj, self.sessions[obj]["credit"], int(eta + 0.5), self.rung))
+        dur = pi.estimate_seconds(h["size"], self.rung, self.chip)
+        n = (h["size"] + BLOCK - 1) // BLOCK
+        self.sess = dict(h=h, cache={}, partial={}, asked=set(), seq=list(range(n)), idx=0, in_block=0.0, dur=dur, sent={}, started=self.t, last_progress=self.t, pct=0,
+                         stall=0.0, retx_left=set(self.retx_plan & set(range(n))))
+        self._notify(enc_event(E_BEGIN_OK, obj, int(dur + 0.5), self.rung, BLOCK))
+        self._prefetch()
+
+    def _lookahead(self):
+        s = self.sess
+        out = []
+        for k in s["seq"][s["idx"]:s["idx"] + CACHE_BLOCKS]:
+            if k not in out:
+                out.append(k)
+        return out
+
+    def _prefetch(self):
+        """Richiede al telefono i blocchi che servono alla radio nei prossimi passi e butta quelli che non servono piu'."""
+        s = self.sess
+        if s is None:
+            return
+        want = self._lookahead()
+        for k in list(s["cache"]):
+            if k not in want:
+                del s["cache"][k]
+                s["asked"].discard(k)       # liberato: se serve di nuovo si richiede al telefono
+        for k in list(s["partial"]):
+            if k not in want:
+                del s["partial"][k]
+                s["asked"].discard(k)
+        if not self.connected:
+            return
+        for k in want:
+            if k not in s["cache"] and k not in s["asked"]:
+                off, ln = self._span(k)
+                s["asked"].add(k)
+                self.stats["pulls"] += 1
+                if k in s.get("served", set()):
+                    self.stats["repulls"] += 1
+                self._notify(enc_event(E_PULL, s["h"]["obj"], off, ln))
 
     def _cancel(self, obj):
-        s = self.sessions.pop(obj, None)
-        if s is None:
+        if not self.sess or self.sess["h"]["obj"] != obj:
             return self._err(obj, ERR_UNKNOWN_OBJ)
-        self.staged = [x for x in self.staged if x != obj]
-        if self.radio and self.radio["obj"] == obj:
-            self.radio = None
-        self.out.append(enc_event(E_DONE, obj, DONE_CANCELLED))
+        self.sess = None
+        self._done(obj, DONE_CANCELLED)
 
     def _resume(self, obj):
-        s = self.sessions.get(obj)
-        if s is None:
+        """Dopo una riconnessione: la scheda richiede di nuovo i blocchi che le servono (le richieste in volo si erano perse)."""
+        if obj in self.last_done and (not self.sess or self.sess["h"]["obj"] != obj):
+            return self._notify(enc_event(E_DONE, obj, self.last_done[obj]))
+        if not self.sess or self.sess["h"]["obj"] != obj:
             return self._err(obj, ERR_UNKNOWN_OBJ)
-        if s["state"] == "staged":      # i dati erano gia' tutti arrivati: la notifica si era persa nell'interruzione
-            if self.radio and self.radio["obj"] == obj:
-                r = self.radio
-                pct = min(99, int((self.t - r["start"]) / r["dur"] * 100))
-                return self.out.append(enc_event(E_PROGRESS, obj, pct, self.rung, int(r["dur"] * (100 - pct) / 100)))
-            return self.out.append(enc_event(E_STAGED, obj))
-        s["last"] = self.t
-        s["credit"] = min(s["h"]["size"] - len(s["buf"]), WINDOW)
-        self.out.append(enc_event(E_RESUME, obj, len(s["buf"]), s["credit"]))
+        self.sess["asked"].clear()
+        self.sess["stall"] = 0.0
+        self._prefetch()
 
     def _rx_ack(self, obj):
         self.rx_sessions.pop(obj, None)
 
-    # -- dati dal telefono (scrittura senza risposta)
+    # -- dati dal telefono (scrittura senza risposta): solo i blocchi richiesti, in ordine
     def on_data(self, b):
         try:
             obj, off, payload = dec_data(b)
         except BadFrame:
             self.stats["bad_frames"] += 1
             return
-        s = self.sessions.get(obj)
-        if s is None or s["state"] != "rx_phone":
+        s = self.sess
+        if s is None or s["h"]["obj"] != obj:
             return
-        if off != len(s["buf"]) or len(payload) > s["credit"]:
-            self.stats["dropped_out_of_order"] += 1     # fuori ordine o oltre il credito: si scarta, il telefono riparte da RESUME
+        k = off // BLOCK
+        if k not in s["asked"] or k in s["cache"] or k >= self._nblocks():
+            self.stats["dropped"] += 1
             return
-        s["buf"] += payload
-        s["credit"] -= len(payload)
-        s["last"] = self.t
-        h = s["h"]
-        if len(s["buf"]) == h["size"]:
-            if zlib.crc32(bytes(s["buf"])) & 0xFFFFFFFF != h["crc"]:
-                self.sessions.pop(obj)
-                return self._err(obj, ERR_CRC)
-            s["state"] = "staged"
-            self.staged.append(obj)
-            self.out.append(enc_event(E_STAGED, obj))
-        elif s["credit"] == 0:
-            s["credit"] = min(h["size"] - len(s["buf"]), WINDOW)
-            self.out.append(enc_event(E_CREDIT, obj, s["credit"], len(s["buf"])))
+        start, ln = self._span(k)
+        part = s["partial"].setdefault(k, bytearray())
+        if off != start + len(part) or len(part) + len(payload) > ln:
+            self.stats["dropped"] += 1
+            return
+        part += payload
+        if len(part) == ln:
+            s["cache"][k] = bytes(s["partial"].pop(k))
+            s.setdefault("served", set()).add(k)
+        self.stats["max_held"] = max(self.stats["max_held"], self.held())
 
-    # -- radio (modello)
+    # -- radio (modello): trasmette il blocco corrente quando ce l'ha; se manca, aspetta
     def tick(self, dt):
         self.t += dt
-        for obj, s in list(self.sessions.items()):     # sessione abbandonata dal telefono: si libera la RAM
-            if s["state"] == "rx_phone" and self.t - s["last"] > RESUME_TIMEOUT_S:
-                self.sessions.pop(obj)
-        if self.radio is None and self.staged:
-            obj = self.staged.pop(0)
-            s = self.sessions[obj]
-            dur = pi.estimate_seconds(s["h"]["size"], self.rung, self.chip)
-            self.radio = dict(obj=obj, start=self.t, dur=dur, last_pct=0, last_evt=self.t)
-        if self.radio:
-            r = self.radio
-            pct = min(100, int((self.t - r["start"]) / r["dur"] * 100))
-            if pct >= 100:
-                s = self.sessions.pop(r["obj"])
-                h = s["h"]
-                status = DONE_DELIVERED if self.radio_ok else DONE_FAILED
-                if self.radio_ok:
-                    self.radio_log.append(dict(obj=r["obj"], kind=h["kind"], data=bytes(s["buf"]), dest=h["dest"], name=h["name"], call=self.call, position=self.position, rung=self.rung))
-                self.out.append(enc_event(E_DONE, r["obj"], status))
-                self.radio = None
-            elif pct - r["last_pct"] >= 10 and self.t - r["last_evt"] >= 2.0:
-                r["last_pct"], r["last_evt"] = pct, self.t
-                self.out.append(enc_event(E_PROGRESS, r["obj"], pct, self.rung, int(r["dur"] * (100 - pct) / 100)))
+        s = self.sess
+        if s is None:
+            return
+        n = self._nblocks()
+        cur = s["seq"][s["idx"]] if s["idx"] < len(s["seq"]) else None
+        if cur is None:
+            return
+        if cur not in s["cache"]:
+            s["stall"] += dt
+            self.stats["stalled_s"] += dt
+            if s["stall"] > STALL_TIMEOUT_S:
+                obj = s["h"]["obj"]
+                self.sess = None
+                self._done(obj, DONE_FAILED)
+            return
+        s["stall"] = 0.0
+        _, ln = self._span(cur)
+        bt = s["dur"] * ln / s["h"]["size"]
+        s["in_block"] += dt
+        if s["in_block"] < bt:
+            return
+        s["in_block"] = 0.0
+        s["sent"].setdefault(cur, s["cache"][cur])
+        self.stats["blocks_sent"] += 1
+        s["idx"] += 1
+        if cur in s["retx_left"]:         # la mappa del ricevitore dira' che manca: lo si rimanda dopo due blocchi
+            s["retx_left"].discard(cur)
+            s["seq"].insert(min(s["idx"] + RETX_DELAY, len(s["seq"])), cur)
+        if s["idx"] >= len(s["seq"]):
+            obj, h = s["h"]["obj"], s["h"]
+            status = DONE_DELIVERED if self.radio_ok else DONE_FAILED
+            if self.radio_ok:
+                data = b"".join(s["sent"][k] for k in range(n))
+                self.radio_log.append(dict(obj=obj, kind=h["kind"], data=data, crc=h["crc"], dest=h["dest"], name=h["name"], call=self.call, position=self.position, rung=self.rung))
+            self.sess = None
+            self._done(obj, status)
+            return
+        done = sum(1 for k in range(n) if k in s["sent"])
+        pct = min(99, int(100 * done / n))
+        if pct - s["pct"] >= 10 and self.t - s["last_progress"] >= 2.0:
+            s["pct"], s["last_progress"] = pct, self.t
+            self._notify(enc_event(E_PROGRESS, s["h"]["obj"], pct, self.rung, int(s["dur"] * (100 - pct) / 100)))
+        self._prefetch()
 
     def radio_received(self, obj, kind, data, from_call):
-        """Un oggetto arrivato dalla radio: si offre al telefono (E_RX) e si manda a pezzi."""
+        """Un oggetto arrivato dalla radio: la scheda non lo conserva, quindi lo accetta solo con il telefono collegato; passa al telefono a pezzi. False = rifiutato."""
+        if not self.connected:
+            return False
         crc = zlib.crc32(data) & 0xFFFFFFFF
-        self.out.append(enc_rx(obj, kind, len(data), crc, from_call))
+        self._notify(enc_rx(obj, kind, len(data), crc, from_call))
         self.rx_sessions[obj] = data
         self.out_data.append((obj, bytes(data), 0))
+        return True
 
 
 # ------------------------------------------------------------------------------------------------------------------ il telefono
 class Phone:
+    """Il telefono tiene l'oggetto intero (e' lui il buffer) e risponde alle richieste E_PULL della scheda."""
+
     def __init__(self, link, bridge):
         self.link, self.b = link, bridge
         self.info = None
         self.tx = {}          # obj -> dict
+        self.pulls = []       # richieste da servire: (obj, offset, lunghezza, inviati)
         self.events = []
-        self.received = {}    # oggetti arrivati dalla scheda: obj -> dict
+        self.received = {}
         self.errors = []
         self.bytes_resent = 0
+        self.bad_events = 0
+        self.served = {}      # (obj, offset) -> quante volte e' stato servito
 
     def hello(self):
         self.link.to_node.append(("cmd", enc_hello()))
@@ -333,20 +416,18 @@ class Phone:
         self.link.to_node.append(("cmd", enc_position(pos)))
 
     def send(self, obj, kind, data, dest, name="", **kw):
-        self.tx[obj] = dict(data=bytes(data), sent=0, credit=0, state="begin", eta=None, done=None)
+        self.tx[obj] = dict(data=bytes(data), state="begin", eta=None, done=None, rung=None)
         self.link.to_node.append(("cmd", enc_begin(obj, kind, data, dest, name, **kw)))
 
     def cancel(self, obj):
         self.link.to_node.append(("cmd", enc_obj_cmd(C_CANCEL, obj)))
 
     def reconnect(self):
-        """Dopo un'interruzione si chiede alla scheda a che punto e' ogni oggetto in invio."""
+        """Dopo un'interruzione le richieste in coda e in volo sono perse: si rilegge lo stato con RESUME e la scheda richiede quello che le serve."""
+        self.pulls.clear()
         for obj, t in self.tx.items():
-            if t["state"] in ("sending", "begin", "staged"):
-                t["credit"] = 0
+            if t["state"] in ("begin", "sending"):
                 self.link.to_node.append(("cmd", enc_obj_cmd(C_RESUME, obj)))
-
-    bad_events = 0
 
     def on_event(self, b):
         try:
@@ -372,14 +453,14 @@ class Phone:
         elif t is None:
             return
         elif code == E_BEGIN_OK:
-            t["credit"], t["eta"], t["rung"], t["state"] = f[0], f[1], f[2], "sending"
-        elif code == E_CREDIT:
-            t["credit"] = f[0]
-        elif code == E_RESUME:
-            self.bytes_resent += max(0, t["sent"] - f[0])
-            t["sent"], t["credit"], t["state"] = f[0], f[1], "sending"
-        elif code == E_STAGED:
-            t["state"] = "staged"
+            t["eta"], t["rung"], t["state"] = f[0], f[1], "sending"
+        elif code == E_PULL:
+            if f[0] + f[1] > len(t["data"]) or f[1] == 0:
+                raise BadFrame("richiesta fuori dall'oggetto")
+            self.served[(obj, f[0])] = self.served.get((obj, f[0]), 0) + 1
+            if self.served[(obj, f[0])] > 1:
+                self.bytes_resent += f[1]
+            self.pulls.append([obj, f[0], f[1], 0])
         elif code == E_DONE:
             t["state"], t["done"] = "done", f[0]
 
@@ -398,13 +479,16 @@ class Phone:
 
     def pump(self, max_pkts):
         n = 0
-        for obj, t in self.tx.items():
-            while t["state"] == "sending" and t["credit"] > 0 and t["sent"] < len(t["data"]) and n < max_pkts:
-                size = min(self.link.att_payload - DATA_HDR, t["credit"], len(t["data"]) - t["sent"])
-                self.link.to_node.append(("data", enc_data(obj, t["sent"], t["data"][t["sent"]:t["sent"] + size])))
-                t["sent"] += size
-                t["credit"] -= size
-                n += 1
+        while self.pulls and n < max_pkts:
+            p = self.pulls[0]
+            obj, off, ln, sent = p
+            data = self.tx[obj]["data"]
+            size = min(self.link.att_payload - DATA_HDR, ln - sent)
+            self.link.to_node.append(("data", enc_data(obj, off + sent, data[off + sent:off + sent + size])))
+            p[3] += size
+            n += 1
+            if p[3] >= ln:
+                self.pulls.pop(0)
 
 
 # ------------------------------------------------------------------------------------------------------------------ esecuzione
@@ -417,16 +501,19 @@ def run(link, bridge, phone, seconds, drops=(), hook=None):
         if pending and t >= pending[0][0] and link.up:
             link.drop()
             bridge.out.clear()      # le notifiche non consegnate si perdono con il collegamento
+            bridge.on_disconnect()
+            phone.pulls.clear()
             down_until = pending[0][1]
             pending.pop(0)
         if not link.up and down_until is not None and t >= down_until:
             link.restore()
             down_until = None
+            bridge.on_connect()
             phone.reconnect()
         if link.up:
             if hook:
                 hook(t, phone, bridge)
-            for _ in range(link.ppe):
+            for _ in range(link.ppe):      # la scheda legge quello che il telefono ha scritto al passo precedente: in un'interruzione il volo si perde
                 if link.to_node:
                     ch, b = link.to_node.pop(0)
                     (bridge.on_command if ch == "cmd" else bridge.on_data)(b)
@@ -454,4 +541,4 @@ if __name__ == "__main__":
     p.hello()
     p.send(1, KIND_FILE, bytes(range(256)) * 40, "IK5XYZ", "prova.bin")
     run(l, b, p, 60)
-    print(p.tx[1]["state"], p.tx[1]["eta"], len(b.radio_log))
+    print(p.tx[1]["state"], p.tx[1]["eta"], len(b.radio_log), b.stats)
