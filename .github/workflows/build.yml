@@ -29,7 +29,7 @@ jobs:
         run: make -C firmware/misura test
       - name: Simulatore del protocollo immagini
         run: python3 tests/sim/test_sim_immagini.py
-      - name: Simulatore immagini: stesso risultato dopo la separazione in mittente, ricevitore e collegamento
+      - name: "Simulatore immagini, stesso risultato dopo la separazione in mittente, ricevitore e collegamento"
         run: python3 tests/sim/test_golden_sim_immagini.py
       - name: Simulatore mesh
         run: python3 tests/sim/test_sim_mesh.py
