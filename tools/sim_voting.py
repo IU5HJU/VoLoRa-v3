@@ -138,6 +138,33 @@ def run_nodo_muto(dist_km, strategia, scenari=3000, seed=1, extra_mobile=25.0, e
             "solo_b": solo_b / n if n else float("nan"), "ritardo_in_piu_s": statistics.mean(extra_delay) if extra_delay else 0.0}
 
 
+def run_due_muti(dist_km, span_s, base_s=T_MUTO, scenari=3000, seed=1, extra_mobile=25.0, extra_nodi=10.0):
+    """Due nodi a scheda singola (nessuno vota). Ognuno aspetta base_s e poi un ritardo per qualita' su span_s (il migliore parte per primo), ascoltando in RF.
+    Ritorna il doppio accesso nella zona di sovrapposizione, il ritardo medio di chi parte per primo rispetto a base_s e la quota di casi in cui i nodi non si sentono."""
+    rng = random.Random(seed)
+    sens = pi.sensitivity_dbm(RUNG)
+    both = doppi = hid = 0
+    primi = []
+    for _ in range(scenari):
+        x, y = rng.uniform(0.0, dist_km), rng.uniform(-0.3 * dist_km, 0.3 * dist_km)
+        d1, d2 = math.hypot(x, y), math.hypot(dist_km - x, y)
+        pa, pb = _prx(rng, d1, extra_mobile), _prx(rng, d2, extra_mobile)
+        if pa < sens or pb < sens:
+            continue
+        both += 1
+        hear = _prx(rng, dist_km, extra_nodi, sigma=4.0) >= sens
+        hid += 0 if hear else 1
+        dl = []
+        for p in (pa, pb):
+            m = p + rng.gauss(0.0, MEAS_SIGMA) - sens
+            dl.append(base_s + span_s * (1.0 - min(1.0, max(0.0, m / SPAN_DB))))
+        tx = elezione(dl, [[True, hear], [hear, True]], "rf")
+        doppi += 1 if len(tx) > 1 else 0
+        primi.append(min(dl) - base_s)
+    return {"sovrapposti": both, "doppio_accesso": doppi / both if both else float("nan"), "nascosti": hid / both if both else float("nan"),
+            "ritardo_primo_s": statistics.mean(primi) if primi else float("nan")}
+
+
 GUARD_VOTO = 0.010     # s fra uno slot di voto e il successivo
 VOTE_BYTES = 12        # frame_mesh.enc_vote
 
@@ -272,6 +299,12 @@ def main():
         r2 = run_nodo_muto(dk, "attesa", a.scenari, a.seed)
         r3 = run_nodo_muto(dk, "time_sharing", a.scenari, a.seed)
         print(f"| {dk:g} km | {100 * r1['doppio_accesso']:.0f} % | {100 * r2['doppio_accesso']:.0f} % | {100 * r3['doppio_accesso']:.1f} % | {100 * r2['solo_b']:.0f} % dei casi | {1000 * r2['ritardo_in_piu_s']:.0f} ms |")
+    print("\nDue nodi a scheda singola (nessuno vota): doppio accesso nella sovrapposizione, secondo l'ampiezza del ritardo per qualita' (dopo 300 ms fissi):")
+    print("| ampiezza | 10 km | 20 km | 30 km | ritardo in piu' di chi parte per primo |")
+    print("|---|---|---|---|---|")
+    for sp in (0.2, 0.4, 0.8, 1.6):
+        rs = [run_due_muti(dk, sp, scenari=a.scenari, seed=a.seed) for dk in (10.0, 20.0, 30.0)]
+        print(f"| {sp * 1000:.0f} ms | " + " | ".join(f"{100 * r['doppio_accesso']:.1f} %" for r in rs) + f" | {1000 * rs[1]['ritardo_primo_s']:.0f} ms |")
     print("\nCambi di nodo lungo un percorso fra i due (media per prova):")
     for h in (0.0, 3.0, 6.0):
         print(f"  isteresi {h:g} dB: {run_percorso(h, dist_km=a.distanza, seed=a.seed):.1f}")

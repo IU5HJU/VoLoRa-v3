@@ -147,6 +147,18 @@ Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio ac
 
 **Cosa resta vero:** se i due nodi non si sentono nemmeno sulla frequenza principale, il muto non ha modo di sapere che l'altro ha già ritrasmesso (Internet non è un mezzo affidabile): **doppio accesso sicuro**; la zona di sovrapposizione fra un nodo muto e uno che vota va evitata, o i due nodi devono potersi sentire in RF.
 
+### Il nodo a scheda singola è la situazione di partenza (decisioni del 26/11/2026)
+I radioamatori che si affacciano al progetto installeranno probabilmente il firmware su **una scheda già usata per altro**: il nodo a **scheda singola** è quindi il caso di partenza, non l'eccezione. Regole decise dall'autore (codice in [`tools/nodo_semplice.py`](../tools/nodo_semplice.py), provato in `tests/sim/test_nodo_semplice.py`):
+
+1. **Con Internet:** il nodo **manda la voce in rete e usa l'infrastruttura della v2** (reflector, senza modificarla). Non ritrasmette in RF, quindi non entra nell'elezione; la rete riconosce le copie (stessa sessione e stesso nominativo, come già fa la v2). Internet è solo un aiuto: se manca, il nodo funziona lo stesso (punto 2).
+2. **Senza Internet: "pappagallo".** Il nodo **memorizza il messaggio vocale** (RAM o microSD: circa 9 kB al minuto a 1200 bps, 24 kB a 3200) e lo **ripete a fine trasmissione**. Si ferma a 60 s continui di voce, come il ripetitore v2.
+3. **Prima di ripetere in RF** aspetta **300 ms fissi** più un **ritardo per qualità su 400 ms** (il segnale migliore parte per primo) e ascolta: se sente partire un altro nodo (pacchetto `RELAYED` o suo frame), **non ripete**. Fra due nodi a scheda singola il doppio accesso è circa 4-5 % se si sentono ([tabella sopra](#4b-un-nodo-senza-canale-di-voto-scheda-singola): 4,6 % a 20 km con 400 ms).
+4. **Nodo solitario:** se negli ultimi **30 minuti** non ha sentito altri nodi (né il frame NODO né pacchetti `RELAYED`) **non aspetta**. Nella zona con un nodo solo non c'è costo.
+5. **Ogni nodo manda il frame NODO** sul canale di incontro (433,700 MHz), anche i nodi a scheda singola (con `caps = 0`), così i vicini sanno che esiste.
+6. **Salire di livello:** una seconda scheda con la radio del voto (canale a 2 m con una sola antenna e duplexer, oppure a 70 cm con due antenne) trasforma il nodo in votante: vince nelle sovrapposizioni.
+
+Cosa non fa un nodo a scheda singola: **ripetere la voce dal vivo in RF** (una radio sola non riceve mentre trasmette; il ripetitore v2 usa due schede per questo). Fa tutto il resto: beacon, polling, immagini, testo, messaggi vocali e membro del gruppo di ripetitori.
+
 ## 5. Cose da decidere o studiare
 1. ~~Ritardo massimo~~ **Deciso il 23/11/2026: 200 ms** (compensati dal loop del microfono della v2). Resta la scala in dB (20 dB nel modello).
 2. ~~Canale per l'annuncio~~ **Deciso il 23/11/2026: via radio**, mai da Internet. **Deciso il 25/11/2026: frequenza dedicata nella banda 430-440 MHz**, una per zona, concordata fra chi installa i nodi, con gradino veloce (R3-R7) e antenne in alto. **Deciso il 26/11/2026: 144,900 MHz in banda 2 m, fisso** (corregge 433,850 MHz: un nodo con due radio richiedeva due antenne; poi corregge 144,850 MHz, canale dei gateway voce digitale; vedi sopra). **Radio di servizio deciso il 26/11/2026: la scheda di trasmissione del nodo** (a riposo fino alla ritrasmissione); da verificare sul ripetitore a due schede.
