@@ -25,6 +25,10 @@ V3_MAGIC = b"V3"
 REVISION = 1
 CAP_FRAMES, CAP_DIRECTORY = 1, 2           # il client vuole i frame V3; il client manda gli annunci
 DIR_LIFE_S = 600
+# Limiti per client V3 (deciso il 26/11/2026; valori di PARTENZA da fissare con le prove): stessi della patch C++ (reflector/v3.patch)
+RATE_WINDOW_MS, MAX_INOLTRO_PER_WINDOW, MAX_ANNUNCIO_PER_WINDOW = 60000, 1200, 12
+BYTE_WINDOW_MS, MAX_BYTES_PER_WINDOW = 600000, 262144
+MAX_OBJECT_BYTES, INNER_OFFER = 65536, 0x35
 
 
 def parse_v2(p):
@@ -67,6 +71,7 @@ class Client:
         self.caps = 0
         self.packets_in = self.packets_out = 0
         self.directory = {}          # nominativo -> istante (ms) in cui il gateway lo ha sentito
+        self.lim = dict(started=False, rate_start=0, inoltro=0, annuncio=0, byte_start=0, bytes=0)
 
 
 class ReflectorCore:
@@ -78,7 +83,7 @@ class ReflectorCore:
         self.talk_session = 0
         self.talk_last = 0
         self.stats = dict(datagrams=0, unknown_client=0, bad_signature=0, replays=0, voice_forwarded=0, text_forwarded=0, voice_blocked=0, bad_mode=0, bad_packet=0, talks=0,
-                          v3_forwarded=0, v3_refused=0, v3_announces=0)
+                          v3_forwarded=0, v3_refused=0, v3_announces=0, v3_rate_limited=0, v3_too_big=0)
 
     # --- client
     def add_client(self, cid, key, name="", callsign=""):
@@ -188,6 +193,36 @@ class ReflectorCore:
         return out
 
     # --- V3
+    @staticmethod
+    def _allow(c, inoltro, nbytes, now):
+        """Limiti di velocita' e di byte per client V3: True = si puo' procedere."""
+        l = c.lim
+        if not l["started"]:
+            l.update(started=True, rate_start=now, byte_start=now)
+        if now - l["rate_start"] >= RATE_WINDOW_MS:
+            l.update(rate_start=now, inoltro=0, annuncio=0)
+        if now - l["byte_start"] >= BYTE_WINDOW_MS:
+            l.update(byte_start=now, bytes=0)
+        if inoltro:
+            if l["inoltro"] >= MAX_INOLTRO_PER_WINDOW or l["bytes"] + nbytes > MAX_BYTES_PER_WINDOW:
+                return False
+            l["inoltro"] += 1
+            l["bytes"] += nbytes
+        else:
+            if l["annuncio"] >= MAX_ANNUNCIO_PER_WINDOW:
+                return False
+            l["annuncio"] += 1
+        return True
+
+    @staticmethod
+    def _offer_too_big(inner):
+        """Un OFFER del protocollo immagini dentro la busta: intestazione 4, nominativo (1 + N), tipo (1), dimensione (3). Oltre il tetto non passa, come in radio."""
+        if len(inner) >= 6 and inner[0] == INNER_OFFER:
+            sz = 5 + inner[4] + 1
+            if len(inner) >= sz + 3:
+                return int.from_bytes(inner[sz:sz + 3], "big") > MAX_OBJECT_BYTES
+        return False
+
     def _on_v3(self, c, pkt, now):
         if not c.v3:
             self.stats["v3_refused"] += 1            # un client v2 non puo' inserire frame V3
@@ -197,11 +232,20 @@ class ReflectorCore:
             self.stats["v3_refused"] += 1
             return []
         if d["nome"] == "REFL_ANNUNCIO":
+            if not self._allow(c, False, len(pkt), now):
+                self.stats["v3_rate_limited"] += 1
+                return []
             self.stats["v3_announces"] += 1
             c.directory = {call: now - age * 1000 for call, age in d["entries"]}
             return []
         # INOLTRO: al gateway che ha sentito la destinazione piu' di recente; l'esito al mittente
         dest = d["dest"]
+        if not self._allow(c, True, len(pkt), now):
+            self.stats["v3_rate_limited"] += 1
+            return [(c.endpoint, c.link.make_packet(fm.enc_refl_esito(dest, fm.ESITO_RIFIUTATO)))]
+        if self._offer_too_big(d["inner"]):
+            self.stats["v3_too_big"] += 1
+            return [(c.endpoint, c.link.make_packet(fm.enc_refl_esito(dest, fm.ESITO_RIFIUTATO)))]
         best = None
         for o in self.clients.values():
             if o.id == c.id or not o.v3 or o.endpoint is None or not o.link.link_up(now):

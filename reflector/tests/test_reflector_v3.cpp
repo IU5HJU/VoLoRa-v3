@@ -247,6 +247,93 @@ static void testMalformedFrames() {
   CHECK(r.core.stats().v3Announces == 0 && r.core.stats().v3Forwarded == 0);
 }
 
+
+// Limiti per client V3 (26/11/2026): velocita' di buste e annunci, byte inoltrati, tetto di un oggetto
+static Bytes offerFrame(uint32_t size) {      // OFFER del protocollo immagini: 0x35, sessione (2), flag (1), nominativo (1 + N), tipo (1), dimensione (3)
+  return Bytes{0x35, 0, 1, 0, 6, 'I', 'U', '5', 'H', 'J', 'U', 0, static_cast<uint8_t>(size >> 16), static_cast<uint8_t>(size >> 8), static_cast<uint8_t>(size)};
+}
+
+static bool hasEsito(const std::vector<Bytes>& v, const uint8_t* dest, uint8_t code) {
+  for (const Bytes& p : v)
+    if (isEsito(p, dest, code)) return true;
+  return false;
+}
+
+static void testRateLimits() {
+  Rig r;
+  r.add(4, true);
+  Client& g1 = *r.cl[0];
+  Client& g2 = r.add(5, true);
+  r.run(8000);
+  r.send(g1, annuncio({{kA, 10}}));
+  const Bytes inner = {0x3E, 1};
+  for (uint32_t i = 0; i < kV3MaxInoltroPerWindow; i++) r.send(g2, inoltro(kA, 3, inner));
+  CHECK(r.core.stats().v3Forwarded == kV3MaxInoltroPerWindow && r.core.stats().v3RateLimited == 0);
+  g2.raw.clear();
+  r.send(g2, inoltro(kA, 3, inner));
+  CHECK(r.core.stats().v3Forwarded == kV3MaxInoltroPerWindow && r.core.stats().v3RateLimited == 1 && hasEsito(g2.raw, kA, kV3EsitoRifiutato));   // la 1201 e' rifiutata e il mittente lo sa
+  r.send(g1, inoltro(kB, 3, inner));                    // un altro client ha il suo conteggio
+  CHECK(r.core.stats().v3RateLimited == 1);
+  r.run(kV3RateWindowMs + 1000, 1000);
+  g2.raw.clear();
+  r.send(g2, inoltro(kA, 3, inner));
+  CHECK(r.core.stats().v3Forwarded == kV3MaxInoltroPerWindow + 1 && hasEsito(g2.raw, kA, kV3EsitoConsegnato));   // finita la finestra si riparte
+}
+
+static void testByteBudget() {
+  Rig r;
+  Client& g1 = r.add(4, true);
+  Client& g2 = r.add(5, true);
+  r.run(8000);
+  r.send(g1, annuncio({{kA, 10}}));
+  const Bytes big(220, 0x3E);                                  // frame da 235 byte: il tetto di byte arriva prima del tetto di buste
+  const uint32_t expected = kV3MaxBytesPerWindow / 235;
+  for (uint32_t i = 0; i < expected + 5; i++) r.send(g2, inoltro(kA, 3, big));
+  CHECK(r.core.stats().v3Forwarded == expected && r.core.stats().v3RateLimited == 5);
+  CHECK(expected < kV3MaxInoltroPerWindow);
+  r.run(kV3ByteWindowMs + 1000, 1000);                         // finita la finestra dei byte si riparte
+  r.send(g1, annuncio({{kA, 10}}));                            // la rubrica dura 10 minuti, come la finestra: si rinnova
+  const uint32_t before = r.core.stats().v3Forwarded;
+  r.send(g2, inoltro(kA, 3, big));
+  CHECK(r.core.stats().v3Forwarded == before + 1);
+}
+
+static void testAnnounceRate() {
+  Rig r;
+  Client& g1 = r.add(4, true);
+  Client& g2 = r.add(5, true);
+  r.run(8000);
+  for (uint32_t i = 0; i < kV3MaxAnnuncioPerWindow; i++) r.send(g1, annuncio({{kA, 10}}));
+  CHECK(r.core.stats().v3Announces == kV3MaxAnnuncioPerWindow);
+  r.send(g1, annuncio({{kB, 10}}));                            // il tredicesimo e' scartato: la rubrica resta quella di prima
+  CHECK(r.core.stats().v3Announces == kV3MaxAnnuncioPerWindow && r.core.stats().v3RateLimited == 1);
+  g2.raw.clear();
+  r.send(g2, inoltro(kB, 3, Bytes{0x3E, 1}));
+  CHECK(hasEsito(g2.raw, kB, kV3EsitoNonTrovato));
+}
+
+static void testObjectCap() {
+  Rig r;
+  Client& g1 = r.add(4, true);
+  Client& g2 = r.add(5, true);
+  r.run(8000);
+  r.send(g1, annuncio({{kA, 10}}));
+  g2.raw.clear();
+  r.send(g2, inoltro(kA, 3, offerFrame(kV3MaxObjectBytes)));    // 64 kB: passa
+  CHECK(r.core.stats().v3Forwarded == 1 && r.core.stats().v3TooBig == 0 && hasEsito(g2.raw, kA, kV3EsitoConsegnato));
+  g2.raw.clear();
+  r.send(g2, inoltro(kA, 3, offerFrame(kV3MaxObjectBytes + 1)));  // 64 kB + 1: rifiutato come in radio
+  CHECK(r.core.stats().v3Forwarded == 1 && r.core.stats().v3TooBig == 1 && hasEsito(g2.raw, kA, kV3EsitoRifiutato));
+  r.send(g2, inoltro(kA, 3, offerFrame(16000000)));
+  CHECK(r.core.stats().v3TooBig == 2);
+  const Bytes data = {0x34, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF};  // un DATA (non e' un OFFER): non si interpreta
+  r.send(g2, inoltro(kA, 3, data));
+  CHECK(r.core.stats().v3TooBig == 2 && r.core.stats().v3Forwarded == 2);
+  const Bytes shortOffer = {0x35, 0, 1, 0, 9};                // OFFER troncato: non si legge fuori dal frame
+  r.send(g2, inoltro(kA, 3, shortOffer));
+  CHECK(r.core.stats().v3TooBig == 2 && r.core.stats().v3Forwarded == 3);
+}
+
 int main() {
   testDeclaration();
   testV2ClientCannotInject();
@@ -255,5 +342,9 @@ int main() {
   testAnnouncementWithOldAge();
   testKeyChangeResetsV3();
   testMalformedFrames();
+  testRateLimits();
+  testByteBudget();
+  testAnnounceRate();
+  testObjectCap();
   TEST_MAIN_END();
 }

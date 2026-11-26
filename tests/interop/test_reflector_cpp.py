@@ -144,6 +144,15 @@ try:
     flags = {c["id"]: c.get("v3") for c in st["clients"]}
     check(flags.get(4) is True and flags.get(5) is True and flags.get(6) is False, f"la pagina di amministrazione segna V3 solo sui nodi V3 {flags}")
     check(st["stats"]["v3Forwarded"] == 1 and st["stats"]["v3Announces"] >= 1 and st["stats"]["v3Refused"] >= 1, f"contatori V3 nello stato: {st['stats']}")
+    import sim_immagini as si
+    cl[5].got.clear()
+    cl[5].send(fm.enc_refl_inoltro(ANA, "IU5HJU", 3, si.enc_offer(0x1234, "IU5HJU", 0, 65537, 16, 4097, 160, 120, [200], 0)))
+    run(1)
+    check(any(len(g) == 9 and g[1] == 82 and g[8] == fm.ESITO_RIFIUTATO for g in cl[5].got), "OFFER oltre i 64 kB: il reflector C++ risponde RIFIUTATO")
+    cl[5].send(fm.enc_refl_inoltro(ANA, "IU5HJU", 3, si.enc_offer(0x1234, "IU5HJU", 0, 65536, 16, 4096, 160, 120, [200], 0)))
+    run(1)
+    st2 = json.loads(urllib.request.urlopen(rq, timeout=5).read())
+    check(st2["stats"]["v3TooBig"] == 1 and st2["stats"]["v3Forwarded"] == 2 and st2["stats"]["v3RateLimited"] == 0, f"contatori dei limiti nello stato: {st2['stats']}")
     html = urllib.request.urlopen(f"http://127.0.0.1:{port + 1}/", timeout=5).read().decode()
     check("<th" in html and ">V3</th>" in html and "c.v3" in html, "la pagina ha la colonna V3")
     p.terminate()

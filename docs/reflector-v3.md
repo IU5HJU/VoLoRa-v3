@@ -78,7 +78,7 @@ Una chiave **per client** (si può togliere un client senza toccare gli altri); 
 ## 8. Non fatto, e da decidere
 - **Server di produzione:** deciso il C++ con patch sulla v2 (punto 7); la patch è scritta e provata sul PC (punto 9). Il Python resta riferimento di prova. Manca una prova su un server vero con nodi veri.
 - **Pagine di amministrazione e pubblica** (chi è collegato, chi parla): non portate; vanno uguali alla v2, con in più una colonna "V3" e la rubrica. Quella pubblica non mostra indirizzi, chiavi, id.
-- ~~**Limiti di velocità** per client e di dimensione dei trasferimenti V3~~ **Deciso il 26/11/2026:** limite di buste al minuto per client V3 e **tetto di 64 kB per oggetto**, come la radio. Da scrivere nella patch C++ (valori da fissare con le prove).
+- ~~**Limiti di velocità** per client e di dimensione dei trasferimenti V3~~ **Deciso e scritto il 26/11/2026** (punto 10), valori di partenza da fissare con le prove.
 - **Più modi voce insieme** (oggi un reflector inoltra un solo modo voce: limite della v2 tenuto per compatibilità).
 - ~~**Stanze**~~ **Deciso il 26/11/2026: non ora.** Si resta con il canale 0, come la v2.
 - **Collegamento con reflector esterni** (SvxLink, YSF, DMR): resta quello che dice lo studio della v2.
@@ -91,3 +91,17 @@ Una chiave **per client** (si può togliere un client senza toccare gli altri); 
 - **Provato sul PC:** le prove della v2 sui moduli patchati restano identiche (79 e 67 controlli); 26 controlli nuovi in `reflector/tests/test_reflector_v3.cpp`; `tests/interop/test_reflector_cpp.py` con due veri `vlnode` v2 (testo, voce RELAYED, nessuna firma errata) e client V3 su socket UDP veri (annuncio, busta, esito consegnato e non trovato, client v2 escluso).
 - **Nota:** il reflector comunica la sua dichiarazione V3 nel KEEPALIVE successivo (fino a 20 s); i frame V3 non la aspettano, perché il reflector riconosce già il client dal suo HELLO.
 - **Non provato:** nessuna scheda vera; nessun server in esercizio; la colonna V3 è provata sullo stato JSON e sul testo della pagina, non in un browser.
+
+## 10. Limiti per client V3 (26/11/2026)
+Scritti nella patch C++ (`reflector/v3.patch`) e nel riferimento in Python (`tools/reflector_v3.py`), con gli **stessi valori**. Provati sul PC; **i valori sono di partenza**, da fissare con le prove su un server vero.
+
+| Limite | Valore di partenza | Cosa succede oltre |
+|---|---|---|
+| Buste (`REFL_INOLTRO`) per client | **1200 al minuto** (20 al secondo: sopra il massimo della radio, un frame da 255 byte a R3 dura 58 ms) | la busta non viene inoltrata; il mittente riceve `REFL_ESITO` **RIFIUTATO** |
+| Annunci della rubrica per client | **12 al minuto** (uno ogni 5 s) | l'annuncio è scartato, la rubrica resta quella di prima |
+| Byte inoltrati per client | **256 kB ogni 10 minuti** (rete di sicurezza se manca l'OFFER) | come le buste: RIFIUTATO |
+| Oggetto dentro la busta | **64 kB**, come la radio e il ponte telefono-scheda | un frame OFFER del protocollo immagini con dimensione maggiore è rifiutato (**RIFIUTATO**) |
+
+I conteggi sono **per client** e a **finestra fissa** (un minuto per le buste e gli annunci, 10 minuti per i byte): chi supera il limite non influenza gli altri. Cambiare la chiave di un client azzera i suoi contatori. Lo stato JSON della pagina di amministrazione e la riga di fine servizio riportano `v3RateLimited` e `v3TooBig`.
+
+**Limite del controllo del tetto:** il reflector legge solo il frame OFFER (dimensione a 24 bit); un oggetto che dichiara una dimensione piccola e poi manda più pezzi del dichiarato non è fermato dal tetto per oggetto, ma dal tetto di byte per client. Il controllo completo, che ricorda la dimensione di ogni oggetto, non è scritto.

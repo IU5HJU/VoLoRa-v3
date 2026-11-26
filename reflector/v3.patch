@@ -73,18 +73,19 @@ diff -u -r a/lib/voicecore/node_link.h b/lib/voicecore/node_link.h
    uint32_t peerLastCounter_ = 0;
 diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
 --- a/lib/voicecore/reflector_core.cpp	2026-11-26 12:55:59.938327710 +0000
-+++ b/lib/voicecore/reflector_core.cpp	2026-11-26 12:56:29.180707553 +0000
-@@ -76,6 +76,9 @@
++++ b/lib/voicecore/reflector_core.cpp	2026-11-26 18:52:52.531922594 +0000
+@@ -76,6 +76,10 @@
    memcpy(cfg.key, key, kNodeKeyBytes);
    c->link.reset(new NodeLink(cfg, boot_ + id + 0x1000, rng_));  // un collegamento nuovo: chi ha la chiave vecchia non e' piu' accettato
    c->haveEndpoint = false;
 +  c->v3 = false;
 +  c->v3Caps = 0;
 +  c->dir.clear();
++  c->lim = Client::V3Limit();
    if (c->wasUp) {
      c->wasUp = false;
      say(std::string("client ") + c->name + " scollegato (chiave cambiata)");
-@@ -151,6 +154,7 @@
+@@ -151,6 +155,7 @@
      c->haveEndpoint = true;
      c->endpoint = from;
      c->lastSeenMs = nowMs;
@@ -92,7 +93,7 @@ diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
    }
    const bool up = c->link->linkUp(nowMs);
    if (up != c->wasUp) {
-@@ -160,6 +164,10 @@
+@@ -160,6 +165,10 @@
  
    if (rx.kind != NodeLink::Kind::Packet) return;
    c->packetsIn++;
@@ -103,7 +104,7 @@ diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
    Packet p;
    if (!decodePacket(rx.packet, rx.packetLen, p)) {
      stats_.badPacket++;
-@@ -232,6 +240,102 @@
+@@ -232,6 +241,151 @@
    }
  }
  
@@ -134,6 +135,32 @@ diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
 +  if (k && to.haveEndpoint) net_.send(to.endpoint, out, k);
 +}
 +
++// Limiti di velocita' e di byte per client V3. true = si puo' procedere.
++bool ReflectorCore::v3Allow(Client& c, bool inoltro, size_t bytes, uint32_t nowMs) {
++  auto& l = c.lim;
++  if (!l.started) {
++    l.started = true;
++    l.rateStart = l.byteStart = nowMs;
++  }
++  if (nowMs - l.rateStart >= kV3RateWindowMs) {
++    l.rateStart = nowMs;
++    l.inoltro = l.annuncio = 0;
++  }
++  if (nowMs - l.byteStart >= kV3ByteWindowMs) {
++    l.byteStart = nowMs;
++    l.bytes = 0;
++  }
++  if (inoltro) {
++    if (l.inoltro >= kV3MaxInoltroPerWindow || l.bytes + bytes > kV3MaxBytesPerWindow) return false;
++    l.inoltro++;
++    l.bytes += static_cast<uint32_t>(bytes);
++  } else {
++    if (l.annuncio >= kV3MaxAnnuncioPerWindow) return false;
++    l.annuncio++;
++  }
++  return true;
++}
++
 +void ReflectorCore::onV3(Client& c, const uint8_t* d, size_t n, uint32_t nowMs) {
 +  if (!c.v3 || n < 2 || d[0] != kV3FrameByte0) {  // un client v2 non puo' inserire frame V3; gli altri frame V3 non sono del reflector
 +    stats_.v3Refused++;
@@ -149,6 +176,10 @@ diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
 +    const size_t count = d[2];
 +    if (count > kV3MaxDirectory || n < 3 + 8 * count) {
 +      stats_.v3Refused++;
++      return;
++    }
++    if (!v3Allow(c, false, n, nowMs)) {
++      stats_.v3RateLimited++;
 +      return;
 +    }
 +    c.dir.clear();
@@ -170,6 +201,25 @@ diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
 +    }
 +    const uint8_t* dest = d + 2;
 +    const uint8_t ttl = d[2 + 2 * kV3CallBytes];
++    if (!v3Allow(c, true, n, nowMs)) {
++      stats_.v3RateLimited++;
++      sendEsito(c, dest, kV3EsitoRifiutato);
++      return;
++    }
++    // un OFFER con un oggetto oltre il tetto non passa (come la radio): hdr 4, nominativo (1 + N), tipo oggetto (1), dimensione (3)
++    const uint8_t* inner = d + 3 + 2 * kV3CallBytes;
++    const size_t innerLen = n - (3 + 2 * kV3CallBytes);
++    if (innerLen >= 6 && inner[0] == kV3InnerOffer) {
++      const size_t sz = 5 + static_cast<size_t>(inner[4]) + 1;
++      if (innerLen >= sz + 3) {
++        const uint32_t objSize = (static_cast<uint32_t>(inner[sz]) << 16) | (static_cast<uint32_t>(inner[sz + 1]) << 8) | inner[sz + 2];
++        if (objSize > kV3MaxObjectBytes) {
++          stats_.v3TooBig++;
++          sendEsito(c, dest, kV3EsitoRifiutato);
++          return;
++        }
++      }
++    }
 +    Client* best = nullptr;
 +    int64_t bestSeen = 0;
 +    for (auto& o : clients_) {
@@ -206,7 +256,7 @@ diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
  void ReflectorCore::tick(uint32_t nowMs) {
    for (auto& c : clients_) {
      if (!c->haveEndpoint) continue;
-@@ -271,6 +375,8 @@
+@@ -271,6 +425,8 @@
      i.lastSeenMs = c->lastSeenMs;
      i.packetsIn = c->packetsIn;
      i.packetsOut = c->packetsOut;
@@ -217,8 +267,8 @@ diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
    }
 diff -u -r a/lib/voicecore/reflector_core.h b/lib/voicecore/reflector_core.h
 --- a/lib/voicecore/reflector_core.h	2026-11-26 12:55:59.934799003 +0000
-+++ b/lib/voicecore/reflector_core.h	2026-11-26 12:56:29.157221508 +0000
-@@ -32,6 +32,16 @@
++++ b/lib/voicecore/reflector_core.h	2026-11-26 18:52:42.569013100 +0000
+@@ -32,6 +32,24 @@
    return true;
  }
  
@@ -231,21 +281,31 @@ diff -u -r a/lib/voicecore/reflector_core.h b/lib/voicecore/reflector_core.h
 +constexpr size_t kV3CallBytes = 6;               // nominativo compatto (6 bit per carattere), confrontato come 6 byte
 +constexpr size_t kV3MaxDirectory = 20;
 +constexpr int64_t kV3DirectoryLifeMs = 600000;   // una voce della rubrica vale 10 minuti
++// Limiti per client V3 (deciso il 26/11/2026; valori di PARTENZA da fissare con le prove): velocita' di buste e annunci, byte inoltrati e tetto di un oggetto come in radio.
++constexpr uint32_t kV3RateWindowMs = 60000;          // finestra per il conteggio dei frame
++constexpr uint32_t kV3MaxInoltroPerWindow = 1200;    // 20 buste al secondo: sopra la velocita' massima della radio (un frame da 255 byte a R3 dura 58 ms)
++constexpr uint32_t kV3MaxAnnuncioPerWindow = 12;     // un annuncio ogni 5 secondi
++constexpr uint32_t kV3ByteWindowMs = 600000;         // finestra per i byte inoltrati
++constexpr uint32_t kV3MaxBytesPerWindow = 262144;    // 256 kB ogni 10 minuti per client: rete di sicurezza se manca l'OFFER
++constexpr uint32_t kV3MaxObjectBytes = 65536;        // tetto di un oggetto, come il ponte telefono-scheda e la radio
++constexpr uint8_t kV3InnerOffer = 0x35;              // un frame OFFER del protocollo immagini dentro la busta: porta la dimensione dell'oggetto
 +
  typedef uint64_t Endpoint;  // indirizzo e porta di un client, come li tiene chi ha il socket (per IPv4: indirizzo * 65536 + porta)
  
  class IReflectorNet {
-@@ -55,6 +65,9 @@
+@@ -55,6 +73,11 @@
      uint32_t badMode = 0;         // modo non inoltrato
      uint32_t badPacket = 0;       // non e' un pacchetto radio valido
      uint32_t talks = 0;           // trasmissioni iniziate
 +    uint32_t v3Forwarded = 0;     // buste V3 inoltrate
 +    uint32_t v3Refused = 0;       // frame V3 scartati (da un client v2, o non del reflector)
 +    uint32_t v3Announces = 0;     // annunci della rubrica ricevuti
++    uint32_t v3RateLimited = 0;   // frame V3 scartati per limite di velocita' o di byte
++    uint32_t v3TooBig = 0;        // buste con un OFFER di oggetto oltre il tetto
    };
  
    // Una trasmissione (finita o in corso): chi l'ha fatta arrivare e con quale nominativo.
-@@ -78,6 +91,8 @@
+@@ -78,6 +101,8 @@
      uint32_t lastSeenMs = 0;
      uint32_t packetsIn = 0;
      uint32_t packetsOut = 0;
@@ -254,7 +314,7 @@ diff -u -r a/lib/voicecore/reflector_core.h b/lib/voicecore/reflector_core.h
      uint32_t declaredAddr = 0;  // l'indirizzo pubblico che il nodo dice di avere (a<<24|b<<16|c<<8|d), 0 = non lo dice; non verificato
    };
  
-@@ -118,7 +133,17 @@
+@@ -118,7 +143,22 @@
      uint32_t lastSeenMs = 0;
      bool wasUp = false;
      uint32_t packetsIn = 0, packetsOut = 0;
@@ -265,8 +325,13 @@ diff -u -r a/lib/voicecore/reflector_core.h b/lib/voicecore/reflector_core.h
 +      int64_t seenMs;                // istante in cui il gateway ha sentito la stazione (puo' essere negativo: l'eta' supera il tempo trascorso)
 +    };
 +    std::vector<DirEntry> dir;       // la rubrica dell'ultimo annuncio
++    struct V3Limit {                 // contatori dei limiti per client
++      uint32_t rateStart = 0, inoltro = 0, annuncio = 0, byteStart = 0, bytes = 0;
++      bool started = false;
++    } lim;
    };
 +  void learnV3(Client& c);
++  bool v3Allow(Client& c, bool inoltro, size_t bytes, uint32_t nowMs);
 +  void onV3(Client& c, const uint8_t* d, size_t n, uint32_t nowMs);
 +  void sendEsito(Client& to, const uint8_t* dest, uint8_t code);
    Client* find(uint32_t id);
@@ -274,7 +339,7 @@ diff -u -r a/lib/voicecore/reflector_core.h b/lib/voicecore/reflector_core.h
    void endTalk();
 diff -u -r a/tools/vlreflector.cpp b/tools/vlreflector.cpp
 --- a/tools/vlreflector.cpp	2026-11-26 13:09:55.792899543 +0000
-+++ b/tools/vlreflector.cpp	2026-11-26 13:10:56.827258323 +0000
++++ b/tools/vlreflector.cpp	2026-11-26 18:52:52.535155333 +0000
 @@ -301,7 +301,7 @@
        const int ei = findEntryById(entries, c.id);
        o << (first ? "" : ",") << "{\"id\":" << c.id << ",\"name\":\"" << jsonEscape(c.name) << "\",\"call\":\"" << jsonEscape(ei >= 0 ? entries[static_cast<size_t>(ei)].name : c.name)
@@ -289,7 +354,7 @@ diff -u -r a/tools/vlreflector.cpp b/tools/vlreflector.cpp
      const ReflectorCore::Stats& s = core->stats();
      o << "],\"stats\":{\"datagrams\":" << s.datagrams << ",\"unknown\":" << s.unknownClient << ",\"badSignature\":" << s.badSignature << ",\"voiceBlocked\":" << s.voiceBlocked
 -      << ",\"talks\":" << s.talks << "}}";
-+      << ",\"talks\":" << s.talks << ",\"v3Announces\":" << s.v3Announces << ",\"v3Forwarded\":" << s.v3Forwarded << ",\"v3Refused\":" << s.v3Refused << "}}";
++      << ",\"talks\":" << s.talks << ",\"v3Announces\":" << s.v3Announces << ",\"v3Forwarded\":" << s.v3Forwarded << ",\"v3Refused\":" << s.v3Refused << ",\"v3RateLimited\":" << s.v3RateLimited << ",\"v3TooBig\":" << s.v3TooBig << "}}";
      return o.str();
    }
  
@@ -299,8 +364,8 @@ diff -u -r a/tools/vlreflector.cpp b/tools/vlreflector.cpp
    const ReflectorCore::Stats& s = core.stats();
 -  snprintf(b, sizeof(b), "fine: datagrammi %u, sconosciuti %u, firme errate %u, ripetuti %u, voce inoltrata %u, testi %u, voce bloccata %u, trasmissioni %u", s.datagrams,
 -           s.unknownClient, s.badSignature, s.replays, s.voiceForwarded, s.textForwarded, s.voiceBlocked, s.talks);
-+  snprintf(b, sizeof(b), "fine: datagrammi %u, sconosciuti %u, firme errate %u, ripetuti %u, voce inoltrata %u, testi %u, voce bloccata %u, trasmissioni %u, V3: annunci %u, buste %u, rifiutati %u", s.datagrams,
-+           s.unknownClient, s.badSignature, s.replays, s.voiceForwarded, s.textForwarded, s.voiceBlocked, s.talks, s.v3Announces, s.v3Forwarded, s.v3Refused);
++  snprintf(b, sizeof(b), "fine: datagrammi %u, sconosciuti %u, firme errate %u, ripetuti %u, voce inoltrata %u, testi %u, voce bloccata %u, trasmissioni %u, V3: annunci %u, buste %u, rifiutati %u, limitati %u, troppo grandi %u", s.datagrams,
++           s.unknownClient, s.badSignature, s.replays, s.voiceForwarded, s.textForwarded, s.voiceBlocked, s.talks, s.v3Announces, s.v3Forwarded, s.v3Refused, s.v3RateLimited, s.v3TooBig);
    logLine(b);
    return 0;
  }
