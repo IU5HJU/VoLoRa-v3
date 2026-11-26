@@ -106,6 +106,29 @@ def pair_ok(rid, chip_a, chip_b):
     return True
 
 
+XTAL_PPM, TCXO_PPM = 10.0, 2.0     # quarzo normale / TCXO: errore di frequenza di ogni scheda (valori di lavoro, da misurare: misura M6)
+
+
+def rung_mask(chip, tcxo=False, khz=433700):
+    """Maschera a 16 bit dei gradini che una stazione puo' annunciare nell'HELLO (decisioni del 26/11/2026): quelli realizzabili dal chip alla frequenza data
+    (R0 solo SX1278, perche' l'SX1262 non arriva a 150 kb/s a 433 MHz) e R12-R14 solo con un TCXO (senza, il budget di frequenza non basta)."""
+    m = 0
+    ppm = TCXO_PPM if tcxo else XTAL_PPM
+    for rid in range(len(pi.RUNGS)):
+        if rung_support(rid, chip, khz, ppm)[0]:
+            m |= 1 << rid
+    return m
+
+
+def common_mask(chip_a, mask_a, chip_b, mask_b):
+    """Gradini che due stazioni possono usare insieme: l'AND delle due maschere meno i gradini che i due chip non si capiscono (R3 se le famiglie differiscono)."""
+    m = mask_a & mask_b
+    for rid in range(len(pi.RUNGS)):
+        if not pair_ok(rid, chip_a, chip_b):
+            m &= ~(1 << rid)
+    return m
+
+
 def sens_datasheet(chip, bw, sf):
     return SENS[chip].get((bw, sf))
 

@@ -128,13 +128,30 @@ ok_cal = ok_r10 = 0
 for seed in range(1, 9):
     for ric in ("calendario", "r10"):
         ch = sim.Channel(-136.0, "gradino", extra_db=11.0, when_s=60.0, rng=random.Random(seed + 1))
-        sm = sim.Simulator(1000, (1 / 3, 2 / 3, 1.0), ch, "SX1278", "SX1278", 7200.0, seed, ricerca=ric)
+        sm = sim.Simulator(1000, (1 / 3, 2 / 3, 1.0), ch, "SX1278", "SX1278", 7200.0, seed, ricerca=ric, tcxo_a=True, tcxo_b=True)   # i gradini lenti richiedono il TCXO
         r = sm.run()
         if r.ok:
             ok_cal += ric == "calendario"
             ok_r10 += ric == "r10"
 check(ok_cal >= ok_r10 + 3, f"ricerca a calendario: {ok_cal}/8 riuscite contro {ok_r10}/8 con il solo ritorno a R10 (R10 non si sente piu')")
 check(sim.scan_rung(0) == 10 and sim.scan_rung(sim.scan_dwell_s(10) + 1) == 11 and sim.scan_rung(sum(sim.scan_dwell_s(r) for r in sim.SCAN_ORDER) + 1) == 10, "calendario: R10, poi R11, e ricomincia dopo il giro")
+
+# maschera dei gradini (decisioni del 26/11/2026): chip e TCXO
+import limiti_chip as lim
+m78, m62, m78t = lim.rung_mask("SX1278"), lim.rung_mask("SX1262"), lim.rung_mask("SX1278", tcxo=True)
+check(m78 == 0b0000111111111111 and m62 == 0b0000111111111110 and m78t == 0x7FFF, f"maschere: SX1278 R0-R11 ({m78:#06x}), SX1262 R1-R11 senza R0 ({m62:#06x}), con TCXO tutti i 15 gradini ({m78t:#06x})")
+cm = lim.common_mask("SX1278", m78, "SX1262", m62)
+check(cm == m62 & ~(1 << 3) and lim.common_mask("SX1262", m62, "SX1262", m62) == m62 and lim.common_mask("SX1278", m78, "SX1278", m78) == m78, "maschera comune: R3 tolto se i chip differiscono (SX1278 con SX1262), tenuto fra chip uguali")
+check(lim.common_mask("SX1278", m78t, "SX1278", m78) == m78, "R12-R14 solo se entrambe le stazioni hanno il TCXO")
+mix = sim.Simulator(2000, (1.0,), sim.Channel(-100.0, rng=random.Random(2)), "SX1278", "SX1262", 600.0, 3)
+cmask = lim.common_mask(mix.S.chip, mix.S.mask(), mix.R.chip, mix.R.mask())
+mixr = [r for r in range(15) if cmask >> r & 1]
+check(3 not in mixr and 0 not in mixr and all(r in mixr for r in (1, 2, 4, 10)) and not any(r in mixr for r in (12, 13, 14)), f"SX1278 con SX1262: gradini comuni R{mixr} (senza R0, R3 e R12-R14)")
+rm = mix.run()
+check(rm.ok and rm.crc_ok, "trasferimento fra SX1278 e SX1262 consegnato senza R0 e R3")
+tc = sim.Simulator(2000, (1.0,), sim.Channel(-100.0, rng=random.Random(2)), "SX1278", "SX1278", 600.0, 3, tcxo_a=True, tcxo_b=True)
+tc.run()
+check(tc.scan_order() == sim.SCAN_ORDER and mix.scan_order() == (10, 11, 10, 10, 10), f"calendario di ricerca: completo con TCXO, ridotto senza ({mix.scan_order()})")
 
 if fails:
     print(fails, "prove fallite")

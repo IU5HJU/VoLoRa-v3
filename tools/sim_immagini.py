@@ -23,6 +23,7 @@ import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import protocollo_immagini as pi  # noqa: E402
+import limiti_chip as lim  # noqa: E402
 import scala_modi as sm  # noqa: E402
 import frame_mesh as fm  # noqa: E402
 
@@ -228,8 +229,8 @@ class Channel:
 
 # ------------------------------------------------------------------------------------------------------------- stazioni
 class Node:
-    def __init__(self, name, chip):
-        self.name, self.chip = name, chip
+    def __init__(self, name, chip, tcxo=False):
+        self.name, self.chip, self.tcxo = name, chip, tcxo
         self.rung = pi.RENDEZVOUS
         self.last_heard = 0.0     # ultimo istante di attivita': frame sentito o trasmissione propria
         self.had_link = False     # ha sentito almeno un frame in questa sessione (prima la ricerca non c'e': si e' ancora all'incontro)
@@ -238,14 +239,8 @@ class Node:
         self.lost_since = None    # istante in cui e' scaduto il timer di ascolto: da qui in poi vale il calendario della ricerca
 
     def mask(self):
-        m = 0
-        for rid, kind, (a, b), _ in pi.RUNGS:
-            ok = True
-            if kind == "FSK" and self.chip == "SX1278" and a + 2 * b > 250.0:   # banda di ricezione dell'SX1278 (RadioLib)
-                ok = False
-            if ok:
-                m |= 1 << rid
-        return m
+        """Gradini annunciati nell'HELLO: quelli che il chip realizza (R0 solo SX1278, R3 d'intesa con il chip dell'altro) e R12-R14 solo con TCXO."""
+        return lim.rung_mask(self.chip, self.tcxo)
 
 
 SCAN_ORDER = (10, 11, 10, 12, 10, 13, 10, 14)   # calendario della ricerca: R10 a ogni secondo turno (il collegamento spesso torna), i gradini lenti a rotazione
@@ -303,7 +298,7 @@ class Result:
 class Simulator:
     def __init__(self, obj_size=20000, layers=(0.2, 0.5, 1.0), channel=None, chip_a="SX1278", chip_b="SX1278", budget_s=600.0, seed=1,
                  call_a="IU5HJU", call_b="IK5XYZ", trace=False, window=WINDOW_FRAMES, max_time_s=4 * 3600.0, ricerca="calendario",
-                 incontro="hello", probes_r10=PROBE_COUNT):
+                 incontro="hello", probes_r10=PROBE_COUNT, tcxo_a=False, tcxo_b=False):
         self.ricerca = ricerca
         self.incontro = incontro            # "hello": la risposta all'HELLO porta la misura; "probe": raffica di PROBE a R10 (vecchio)
         self.probes_r10 = probes_r10
@@ -311,7 +306,7 @@ class Simulator:
         self.rssi_est = None            # ultima stima della potenza ricevuta (misura dell'HELLO, report delle PROBE o STATUS)
         self.rng = random.Random(seed)
         self.ch = channel or Channel(-100.0, rng=random.Random(seed + 1))
-        self.S, self.R = Node("S", chip_a), Node("R", chip_b)
+        self.S, self.R = Node("S", chip_a, tcxo_a), Node("R", chip_b, tcxo_b)
         self.t = 0.0
         self.budget = budget_s
         self.trace_on = trace
@@ -343,6 +338,11 @@ class Simulator:
         if self.trace_on:
             print(line)
 
+    def scan_order(self):
+        """Calendario della ricerca ristretto ai gradini che entrambe le stazioni hanno annunciato (dopo l'incontro la maschera comune e' nota a tutte e due)."""
+        m = lim.common_mask(self.S.chip, self.S.mask(), self.R.chip, self.R.mask())
+        return tuple(r for r in SCAN_ORDER if m >> r & 1) or (pi.RENDEZVOUS,)
+
     def tick(self):
         """Dopo un lungo silenzio in ascolto una stazione entra in ricerca: segue il calendario dei gradini (stesso per entrambe, in funzione del tempo).
         Con ricerca="r10" (vecchio comportamento, per confronto) torna solo al gradino di incontro."""
@@ -353,7 +353,7 @@ class Simulator:
                 self.res.fallbacks += 1
             if n.lost_since is not None and not n.hold and self.t >= n.hold_until:
                 if self.ricerca == "calendario":
-                    self.set_rung(n, scan_rung(self.t - n.lost_since))
+                    self.set_rung(n, scan_rung(self.t - n.lost_since, self.scan_order()))
                 else:
                     self.set_rung(n, pi.RENDEZVOUS)
 
@@ -517,7 +517,7 @@ class Simulator:
                 raise Failure("nessun incontro (HELLO senza risposta)")
 
     def allowed(self):
-        m = self.S.mask() & self.caps["rung_mask"]
+        m = lim.common_mask(self.S.chip, self.S.mask(), self.R.chip, self.caps["rung_mask"])
         return [r for r in range(len(pi.RUNGS)) if m >> r & 1]
 
     def probe(self, rid_check=None):
@@ -588,7 +588,7 @@ class Simulator:
                 self.tr("--", f"ritrovati a R{self.S.rung} dopo {self.t - t0:.0f} s")
                 return
             self.advance(pi.frame_airtime_s(self.S.rung, 25) * (1.0 + self.rng.random()))
-            if self.t - t0 > max(GIVE_UP_S, 3.0 * sum(scan_dwell_s(r) for r in SCAN_ORDER)):   # tre giri del calendario
+            if self.t - t0 > max(GIVE_UP_S, 3.0 * sum(scan_dwell_s(r) for r in self.scan_order())):   # tre giri del calendario
                 raise Failure("collegamento perso (la ricerca non ha ritrovato la stazione)")
 
     def predicted_best(self, prx_est, allowed, margin):
