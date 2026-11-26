@@ -32,8 +32,17 @@ In BOOST ogni trasmissione conta in una **finestra scorrevole di 100 s**; sopra 
 | Configurazione del nodo | `tools/config_nodo.py` (`boost`, `boost_rischio_accettato`, `potenze`), `site/nodo.html` |
 | Prove | `firmware/misura/tests/test_core.cpp`, `tests/sim/test_config_nodo.py`, `tests/page/run_nodo.js` |
 
+## Nel firmware V3 (scheda mobile e banco)
+Il BOOST è nel driver radio V3 (`firmware/v3/src/radio_board.h`) con il nucleo `firmware/v3/src/boost.h` (stesso comando, stessi testi, stesso conteggio del ciclo di lavoro di `misura_core.h`). **Provato sul PC** (`tests/test_boost.cpp`, 26 controlli: comando, potenza, finestra di 100 s, avvisi, nessuno spegnimento automatico); **compilato dalla CI, mai eseguito su una scheda**.
+- Comandi sulla seriale di `main_mobile.cpp` e `main_bench.cpp`: `BOOST ON RISCHIO`, `BOOST OFF`, `BOOST STATUS`. Sempre **spento all'avvio**, non si salva.
+- La potenza vale per **ogni gradino** (LoRa e FSK): ogni cambio di gradino riconfigura la radio e usa la potenza in vigore (+17 dBm, o +20 dBm in BOOST). Ad accensione e spegnimento si cambia subito la potenza con `setOutputPower`, e in BOOST si porta il limite di corrente a 140 mA (circa 120 mA di assorbimento a +20 dBm). RadioLib (letta nel sorgente 7.8.1; la CI usa la 7.5.0) accetta 20 dBm su SX1278 (PA_BOOST con PA_DAC alto) e SX1262.
+- **SX1278:** ogni trasmissione conta in una finestra di 100 s; sopra l'1% esce `ATTENZIONE BOOST: ciclo di lavoro …` (al massimo ogni 5 s). Il ponte e il protocollo non cambiano e **il BOOST non si spegne da solo** (decisione: solo avviso). Un trasferimento d'immagine in BOOST supera facilmente l'1%: l'avviso comparirà.
+- **SX1262:** +20 dBm è sotto il suo massimo (+22 dBm): il ciclo si misura (si vede in `BOOST STATUS`) ma non c'è avviso di ciclo; restano calore, corrente, antenna e saturazione dei ricevitori vicini.
+- Non c'è ancora un comando BOOST dal telefono (Bluetooth): è una scelta voluta, perché attivarlo richiede di leggere l'avviso sulla seriale.
+
 ## Da fare / da decidere
 - Compilare e provare il firmware di misura con BOOST su T3 e T-Beam (corrente, temperatura, spurie con l'analizzatore), fase 1.
-- Il firmware dei nodi V3 non esiste ancora: la regola è scritta (parametro `boost` della configurazione, `BOOST ON RISCHIO`), da realizzare con lo stesso codice di `misura_core.h`.
+- ~~Il firmware dei nodi V3~~ La scheda mobile e il banco V3 hanno il BOOST (sezione sopra); il ruolo "nodo" non esiste ancora e prenderà il parametro `boost` della configurazione.
+- Da misurare sulla scheda: corrente, temperatura e spurie a +20 dBm; se il limite di corrente a 140 mA basta davvero.
 - ~~**Decisione**~~ **Deciso il 26/11/2026: solo avviso.** Il nodo non spegne il BOOST da solo se supera l'1%: segnala il rischio e continua.
 - L'app di misura non ha ancora il comando BOOST (si manda da terminale seriale).

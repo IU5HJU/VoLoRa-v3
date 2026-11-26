@@ -55,10 +55,12 @@ static void handleLine(const char* line) {
     if (!station->startSend(txObj, static_cast<size_t>(n), ends, 3, 600.0, static_cast<uint16_t>(1 + esp_random() % 65000))) { Serial.println("ERR invio non partito"); return; }
     announcedSend = false; sendStartMs = millis();
     Serial.printf("OK invio di %ld byte (CRC32 %08X): HELLO a R10...\n", n, static_cast<unsigned>(crc32(txObj, static_cast<size_t>(n))));
+  } else if (radio.boostCommand(line)) {
+    // gestito dal driver radio (BOOST ON RISCHIO | OFF | STATUS)
   } else if (!strncasecmp(line, "STATO", 5)) {
     if (!station) { Serial.println("nessun nominativo"); return; }
     Serial.printf("gradino R%d, in ricerca %s, invio %s, radio: errori di ricezione %u\n", station->link().rung, station->link().lost ? "si" : "no", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(radio.rxErrors()));
-  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | SEND <byte> | STATO");
+  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | SEND <byte> | STATO | BOOST ON RISCHIO|OFF|STATUS");
 }
 
 void setup() {

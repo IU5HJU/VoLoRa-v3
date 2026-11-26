@@ -6,6 +6,7 @@
 #include <RadioLib.h>
 
 #include "board.h"
+#include "boost.h"
 #include "medium.h"
 
 #if defined(RADIO_SX1262)
@@ -22,7 +23,7 @@ namespace v3 {
 namespace img {
 
 constexpr float kFreqMhz = 433.700f;     // canale di incontro (docs/band-plan.md): liberamente configurabile nel campo del chip
-constexpr int kPowerDbm = 17;            // massimo in continuo dell'SX1278 (docs/confronto-datasheet.md); il BOOST non e' ancora collegato
+constexpr int kPowerDbm = boost::kNormalDbm;   // +17 dBm: massimo in continuo dell'SX1278 (docs/confronto-datasheet.md); con BOOST +20 dBm (boost.h)
 constexpr uint8_t kSyncWord = 0x5D;      // diverso da quello della v2
 
 static volatile bool vl3Irq = false;
@@ -37,6 +38,20 @@ class BoardRadio : public Radio {
     const int st = vl3Radio.startTransmit(f, n);
     if (st != RADIOLIB_ERR_NONE) { Serial.printf("[radio] startTransmit errore %d\n", st); return false; }
     txBusy_ = true;
+    if (boost_.txStarted(millis(), static_cast<uint32_t>(frameAirtimeS(rung_, static_cast<int>(n)) * 1e6)))
+      Serial.printf("ATTENZIONE BOOST: ciclo di lavoro %.1f%% su %d s, oltre %.0f%% (rischio calore e danno alla radio). BOOST OFF per tornare a +%d dBm\n", boost_.duty(millis()), boost::DutyGuard::kBuckets, boost::kDutyMaxPct, boost::kNormalDbm);
+    return true;
+  }
+  // ----- BOOST (+20 dBm, estrema, docs/boost.md): sempre spento all'avvio, non si salva, non si spegne da solo -----
+  const boost::State& boostState() const { return boost_; }
+  // Un comando seriale "BOOST ...". Ritorna false se la riga non e' un comando BOOST.
+  bool boostCommand(const char* line) {
+    const boost::Cmd c = boost::parse(line);
+    if (c == boost::Cmd::Invalid) { if (strncasecmp(line, "BOOST", 5)) return false; Serial.println("ERR BOOST ON RISCHIO | BOOST OFF | BOOST STATUS"); return true; }
+    if (c == boost::Cmd::NeedsAck) { Serial.println(boost::kWarning); Serial.println("ERR BOOST non attivato: scrivi BOOST ON RISCHIO"); return true; }
+    if (c == boost::Cmd::On) { boost_.enable(); applyPower(); Serial.println(boost::kWarning); Serial.printf("BOOST ATTIVO (RISCHIO): +%d dBm\n", boost_.power()); return true; }
+    if (c == boost::Cmd::Off) { boost_.disable(); applyPower(); Serial.printf("BOOST spento: +%d dBm\n", boost_.power()); return true; }
+    Serial.printf("BOOST %s, potenza %d dBm, ciclo di lavoro %.2f%% su %d s\n", boost_.on() ? "ATTIVO (RISCHIO)" : "spento", boost_.power(), boost_.duty(millis()), boost::DutyGuard::kBuckets);
     return true;
   }
   double random() override { return esp_random() / 4294967296.0; }
@@ -69,6 +84,14 @@ class BoardRadio : public Radio {
   uint32_t rxErrors() const { return rxErrors_; }
 
  private:
+  // potenza e limite di corrente (a +20 dBm servono circa 120 mA: il limite di base della radio e' piu' basso)
+  void limitCurrent() { if (boost_.on()) vl3Radio.setCurrentLimit(boost::kOcpMa); }
+  void applyPower() {
+    if (!ok_) return;
+    const int st = vl3Radio.setOutputPower(boost_.power());
+    if (st != RADIOLIB_ERR_NONE) Serial.printf("[radio] potenza %d dBm errore %d\n", boost_.power(), st);
+    limitCurrent();
+  }
   // il filtro di ricezione FSK: il primo valore permesso dal chip che contiene la banda del segnale piu' l'errore di due quarzi da 10 ppm
   static float fskRxBw(bool sx1262, double br, double dev) {
     static const float ssb[] = {2.6f, 3.1f, 3.9f, 5.2f, 6.3f, 7.8f, 10.4f, 12.5f, 15.6f, 20.8f, 25.0f, 31.3f, 41.7f, 50.0f, 62.5f, 83.3f, 100.0f, 125.0f, 166.7f, 200.0f, 250.0f};      // SX1278: banda laterale singola
@@ -84,25 +107,26 @@ class BoardRadio : public Radio {
     int st;
     if (r.lora) {
 #if defined(RADIO_SX1262)
-      st = vl3Radio.begin(kFreqMhz, static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, kPowerDbm, 8, 1.6f);
+      st = vl3Radio.begin(kFreqMhz, static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8, 1.6f);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(true);
 #else
       if (r.b == 6) { Serial.println("[radio] R3 (SF6) non supportato sull'SX1278: serve l'intestazione implicita"); return false; }
-      st = vl3Radio.begin(kFreqMhz, static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, kPowerDbm, 8);
+      st = vl3Radio.begin(kFreqMhz, static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(true);
 #endif
     } else {
 #if defined(RADIO_SX1262)
-      st = vl3Radio.beginFSK(kFreqMhz, static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(true, r.a, r.b), kPowerDbm, 16, 1.6f);
+      st = vl3Radio.beginFSK(kFreqMhz, static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(true, r.a, r.b), boost_.power(), 16, 1.6f);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.variablePacketLengthMode(255);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(2);
 #else
-      st = vl3Radio.beginFSK(kFreqMhz, static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(false, r.a, r.b), kPowerDbm, 16, false);
+      st = vl3Radio.beginFSK(kFreqMhz, static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(false, r.a, r.b), boost_.power(), 16, false);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.variablePacketLengthMode(64);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(true);
 #endif
     }
     if (st != RADIOLIB_ERR_NONE) { Serial.printf("[radio] configurazione R%d errore %d\n", rung, st); return false; }
+    limitCurrent();
     vl3Radio.setPacketSentAction(vl3OnIrq);
     vl3Radio.setPacketReceivedAction(vl3OnIrq);
     txBusy_ = false;
@@ -112,6 +136,7 @@ class BoardRadio : public Radio {
   int rung_ = kRendezvous;
   bool ok_ = false, txBusy_ = false;
   uint32_t rxErrors_ = 0;
+  boost::State boost_{kBoardSx1262};
 };
 
 }  // namespace img
