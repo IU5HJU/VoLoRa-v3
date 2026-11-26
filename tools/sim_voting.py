@@ -116,9 +116,9 @@ def _fsk_mode(br, dev):
     return (f"FSK {br:g}k dev {dev:g} ({bw:g} kHz)", -174 + 10 * math.log10(bw * 1000) + scm.NF + 12, (pi.FSK_PHY_BYTES + VOTE_BYTES) * 8 / (br * 1000))
 
 
-# Servizio a 144,850 MHz (2 m, deciso il 26/11/2026): modi stretti (banda occupata sotto 15 kHz, adatti ai segmenti digitali dei 2 m) e perdita a 144,85 MHz
+# Servizio a 144,900 MHz (2 m, deciso il 26/11/2026): modi stretti (banda occupata sotto 15 kHz, adatti ai segmenti digitali dei 2 m) e perdita a 144,85 MHz
 SERVICE_MODES_2M = [_fsk_mode(4.8, 2.4), _fsk_mode(2.4, 1.2)]
-SERVICE_F_MHZ = {"2m": 144.85, "70cm": None}
+SERVICE_F_MHZ = {"2m": 144.9, "70cm": None}
 SERVICE_MODES_BY_BAND = {"2m": SERVICE_MODES_2M, "70cm": SERVICE_MODES}
 
 
@@ -214,7 +214,7 @@ def main():
         r2 = run_elezione("qualita", "rf", a.distanza, a.scenari, a.seed, nodi_si_sentono=True)
         print(f"| {1000 * W:.0f} ms | {100 * r1['doppio_accesso']:.1f} % | {100 * r2['doppio_accesso']:.1f} % | {1000 * r1['ritardo_medio_s']:.0f} ms |")
     W = w0
-    print("\nVoto via radio sul canale di servizio a 144,850 MHz (2 m), FSK stretto; antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo:")
+    print("\nVoto via radio sul canale di servizio a 144,900 MHz (2 m), FSK stretto; antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo:")
     print("| distanza fra i nodi | nodi si sentono | gradino del voto | durata del voto (2 slot) | entra in 200 ms | doppio accesso | nodo migliore |")
     print("|---|---|---|---|---|---|---|")
     for dk in (5.0, 10.0, 20.0, 30.0, 50.0, 70.0):

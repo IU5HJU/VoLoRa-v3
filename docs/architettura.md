@@ -11,7 +11,7 @@ Ogni dispositivo ha **un compito solo** e un firmware che fa soltanto quello. Da
 | Nodo immagini | invio e ricezione di immagini | LoRa e FSK, negoziazione del modo |
 | Ripetitore RX | ascolta e configura la TX | come oggi, firmware dedicato |
 | Ripetitore TX | trasmette | come oggi, firmware dedicato |
-| Nodo mesh (deciso il 25/11/2026) | beacon, polling, ripetizione e invio dei trasferimenti | ruolo a sé, a 433 MHz; ascolto a R10; **due radio con una sola antenna collineare bibanda e un duplexer 2 m / 70 cm** (voto a 144,850 MHz, deciso il 26/11/2026) |
+| Nodo mesh (deciso il 25/11/2026) | beacon, polling, ripetizione e invio dei trasferimenti | ruolo a sé, a 433 MHz; ascolto a R10; **due radio con una sola antenna collineare bibanda e un duplexer 2 m / 70 cm** (voto a 144,900 MHz, deciso il 26/11/2026) |
 | Nodo a due bande (ipotesi) | trasferimenti veloci a 2,4 GHz con la banda 430-440 MHz come incontro e ripiego | due radio: una T3 a 433 MHz e un **modulo Ebyte E28-2G4T27SX** (UART, già a disposizione dell'autore, [modulo-2g4-uart.md](modulo-2g4-uart.md)); in alternativa una T3-S3 con SX1280 |
 | Nodo Internet | porta i pacchetti al reflector | gateway; **solo aiuto alla sperimentazione**, non fa parte del collegamento radio affidabile |
 

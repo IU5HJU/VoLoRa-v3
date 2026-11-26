@@ -16,7 +16,7 @@ PROFILE0 = {
     CH_SERVICE: (433850, 125.0, "trasferimenti stretti con ascolto prima di parlare (il VOTO non e' piu' qui: vedi SERVICE_2M_KHZ)"),
     CH_NARROW: (433955, 62.5, "trasferimenti con i gradini stretti (R11-R14)"),
 }
-SERVICE_2M_KHZ = 144850                # canale di servizio del VOTO, fisso, in banda 2 m (deciso il 26/11/2026): la stessa antenna bibanda serve le due radio con un duplexer
+SERVICE_2M_KHZ = 144900                # canale di servizio del VOTO, fisso, in banda 2 m (deciso il 26/11/2026; 144,850 era un canale dei gateway voce digitale: spostato a 144,900): la stessa antenna bibanda serve le due radio con un duplexer
 RESERVED_FROM = 3                      # 3-15: riservati (tabella estesa, frequenze da definire)
 
 
@@ -64,7 +64,7 @@ HAM_2G4_KHZ = (2400000, 2450000)
 
 
 def harmonic_khz(khz, n):
-    """Frequenza dell'n-esima armonica: la terza del canale di servizio (3 x 144,850 = 434,550 MHz) cade in 70 cm, vicino ai nostri canali."""
+    """Frequenza dell'n-esima armonica: la terza del canale di servizio (3 x 144,900 = 434,700 MHz) cade in 70 cm, vicino ai nostri canali."""
     return khz * n
 
 

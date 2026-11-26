@@ -31,7 +31,7 @@ Nel 2 m (in alto): 145,794-145,806 MHz comunicazioni spaziali (ISS); 145,806-146
 ## 3. Tabella dei canali del profilo 0 (deciso il 26/11/2026)
 > **Valori di partenza, non limiti.** Nel firmware le frequenze di T3 e T-Beam sono liberamente configurabili e quelle del modulo a 2,4 GHz sono configurabili a piacere dentro 2400-2450 MHz ([regole-radioamatoriali.md](regole-radioamatoriali.md)). Il codice in `tools/canali.py` controlla solo il campo del chip e le sovrapposizioni.
 
-Decisioni dell'autore: **canale di incontro 433,700 MHz** (125 kHz) e **canale di servizio del voto a 144,850 MHz in banda 2 m** (corretto il 26/11/2026: prima era 433,850 MHz; il voto è in [voting-isofrequenza.md](voting-isofrequenza.md)). La tabella è in [`tools/canali.py`](../tools/canali.py), provata in `tests/sim/test_canali.py`. Il `canale` del BAND-SET con profilo 0 è l'indice di questa tabella.
+Decisioni dell'autore: **canale di incontro 433,700 MHz** (125 kHz) e **canale di servizio del voto a 144,900 MHz in banda 2 m** (corretto il 26/11/2026: prima 433,850 MHz, poi 144,850 MHz che è un canale dei gateway voce digitale; il voto è in [voting-isofrequenza.md](voting-isofrequenza.md)). La tabella è in [`tools/canali.py`](../tools/canali.py), provata in `tests/sim/test_canali.py`. Il `canale` del BAND-SET con profilo 0 è l'indice di questa tabella.
 
 | Canale | Frequenza (MHz) | Larghezza max | Gradini ammessi | Uso |
 |---|---|---|---|---|
@@ -44,8 +44,8 @@ Decisioni dell'autore: **canale di incontro 433,700 MHz** (125 kHz) e **canale d
 - **L'incontro (R10) è sul canale 0**, come deciso: HELLO e beacon sempre lì. I trasferimenti negoziano il canale nell'HELLO (BAND-SET con profilo 0).
 - **Cosa entra in 125 kHz:** i gradini con larghezza occupata fino a 125 kHz: FSK R2 (50 kbit/s, 100 kHz di banda occupata, circa 38 kbit/s netti) e LoRa R8-R14. **Il più veloce è R2 in FSK**, poi R8 (circa 1,6 kbit/s netti).
 - **Non entrano i gradini larghi:** R0, R1 (FSK 150k e 100k) e R3-R7 (LoRa 250-500 kHz) non hanno un canale nel segmento. Per i trasferimenti veloci restano il **cambio di banda a 2,4 GHz (profilo 2)** o un accordo temporaneo fra le stazioni per usare tutto il segmento (non nella tabella).
-- **Il canale 1 non ospita più il voto**: il voto è a 144,850 MHz (2 m). In 70 cm il canale 1 è un secondo canale da 125 kHz per i trasferimenti stretti.
-- **Il canale di servizio a 2 m, 144,850 MHz,** non è nelle schermate del piano che ho visto (compare solo 145,794-146,000 MHz): **da controllare sul piano dei 2 m**. La **terza armonica** (434,550 MHz) cade in 70 cm a circa 0,6 MHz dal canale 2: filtro passa-basso sulla radio a 2 m.
+- **Il canale 1 non ospita più il voto**: il voto è a 144,900 MHz (2 m). In 70 cm il canale 1 è un secondo canale da 125 kHz per i trasferimenti stretti.
+- **Il canale di servizio a 2 m, 144,900 MHz,** sta nel segmento MGM (12 kHz) dei 2 m, fra i canali liberi (punto 3b). La **terza armonica** (434,700 MHz) cade in 70 cm a circa 0,7 MHz dal canale 2: filtro passa-basso sulla radio a 2 m.
 - **A 433,700 MHz il piano indica la frequenza FAX** (attività stretta): ascolto prima di trasmettere.
 
 ## 3b. Il 2 m (144-146 MHz) e il canale del voto (schermate del 26/11/2026)
@@ -65,13 +65,12 @@ Decisioni dell'autore: **canale di incontro 433,700 MHz** (125 kHz) e **canale d
 | 145,794-145,806 | 12 kHz | FM/Digital Voice | ISS |
 | 145,806-146,000 | 12 kHz | tutti i modi | finestra esclusiva satellite |
 
-**Cosa risulta per il canale del voto a 144,850 MHz (deciso dall'autore il 26/11/2026):**
-- **144,850 MHz sta nel segmento MGM da 12 kHz** (144,794-144,9625), il segmento giusto per un modo generato da macchina come il nostro voto, e la nostra FSK a 9,6 kHz di banda occupata ci sta.
-- **Ma 144,8500 MHz è uno dei cinque canali dei gateway Internet per voce digitale** (144,8125, 144,8250, 144,8375, **144,8500**, 144,8625): ci trasmette voce digitale (hotspot e gateway), anche continua. I nostri VOTI da 35 ms si sovrapporrebbero a quelle trasmissioni e le sentiremmo disturbare.
-- **Liberi nel segmento** (passo 12,5 kHz): da **144,8750 a 144,9500 MHz** (sette canali). Il centro 144,9000 MHz dista circa 27 kHz dal gateway 144,8625 ed è lontano dal 144,800 APRS.
-- La **terza armonica** di 144,9000 MHz è 434,700 MHz (non ho il piano di 434-435 MHz).
+**Cosa risulta per il canale del voto:**
+- Il segmento **144,794-144,9625 MHz** è **MGM, 12 kHz**: il segmento giusto per un modo generato da macchina come il nostro voto; la FSK a 9,6 kHz di banda occupata ci sta.
+- **144,8500 MHz (scelta iniziale) è uno dei cinque canali dei gateway Internet per voce digitale** (144,8125, 144,8250, 144,8375, 144,8500, 144,8625), dove trasmettono voce digitale anche continua: i VOTI da 35 ms si sovrapporrebbero.
+- **Liberi** (passo 12,5 kHz): da 144,8750 a 144,9500 MHz (sette canali). **Deciso il 26/11/2026: 144,9000 MHz**, circa 27 kHz dal gateway 144,8625 e lontano dall'APRS a 144,800. Terza armonica 434,700 MHz.
 
-
+## 4. 13 cm e 23 cm
 - **13 cm:** tutta la fascia 2400-2450 MHz è "Satellite" nel piano attuale; ATV in 2427-2443 MHz se non c'è traffico satellitare; i segmenti digitali (2355-2365 e 2392-2400 MHz) sono sotto il campo del modulo. Dettagli e canali candidati in [modulo-2g4-uart.md](modulo-2g4-uart.md), punto 9.
 - **23 cm (1,296994-1,298 GHz):** uscite ripetitori con shift 6 MHz, simplex FM, chiamata Digital Voice 1,297725, gateway Internet voce 1,297900-1,297975. Possibile banda "più performante" per voce e dati, da studiare.
 
