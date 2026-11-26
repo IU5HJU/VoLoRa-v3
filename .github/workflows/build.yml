@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - name: Logica del firmware di misura
         run: make -C firmware/misura test
       - name: Simulatore del protocollo immagini
@@ -47,6 +49,10 @@ jobs:
         run: python3 tests/sim/test_config_nodo.py
       - name: Prove ascolto del nodo
         run: python3 tests/sim/test_ascolto_nodo.py
+      - name: Prove reflector V3
+        run: python3 tests/sim/test_reflector_v3.py
+      - name: Interoperabilita' del reflector V3 con il vlnode della v2
+        run: python3 tests/interop/test_reflector_vs_vlnode.py
       - name: Prove moduli UART finti
         run: python3 tests/app/test_uartlink.py
       - name: "Applicazione, logica"

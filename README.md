@@ -26,6 +26,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 - [docs/voting-isofrequenza.md](docs/voting-isofrequenza.md): più nodi sulla stessa frequenza nella voce: elezione per qualità e voto via radio (Internet non è affidabile).
 - [docs/compatibilita-v2.md](docs/compatibilita-v2.md): la regola di compatibilità con la v2 (infrastruttura invariata).
 - [docs/band-plan.md](docs/band-plan.md): il band plan ARI (70 cm, 13 cm, 23 cm) dalle schermate del sito, e dove cadono i nostri canali.
+- [docs/reflector-v3.md](docs/reflector-v3.md): il reflector V3, sostituto compatibile del reflector v2 (stesso collegamento, voce e testo identici) con il trasporto del V3.
 - [docs/configurazione-nodo.md](docs/configurazione-nodo.md): la configurazione di un nodo scelta dal sysop: gateway o pappagallo per v2 e V3, topologia singola, doppia o tripla.
 - [docs/modulo-2g4-uart.md](docs/modulo-2g4-uart.md): i moduli Ebyte a 2,4 GHz con seriale, usati come tubo opaco (profilo 2 del cambio di banda), con la scheda di prova dell'applicazione e la configurazione dal programma.
 - [docs/prova-gradini-lenti.md](docs/prova-gradini-lenti.md): prova in laboratorio dei gradini R10-R14 fra le due T3, con la serie F10 dell'app.

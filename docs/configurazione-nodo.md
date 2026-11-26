@@ -69,7 +69,7 @@ Una radio ascolta **un profilo alla volta**: la voce dal vivo della v2 (Range, S
 ## 7. Punti aperti
 - ~~**"Nodo con gateway con seconda scheda":**~~ **Deciso il 26/11/2026:** la seconda scheda è la **radio del voto** (topologia doppia); il gateway Internet lo fa la scheda principale con il suo Wi-Fi.
 - ~~**Una radio ascolta un profilo alla volta:**~~ **Deciso il 26/11/2026:** ascolto a turni dall'orologio, modo v2 durante il QSO e con lock (punto 5).
-- **Il reflector V3:** deciso che **sostituirà il reflector v2** (vedi sotto); protocollo da definire.
+- **Il reflector V3:** deciso che **sostituirà il reflector v2**; **progettato** in [reflector-v3.md](reflector-v3.md). Il gateway V3 si dichiara nei HELLO e KEEPALIVE e manda l'annuncio delle stazioni sentite; il lato nodo (firmware) è da scrivere.
 - ~~**Pagina di configurazione**~~ **Fatta** (punto 6), senza scrittura sulla scheda.
 - ~~**Gestione delle chiavi** del sysop~~ **Deciso il 26/11/2026: una chiave per nodo** (16 byte, generata dalla pagina, scritta nella configurazione); cambio con la pagina e riscrittura via seriale o web. Resta da definire come si cambia la chiave via radio senza ripetere la vecchia.
 - ~~**Comando forzato che interrompe un QSO**~~ **Deciso il 26/11/2026: mai.**

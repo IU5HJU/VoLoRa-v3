@@ -6,7 +6,7 @@ Il codice e i documenti della v2 sono nel submodule `third_party/VoLoRa-v2` (ver
 
 > **Principio d'uso (26/11/2026).** Un nodo V3 si usa **come un nodo v2, con le solite funzioni**, e in più ha una capacità maggiore di relazionarsi con gli altri nodi e con le radio mobili grazie alle caratteristiche del V3 ([configurazione-nodo.md](configurazione-nodo.md)).
 
-> **Il reflector V3 sostituirà il reflector v2 (26/11/2026).** Poiché la v2 non si modifica, il nuovo reflector deve essere un **sostituto compatibile**: parla ai nodi v2 il protocollo v2 **invariato** (collegamento firmato, KEEPALIVE, contatore anti-ripetizione, modi voce, messaggio e testo) e ai nodi V3 il protocollo V3. Il suo progetto è da fare.
+> **Il reflector V3 sostituirà il reflector v2 (26/11/2026).** Poiché la v2 non si modifica, il nuovo reflector deve essere un **sostituto compatibile**: parla ai nodi v2 il protocollo v2 **invariato** (collegamento firmato, KEEPALIVE, contatore anti-ripetizione, modi voce, messaggio e testo) e ai nodi V3 il protocollo V3. Il progetto è in [reflector-v3.md](reflector-v3.md) (riferimento in Python provato contro il vero `vlnode` della v2).
 
 ## 1. Cosa significa
 1. **Nessuna modifica ai formati v2:** né ai pacchetti (modi 1-7, flag, sessione, nominativo, posizione), né al significato del bit `RELAYED`, né ai comandi del sysop, né al reflector.

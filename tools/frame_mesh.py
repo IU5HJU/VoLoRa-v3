@@ -17,7 +17,7 @@ VERSION = 3
 REVISION = 2                                   # revisione 0.2 dei frame (23/11/2026): opzioni TLV, profili, banda, id a 32 bit
 T_BEACON, T_MESH = 13, 14
 # Sottotipi del frame 14: 1-63 mesh, 64-127 collegamento e cambio di banda, 128-255 riservati (spazio per le funzioni future)
-SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, NODE_INFO=8, FORZA_IMG=9, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68, SYSOP=70)
+SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, NODE_INFO=8, FORZA_IMG=9, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68, SYSOP=70, REFL_ANNUNCIO=80, REFL_INOLTRO=81, REFL_ESITO=82)
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
@@ -274,6 +274,29 @@ def verify_sysop(key, frame_bytes, last_counter):
     return d
 
 
+# ------------------------------------------------------------------------------------------------ reflector V3 (docs/reflector-v3.md)
+ESITO_CONSEGNATO, ESITO_NON_TROVATO, ESITO_RIFIUTATO = 0, 1, 2
+
+
+def enc_refl_annuncio(entries):
+    """Un nodo gateway V3 dice al reflector quali stazioni sente nella sua zona radio: [(nominativo, eta' in secondi)], fino a 20 voci. Frame sul collegamento Internet,
+    mai in radio."""
+    entries = list(entries)[:20]
+    return _mesh("REFL_ANNUNCIO", bytes([len(entries)]) + b"".join(pack_call(c) + struct.pack(">H", min(a, 65535)) for c, a in entries))
+
+
+def enc_refl_inoltro(dest, src, ttl, inner):
+    """Busta per far arrivare un frame V3 `inner` (OFFER, DATA, STATUS...) alla stazione `dest` attraverso il nodo che la sente. Il reflector la manda al gateway che ha `dest`
+    nel proprio annuncio. ttl scende a ogni passaggio."""
+    if len(inner) > 235:
+        raise ValueError("frame troppo lungo per un datagramma")
+    return _mesh("REFL_INOLTRO", pack_call(dest) + pack_call(src) + bytes([ttl & 0xFF]) + bytes(inner))
+
+
+def enc_refl_esito(dest, code):
+    return _mesh("REFL_ESITO", pack_call(dest) + bytes([code]))
+
+
 def vote_winner(votes):
     """votes = [(margine_dB, id_nodo)]: vince il margine piu' alto; a parita' l'identificativo piu' basso. Ritorna l'id vincente."""
     return min(votes, key=lambda v: (-v[0], v[1]))[1]
@@ -310,6 +333,16 @@ def decode(b):
             d["members"] = [(unpack_call(x[14 + 7 * i:20 + 7 * i]), x[20 + 7 * i] & 3, x[20 + 7 * i] >> 2) for i in range(cnt)]
             if len(x) < 14 + 7 * cnt:
                 return None
+        elif n == "REFL_ANNUNCIO":
+            cnt = x[0]
+            d["entries"] = [(unpack_call(x[1 + 8 * i:7 + 8 * i]), struct.unpack(">H", x[7 + 8 * i:9 + 8 * i])[0]) for i in range(cnt)]
+            if len(x) < 1 + 8 * cnt:
+                return None
+        elif n == "REFL_INOLTRO":
+            d["dest"], d["src"], d["ttl"] = unpack_call(x[0:6]), unpack_call(x[6:12]), x[12]
+            d["inner"] = bytes(x[13:])
+        elif n == "REFL_ESITO":
+            d["dest"], d["code"] = unpack_call(x[0:6]), x[6]
         elif n == "SYSOP":
             d["call"] = unpack_call(x[0:6])
             d["cmd"], d["arg"], d["counter"] = struct.unpack(">BHI", x[6:13])
