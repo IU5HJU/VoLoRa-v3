@@ -45,6 +45,15 @@ inline int chunkSize(int rung, bool sx1262) {
   return top < kMinChunk ? top : kMinChunk;
 }
 
+// Sensibilita' stimata dello studio (docs/scala-modi.md): LoRa dalle formule Semtech, FSK con banda = bit rate + 2 x deviazione e SNR 12 dB; cifra di rumore 6 dB.
+inline double sensitivityDbm(int rung) {
+  const Rung& r = kRungs[rung];
+  static const double snr[13] = {0, 0, 0, 0, 0, -2.5, -5.0, -7.5, -10.0, -12.5, -15.0, -17.5, -20.0};
+  if (r.lora) return -174 + 10 * std::log10(r.a * 1000) + 6.0 + snr[static_cast<int>(r.b)];
+  return -174 + 10 * std::log10((r.a + 2 * r.b) * 1000) + 6.0 + 12;
+}
+inline int piecesPerFrame(int rung, bool sx1262) { return chunkSize(rung, sx1262) / kPiece; }
+
 // Tempo stimato per trasferire nbytes: frame, ritrasmissioni (perdita media), una STATUS per finestra e i tempi di commutazione.
 inline double estimateSeconds(uint32_t nbytes, int rung, bool sx1262, double loss = 0.05, int window = 16, double guardS = 0.15) {
   const int c = chunkSize(rung, sx1262);

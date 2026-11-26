@@ -7,6 +7,7 @@
 #include <Preferences.h>
 
 #include "ble_bridge.h"
+#include "img_proto.h"
 #include "limits.h"
 
 #if defined(RADIO_SX1262)
@@ -141,6 +142,8 @@ void setup() {
   const uint16_t rungMask = v3::rungMask(kSx1262, kTcxo);       // SX1278: R0-R11 (0x0FFF); SX1262: R1-R11 (0x0FFE); con TCXO anche R12-R14
   bridge = new v3::ble::Bridge(&sink, call, kSx1262, kRung, rungMask);
   Serial.printf("gradini annunciati: 0x%04X\n", rungMask);
+  Serial.printf("protocollo immagini (non ancora collegato alla radio): mittente %u byte, ricevitore %u byte, collegamento %u byte di RAM\n", static_cast<unsigned>(sizeof(v3::img::Sender)),
+                static_cast<unsigned>(sizeof(v3::img::Receiver)), static_cast<unsigned>(sizeof(v3::img::Link)));
   Serial.printf("nominativo: %s\n", call[0] ? call : "(non impostato: scrivi CALL IU5HJU)");
 
   passkey = 100000 + (esp_random() % 900000);           // codice a 6 cifre per l'accoppiamento (sulla seriale; lo schermo OLED dopo)
