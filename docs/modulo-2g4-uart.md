@@ -85,3 +85,29 @@ Tutto questo è codificato in [`tools/ebyte_e28.py`](../tools/ebyte_e28.py) e pr
 5. **Scansione RSSI** (modo 1) a casa tua: quanto è occupata la banda dal Wi-Fi.
 6. **Portata** e perdita contro distanza.
 7. Tempo di cambio di modo con AUX.
+
+## 9. Il band plan 13 cm (documento ARI Milano, U/SHF Bandplan rev. 4.1.2, maggio 2004)
+Fonte: il PDF fornito dall'autore il 26/11/2026. È del **maggio 2004** (D.M. 8-07-2002, raccomandazioni IARU Regione 1 di San Marino 2002), pubblicato dalla sezione ARI di Milano: **datato, da confrontare con il piano attuale**. Lo studio non lo prende come vincolo (come per i 430-440 MHz); serve a scegliere bene i canali.
+
+**13 cm, 2300-2450 MHz, statuto secondario** (testo del documento):
+| Segmento | Uso |
+|---|---|
+| 2300-2320 MHz | regolato dal VHF Manager (Torremolinos 1990) |
+| 2320,075 ± 75 kHz | solo CW; EME 2320,012 ± 12; PSK31 2320,138 |
+| 2320,150-2321,000 | CW e SSB, chiamata SSB 2320,200 |
+| 2320,900 ± 100 kHz | beacon; 2321,500 ± 500 kHz: NBFM e ripetitori |
+| **2322-2400 MHz** | **permessa la trasmissione in tutti i modi** |
+| ATV | 2322-2355 e 2370-2392 MHz |
+| **Comunicazioni digitali** | **2355-2365 e 2392-2400 MHz** |
+| **Satellite** | **2440-2450 MHz** (nel disegno l'intera fascia 2400-2450 è colorata come satellite: testo e disegno non coincidono) |
+Per 2400-2440 MHz il documento non dice nulla di specifico.
+
+**Wi-Fi nel documento:** non è nominato. Il piano fotografa solo la ripartizione radioamatoriale.
+
+### Cosa significa per il modulo (campo 2400-2500 MHz, CHAN × passo)
+- **I segmenti "digitali" e "tutti i modi" stanno sotto 2400 MHz**, fuori dal campo del modulo (canale 0 = 2400 MHz esatti, sul bordo): con questi moduli non si arriva a 2322-2400.
+- Dentro 2400-2450 MHz il documento non assegna segmenti per i dati veloci; la fascia 2440-2450 è dei satelliti (testo): **meglio evitare CHAN 40-50 a 1 MHz di passo** (e i canali equivalenti con passo maggiore).
+- **Il Wi-Fi occupa quasi tutta la fascia** (punto 6 delle risposte precedenti: canali da 20 MHz con centro 2407 + 5·n): i soli spazi fra i canali 1, 6 e 11 sono circa **2422-2427 MHz** e **2447-2452 MHz**. Quest'ultimo cade nella fascia satellite. Candidati a 1 MHz di passo: **CHAN 22-27 (2422-2427 MHz)**, che contengono il valore di fabbrica **CHAN 24 = 2424 MHz**; e **CHAN 0-1** (2400-2401 MHz, bordo basso). La **scansione RSSI** (modo 1) decide comunque: i router in zona possono usare altri canali.
+- Con velocità d'aria alta (50k e 100k: passo di 2 MHz; 1M: 3 MHz; 2M: 5 MHz) i canali sono più radi: **CHAN 12 a 2 MHz = 2424 MHz**, **CHAN 8 a 3 MHz = 2424 MHz**, **CHAN 5 a 5 MHz = 2425 MHz**. La larghezza di banda occupata dal modulo a 1M e 2M non è nel manuale: a 2 Mbps può superare i 2 MHz, e uno spazio fra due canali Wi-Fi da 5 MHz potrebbe non bastare.
+- Altre bande dello stesso documento, per eventuali profili futuri: 5 cm (5650-5850 MHz, secondario, con segmenti "non assegnati in Italia"), 3 cm (10300-10500 MHz secondario), 1,5 cm (24000-24050 MHz esclusivo), 7 mm (47000-47200 MHz esclusivo). Da rileggere sul piano attuale.
+
