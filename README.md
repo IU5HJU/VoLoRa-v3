@@ -25,6 +25,7 @@ Studio del **protocollo VoLoRa V3**: firmware **specializzati per ruolo** (ogni 
 - [docs/terminali-nascosti.md](docs/terminali-nascosti.md): cosa sono i terminali nascosti e perché il protocollo usa turni dall'orologio, voto e veto del destinatario.
 - [docs/voting-isofrequenza.md](docs/voting-isofrequenza.md): più nodi sulla stessa frequenza nella voce: elezione per qualità e voto via radio (Internet non è affidabile).
 - [docs/compatibilita-v2.md](docs/compatibilita-v2.md): la regola di compatibilità con la v2 (infrastruttura invariata).
+- [docs/band-plan.md](docs/band-plan.md): il band plan ARI (70 cm, 13 cm, 23 cm) dalle schermate del sito, e dove cadono i nostri canali.
 - [docs/modulo-2g4-uart.md](docs/modulo-2g4-uart.md): i moduli Ebyte a 2,4 GHz con seriale, usati come tubo opaco (profilo 2 del cambio di banda), con la scheda di prova dell'applicazione e la configurazione dal programma.
 - [docs/prova-gradini-lenti.md](docs/prova-gradini-lenti.md): prova in laboratorio dei gradini R10-R14 fra le due T3, con la serie F10 dell'app.
 - [docs/mesh-v3.md](docs/mesh-v3.md): bozza della logica mesh V3 (beacon, polling, ripetizione, ricezione da più stazioni) con numeri calcolati e decisioni.
