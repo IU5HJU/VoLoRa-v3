@@ -28,16 +28,22 @@ Nel 2 m (in alto): 145,794-145,806 MHz comunicazioni spaziali (ISS); 145,806-146
 - **Il segmento che meglio ci ospita è 433,600-434,000 MHz** ("tutti i modi", 20 kHz, 400 kHz in tutto), che ha già i **canali per comunicazioni digitali 433,625-433,775 (150 kHz)**. Evita le uscite e gli ingressi dei ripetitori FM (430-432, 432,825-433,200) e i segmenti stretti (CW/SSB/beacon/EME).
 - **I satelliti (435-438 MHz)** sono l'altra ampia fascia, ma vanno lasciati liberi.
 
-## 3. Proposte per i canali ancora da definire (profilo 0)
-Tutte **da decidere**; in 433,600-434,000 MHz ci stanno al più tre canali da 125 kHz o uno da 250-400 kHz:
+## 3. Tabella dei canali del profilo 0 (deciso il 26/11/2026)
+Decisioni dell'autore: **canale di incontro 433,700 MHz** e **canale di servizio del voto 433,850 MHz**, entrambi da 125 kHz. La tabella è in [`tools/canali.py`](../tools/canali.py), provata in `tests/sim/test_canali.py`. Il `canale` del BAND-SET con profilo 0 è l'indice di questa tabella.
 
-| Uso | Larghezza | Proposta di centro | Note |
-|---|---|---|---|
-| Incontro e beacon (R10, 125 kHz) | 125 kHz | **433,700 MHz** (433,6375-433,7625) | dentro i canali digitali; la frequenza FAX 433,700 è un'attività stretta, da controllare con l'ascolto |
-| Canale di servizio del voto (gradino veloce) | 125 kHz | 433,850 MHz (433,7875-433,9125) | R8/R9 (125 kHz): R3-R7 sono più larghi di 125 kHz e non ci stanno |
-| Trasferimenti veloci (immagini) | 250-400 kHz | da negoziare, oltre i 434 MHz non c'è segmento | per R3-R7 e FSK serve altro spazio: vedi sotto |
+| Canale | Frequenza (MHz) | Larghezza max | Gradini ammessi | Uso |
+|---|---|---|---|---|
+| 0 | 433,700 | 125 kHz | R2, R8-R14 | incontro: beacon, polling, HELLO e trasferimenti stretti |
+| 1 | 433,850 | 125 kHz | R2, R8-R14 | servizio fra i nodi (VOTO) e trasferimenti stretti con ascolto prima di parlare |
+| 2 | 433,955 | 62,5 kHz | R11-R14 | trasferimenti con i gradini stretti |
+| 3-15 | — | — | — | riservati (tabella estesa) |
 
-I **modi larghi** (R3-R7, FSK da 150 kHz) **non entrano** nei 400 kHz insieme agli altri canali: per i trasferimenti veloci restano due strade: (a) usare 433,600-434,000 per un solo canale largo alla volta, concordato fra le stazioni, oppure (b) **cambiare banda** (2,4 GHz, profilo 2), che è proprio l'idea del cambio di banda.
+- **Tutti e tre i canali stanno nel segmento 433,600-434,000 MHz** (tutti i modi, canali digitali 433,625-433,775) e oltre il segmento FM/Digital Voice della v2 (fino a 433,575 MHz). Guardia minima fra i canali: 11,25 kHz.
+- **L'incontro (R10) è sul canale 0**, come deciso: HELLO e beacon sempre lì. I trasferimenti negoziano il canale nell'HELLO (BAND-SET con profilo 0).
+- **Cosa entra in 125 kHz:** i gradini con larghezza occupata fino a 125 kHz: FSK R2 (50 kbit/s, 100 kHz di banda occupata, circa 38 kbit/s netti) e LoRa R8-R14. **Il più veloce è R2 in FSK**, poi R8 (circa 1,6 kbit/s netti).
+- **Non entrano i gradini larghi:** R0, R1 (FSK 150k e 100k) e R3-R7 (LoRa 250-500 kHz) non hanno un canale nel segmento. Per i trasferimenti veloci restano il **cambio di banda a 2,4 GHz (profilo 2)** o un accordo temporaneo fra le stazioni per usare tutto il segmento (non nella tabella).
+- **Il canale 1** è condiviso fra il voto (frame di 12 byte, rarissimi) e i trasferimenti stretti: chi trasmette ascolta prima, e il voto ha la precedenza.
+- **A 433,700 MHz il piano indica la frequenza FAX** (attività stretta): ascolto prima di trasmettere.
 
 ## 4. 13 cm e 23 cm
 - **13 cm:** tutta la fascia 2400-2450 MHz è "Satellite" nel piano attuale; ATV in 2427-2443 MHz se non c'è traffico satellitare; i segmenti digitali (2355-2365 e 2392-2400 MHz) sono sotto il campo del modulo. Dettagli e canali candidati in [modulo-2g4-uart.md](modulo-2g4-uart.md), punto 9.

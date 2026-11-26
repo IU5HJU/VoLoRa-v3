@@ -21,6 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import protocollo_immagini as pi  # noqa: E402
+import scala_modi as scm  # noqa: E402
 import sim_mesh as sm  # noqa: E402
 
 RUNG = 6               # gradino della voce (ipotesi: dipende dal profilo VoLoRa v2 scelto)
@@ -95,9 +96,22 @@ GUARD_VOTO = 0.010     # s fra uno slot di voto e il successivo
 VOTE_BYTES = 12        # frame_mesh.enc_vote
 
 
+# Modi del canale di servizio (433,850 MHz, 125 kHz di banda: docs/band-plan.md): FSK R2 e LoRa a 125 kHz. (nome, sensibilita' dBm, tempo in aria del VOTO s)
+SERVICE_MODES = [("R2 FSK 50k", pi.sensitivity_dbm(2), pi.frame_airtime_s(2, VOTE_BYTES)),
+                 ("125/SF7", scm.sens_lora(125, 7), scm.lora_toa(7, 125, 1, VOTE_BYTES, 8)),
+                 ("125/SF8", scm.sens_lora(125, 8), scm.lora_toa(8, 125, 1, VOTE_BYTES, 8)),
+                 ("125/SF9 (R8)", scm.sens_lora(125, 9), scm.lora_toa(9, 125, 1, VOTE_BYTES, 8)),
+                 ("125/SF10 (R9)", scm.sens_lora(125, 10), scm.lora_toa(10, 125, 1, VOTE_BYTES, 8)),
+                 ("125/SF12 (R10)", scm.sens_lora(125, 12), scm.lora_toa(12, 125, 1, VOTE_BYTES, 8))]
+
+
 def rung_collegamento(dist_km, extra_nodi, rng, sigma=4.0):
-    """Gradino piu' veloce con 6 dB di margine fra i due nodi (antenne in alto: perdita extra piccola); None se non si sentono."""
-    return sm.best_rung(_prx(rng, dist_km, extra_nodi, sigma=sigma))
+    """Modo piu' veloce del canale di servizio con 6 dB di margine fra i due nodi (antenne in alto: perdita extra piccola): (nome, tempo in aria); None se non si sentono."""
+    prx = _prx(rng, dist_km, extra_nodi, sigma=sigma)
+    for name, sens_dbm, toa in SERVICE_MODES:
+        if prx - sens_dbm >= sm.MARGIN_DB:
+            return name, toa
+    return None
 
 
 def run_voto_radio(dist_nodi_km, extra_mobile=25.0, extra_nodi=10.0, p_loss=0.03, repeat=1, scenari=3000, seed=1):
@@ -122,8 +136,8 @@ def run_voto_radio(dist_nodi_km, extra_mobile=25.0, extra_nodi=10.0, p_loss=0.03
             senza_link += 1
             doppi += 1
             continue
-        rungs.append(rl)
-        slot = pi.frame_airtime_s(rl, VOTE_BYTES) + GUARD_VOTO
+        rungs.append(rl[0])
+        slot = rl[1] + GUARD_VOTO
         durate.append(2 * slot * repeat)
         m = [p1 - sens + rng.gauss(0, MEAS_SIGMA), p2 - sens + rng.gauss(0, MEAS_SIGMA)]
         win = 0 if m[0] >= m[1] else 1
@@ -134,7 +148,7 @@ def run_voto_radio(dist_nodi_km, extra_mobile=25.0, extra_nodi=10.0, p_loss=0.03
     ok = n - doppi
     return {"casi": n, "doppio_accesso": doppi / n if n else float("nan"), "senza_collegamento": senza_link / n if n else float("nan"),
             "migliore_se_unico": migliore / ok if ok else float("nan"), "durata_voto_s": statistics.median(durate) if durate else float("nan"),
-            "gradino_mediano": statistics.median(rungs) if rungs else None}
+            "gradino_mediano": max(set(rungs), key=rungs.count) if rungs else None}
 
 
 def run_percorso(isteresi_db, passi=60, dist_km=20.0, seed=1, extra=25.0, fading_db=3.0, prove=300):
@@ -183,13 +197,13 @@ def main():
         r2 = run_elezione("qualita", "rf", a.distanza, a.scenari, a.seed, nodi_si_sentono=True)
         print(f"| {1000 * W:.0f} ms | {100 * r1['doppio_accesso']:.1f} % | {100 * r2['doppio_accesso']:.1f} % | {1000 * r1['ritardo_medio_s']:.0f} ms |")
     W = w0
-    print("\nVoto via radio sul canale di servizio fra i nodi (antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo):")
+    print("\nVoto via radio sul canale di servizio a 433,850 MHz, 125 kHz (modi: FSK R2 e LoRa 125 kHz; antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo):")
     print("| distanza fra i nodi | nodi si sentono | gradino del voto | durata del voto (2 slot) | entra in 200 ms | doppio accesso | nodo migliore |")
     print("|---|---|---|---|---|---|---|")
-    for dk in (10.0, 20.0, 30.0, 50.0):
+    for dk in (3.0, 5.0, 10.0, 20.0, 30.0, 50.0):
         r = run_voto_radio(dk, scenari=a.scenari, seed=a.seed)
         durata = r["durata_voto_s"]
-        gr = "-" if r["gradino_mediano"] is None else f"R{int(r['gradino_mediano'])}"
+        gr = "-" if r["gradino_mediano"] is None else r["gradino_mediano"]
         print(f"| {dk:g} km | {100 * (1 - r['senza_collegamento']):.0f} % | {gr} | {1000 * durata:.0f} ms | {'si' if durata <= W else 'NO'} | {100 * r['doppio_accesso']:.1f} % | {100 * r['migliore_se_unico']:.0f} % |")
     print("\nCambi di nodo lungo un percorso fra i due (media per prova):")
     for h in (0.0, 3.0, 6.0):

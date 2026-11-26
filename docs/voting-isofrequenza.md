@@ -83,14 +83,16 @@ Lettura:
 | 400 ms | 22 % | 5 % | 131 ms |
 | 800 ms | 11 % | 2 % | 289 ms |
 
-**Il voto via radio** (canale di servizio, VOTO da 12 byte, un voto su 33 perso, antenne in alto con 10 dB di perdita extra, un solo tentativo; stesso modello):
+**Il voto via radio** sul canale di servizio **433,850 MHz, 125 kHz** ([band-plan.md](band-plan.md)). Modi ammessi: FSK R2 e LoRa a 125 kHz (SF7-SF12). VOTO da 12 byte, un voto su 33 perso, antenne in alto con 10 dB di perdita extra, un solo tentativo; stesso modello. *(Risultati rifatti il 26/11/2026: la prima stima usava i gradini R3-R7, più larghi di 125 kHz, che sul canale scelto non stanno.)*
 
-| Distanza fra i nodi | Gradino del voto | Durata del voto (2 slot) | Entra in 200 ms | Doppio accesso | Nodo migliore |
+| Distanza fra i nodi | Modo del voto | Durata del voto (2 slot) | Entra in 200 ms | Doppio accesso | Nodo migliore |
 |---|---|---|---|---|---|
-| 10 km | R3 | 32 ms | sì | 3,0 % | 97 % |
-| 20 km | R4 | 41 ms | sì | 2,4 % | 95 % |
-| 30 km | R5 | 61 ms | sì | 3,9 % | 95 % |
-| 50 km | R7 | 164 ms | sì | 1,2 % | 95 % |
+| 3 km | FSK R2 | 27 ms | sì | 2,7 % | 97 % |
+| 5 km | FSK R2 | 27 ms | sì | 3,1 % | 97 % |
+| 10 km | LoRa 125/SF7 | 102 ms | sì | 3,0 % | 97 % |
+| 20 km | LoRa 125/SF7 | 102 ms | sì | 2,4 % | 95 % |
+| 30 km | LoRa 125/SF7 | 102 ms | sì | 3,9 % | 95 % |
+| 50 km | LoRa 125/SF7 (o SF8) | 185 ms | sì | 1,2 % | 95 % |
 
 Il doppio accesso residuo (circa 1-4 %) è soprattutto la **perdita del VOTO del vincitore** (3 % nel modello): si abbassa **ripetendo il voto**, a spese della durata. **È il metodo scelto:** vota il margine, non il caso, e non dipende da Internet. Il voto lungo il percorso a 50 km quasi riempie i 200 ms: oltre, serve un gradino più veloce (antenne migliori) o la zona di sovrapposizione non è ammessa.
 
@@ -102,7 +104,7 @@ Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio ac
 
 ## 5. Cose da decidere o studiare
 1. ~~Ritardo massimo~~ **Deciso il 23/11/2026: 200 ms** (compensati dal loop del microfono della v2). Resta la scala in dB (20 dB nel modello).
-2. ~~Canale per l'annuncio~~ **Deciso il 23/11/2026: via radio**, mai da Internet. **Deciso il 25/11/2026: frequenza dedicata nella banda 430-440 MHz**, una per zona, concordata fra chi installa i nodi, con gradino veloce (R3-R7) e antenne in alto. Da scegliere la frequenza e il gradino precisi; e se la scheda di trasmissione del nodo può fare da radio di servizio (da verificare).
+2. ~~Canale per l'annuncio~~ **Deciso il 23/11/2026: via radio**, mai da Internet. **Deciso il 25/11/2026: frequenza dedicata nella banda 430-440 MHz**, una per zona, concordata fra chi installa i nodi, con gradino veloce (R3-R7) e antenne in alto. **Deciso il 26/11/2026: 433,850 MHz** (canale 1 della tabella, 125 kHz, [band-plan.md](band-plan.md)). Il modo veloce deve stare nei 125 kHz: FSK R2 o LoRa 125 kHz (simulatore ripetuto con questi modi il 26/11/2026: il voto entra nei 200 ms fino a 50 km). Da verificare ancora: se la scheda di trasmissione del nodo può fare da radio di servizio (da verificare).
 3. Quante **ripetizioni** del VOTO (una riduce il caso, ma allunga il voto) e il **tempo di guardia** fra gli slot (10 ms nel modello).
 4. Il formato del VOTO è in [`tools/frame_mesh.py`](../tools/frame_mesh.py) (`enc_vote`, sottotipo 7 del frame MESH, 12 byte); da integrare in [mesh-v3.md](mesh-v3.md), punto 8c.
 5. Quanto tempo il nodo ricorda il vincitore e la soglia dell'isteresi (di base 3 dB).
