@@ -138,10 +138,14 @@ def decode(b):
                 d["rssi"], d["snr"] = struct.unpack("bb", body[o:o + 2])
                 o += 2
             if d["flags"] & F_POS:
+                if len(body) < o + 7:
+                    return None                         # posizione troncata: frame non valido
                 d["pos"] = fm.unpack_pos(body[o:o + 7])
+                d["pos_raw"] = bytes(body[o:o + 7])
                 o += 7
             if d["flags"] & F_OPT:
                 d["opts"] = fm.unpack_opts(body[o:])
+                d["opts_raw"] = bytes(body[o:])
         elif tipo == T["PROBE"]:
             d.update(rung=body[0], idx=body[1], count=body[2])
         elif tipo == T["PROBE_REPORT"]:
@@ -163,10 +167,14 @@ def decode(b):
             d["crc"] = struct.unpack(">I", body[o + 12 + 2 * nl:o + 16 + 2 * nl])[0]
             e = o + 16 + 2 * nl
             if d["flags"] & F_POS:
+                if len(body) < e + 7:
+                    return None
                 d["pos"] = fm.unpack_pos(body[e:e + 7])
+                d["pos_raw"] = bytes(body[e:e + 7])
                 e += 7
             if d["flags"] & F_OPT:
                 d["opts"] = fm.unpack_opts(body[e:])
+                d["opts_raw"] = bytes(body[e:])
         elif tipo == T["ACCEPT"]:
             d.update(layers=body[0], window=body[1], k=body[2])
         elif tipo == T["DATA"]:
@@ -185,7 +193,7 @@ def decode(b):
             d["crc"] = struct.unpack(">I", body[5 + n:9 + n])[0]
         elif tipo == T["ABORT"]:
             d["reason"] = body[0]
-    except (IndexError, struct.error, UnicodeDecodeError):
+    except (IndexError, struct.error, ValueError):      # ValueError comprende UnicodeDecodeError, la posizione di tipo sconosciuto e le opzioni troncate
         return None
     return d
 

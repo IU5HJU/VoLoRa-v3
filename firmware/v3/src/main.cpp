@@ -7,14 +7,14 @@
 #include <Preferences.h>
 
 #include "ble_bridge.h"
+#include "limits.h"
 
 #if defined(RADIO_SX1262)
 constexpr bool kSx1262 = true;
-constexpr uint16_t kRungMask = 0x0FFE;      // senza R0 (150 kb/s non garantiti sull'SX1262 a 433 MHz) e senza R12-R14 (serve il TCXO): docs/confronto-datasheet.md
 #else
 constexpr bool kSx1262 = false;
-constexpr uint16_t kRungMask = 0x0FFF;      // SX1278 senza TCXO: R0-R11
 #endif
+constexpr bool kTcxo = false;               // il TCXO non si legge ancora dalla scheda: senza, R12-R14 non si annunciano (docs/confronto-datasheet.md)
 constexpr int kRung = 5;                    // gradino del modello a tempo (R5 = LoRa 250 kHz / SF7)
 
 // UUID del servizio (docs/ble-telefono.md)
@@ -138,7 +138,9 @@ void setup() {
   prefs.begin("vl3", false);
   const String saved = prefs.getString("call", "");
   strncpy(call, saved.c_str(), sizeof(call) - 1);
-  bridge = new v3::ble::Bridge(&sink, call, kSx1262, kRung, kRungMask);
+  const uint16_t rungMask = v3::rungMask(kSx1262, kTcxo);       // SX1278: R0-R11 (0x0FFF); SX1262: R1-R11 (0x0FFE); con TCXO anche R12-R14
+  bridge = new v3::ble::Bridge(&sink, call, kSx1262, kRung, rungMask);
+  Serial.printf("gradini annunciati: 0x%04X\n", rungMask);
   Serial.printf("nominativo: %s\n", call[0] ? call : "(non impostato: scrivi CALL IU5HJU)");
 
   passkey = 100000 + (esp_random() % 900000);           // codice a 6 cifre per l'accoppiamento (sulla seriale; lo schermo OLED dopo)

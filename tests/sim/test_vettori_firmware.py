@@ -23,7 +23,7 @@ def check(c, m):
 repo = os.path.join(ROOT, "firmware", "v3", "tests", "vettori")
 with tempfile.TemporaryDirectory() as tmp:
     nomi = gen.genera(tmp)
-    check(len(nomi) == 15, f"il generatore produce {len(nomi)} file di vettori")
+    check(len(nomi) == 18, f"il generatore produce {len(nomi)} file di vettori")
     for n in nomi:
         a, b = os.path.join(tmp, n + ".txt"), os.path.join(repo, n + ".txt")
         check(os.path.exists(b) and filecmp.cmp(a, b, shallow=False), f"vettori '{n}' aggiornati nel repository")
