@@ -16,7 +16,6 @@
 ## 2. Livelli del collegamento
 | Livello | Cosa si scambia | Quando |
 |---|---|---|
-| 26/11/2026 | **Gradini e chip** (dal confronto con i datasheet): R3 solo fra chip della stessa famiglia; R0 solo SX1278; R12-R14 solo con TCXO annunciato; FSK a 64 byte sull'SX1278; +17 dBm in continuo sull'SX1278. | autore, [confronto-datasheet.md](confronto-datasheet.md) punto 6 |
 | **0 - beacon** | solo nominativo | ciclicamente, da tutti |
 | **1 - polling** | nominativo del destinatario, nominativo del mittente | quando l'operatore sceglie un destinatario |
 | **2 - scambio** | nominativi, **rapporto di segnale** (RSSI e SNR misurati), **posizione** (GPS o locatore), capacità (gradini ammessi, memoria) | dopo che le due stazioni si sono ascoltate |
@@ -199,6 +198,7 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 21, OFFERTA 24, GRU
 ## 10. Registro delle decisioni
 | Data | Decisione | Fonte |
 |---|---|---|
+| 26/11/2026 | **Gradini e chip** (dal confronto con i datasheet): R3 solo fra chip della stessa famiglia; R0 solo SX1278; R12-R14 solo con TCXO annunciato; FSK a 64 byte sull'SX1278; +17 dBm in continuo sull'SX1278. | autore, [confronto-datasheet.md](confronto-datasheet.md) punto 6 |
 | 23/11/2026 | Il beacon contiene il **solo nominativo**. Poi, fra stazioni che si sono ascoltate, si scambiano nominativo, rapporto e posizione. | autore |
 | 23/11/2026 | **Nominativo, rapporto di segnale e posizione (locatore o GPS)** sono elementi fissi di ogni collegamento. Nessuna privacy. | autore, [regole-radioamatoriali.md](regole-radioamatoriali.md) |
 | 23/11/2026 | Il primo contatto può essere il solo nominativo. | autore |
