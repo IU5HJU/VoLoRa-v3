@@ -173,6 +173,8 @@ Codificati e decodificati in [`tools/frame_mesh.py`](../tools/frame_mesh.py), pr
 | VETO | 14/6 | 12 | come CONFERMA con esito 1 e il nominativo del membro che il destinatario non sente al gradino scelto |
 | VOTO | 14/7 | 12 | isofrequenza: nominativo della mobile (6), sessione (2), margine in dB (1), identificativo del nodo (1); sul canale di servizio fra i nodi ([voting-isofrequenza.md](voting-isofrequenza.md)) |
 | BAND-SET | 14/64 | 14 | cambio di banda: sessione (2), profilo (1), canale (1), gradino (1), k (1), ripetizioni (1), quando (1), ora UTC (4) |
+| BAND-SET-FREQ | 14/67 | 17 | come BAND-SET con la frequenza in kHz (4 byte) al posto dell'indice del canale |
+| BAND-ACK-FREQ | 14/68 | 9 | sessione (2), profilo (1), frequenza in kHz (4) |
 | BAND-ACK | 14/65 | 6 | sessione (2), profilo (1), canale (1) |
 | BAND-BACK | 14/66 | 5 | ritorno alla banda base: sessione (2), motivo (1) |
 
@@ -199,6 +201,7 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 21, OFFERTA 24, GRU
 | 23/11/2026 | **Il gruppo di ripetitori è coordinato dal mittente** (il destinatario può mettere il veto). | autore |
 | 23/11/2026 | Regola "pochi e veloci" di partenza: **almeno 2 membri, tolleranza di 1 gradino** (da tarare sul simulatore). | autore |
 | 23/11/2026 | Primo passo del piano: **simulatore mesh sul PC**. | autore |
+| 26/11/2026 | **Frequenze configurabili:** nel firmware ogni frequenza dei canali di T3 e T-Beam è liberamente configurabile (si controlla solo il campo del chip); le frequenze a 2,4 GHz del modulo sono configurabili a piacere dentro la banda radioamatoriale 2400-2450 MHz, sulla griglia del modulo. Le tabelle sono valori di partenza; il cambio di canale può portare la frequenza esplicita (BAND-SET-FREQ). Nota in [regole-radioamatoriali.md](regole-radioamatoriali.md). | autore |
 | 26/11/2026 | **Canali del profilo 0 (band plan ARI):** incontro a **433,700 MHz**, servizio del voto a **433,850 MHz** (entrambi 125 kHz), canale stretto a 433,955 MHz (62,5 kHz); tabella in [band-plan.md](band-plan.md), punto 3, e `tools/canali.py`. | autore |
 | 25/11/2026 | **Decisioni di partenza** (dalla lista delle aperte): ruolo "nodo mesh" a sé; ritrasmissione selettiva e fontana nei gruppi; **canale di servizio del voto = frequenza dedicata** nella banda 430-440 MHz, uno per zona (poi fissato a 433,850 MHz), modo veloce nei 125 kHz e antenne in alto; **canale delle immagini negoziato nell'HELLO**; gradino di ascolto **R10 fisso**; beacon fisso a 10 minuti con slot; ripetitori per rapporto di segnale, massimo 2 salti; canale a 2,4 GHz scelto con **scansione RSSI dei due lati**; soglia del cambio di banda **25 dB** (da tarare); **firma di autenticità**: opzione prevista e non attiva; identificazione ogni **10 minuti** nei trasferimenti lunghi. | autore |
 | 24/11/2026 | **Revisione 0.2 dei frame:** opzioni in coda, profili fisici e **cambio di banda** (per esempio 2,4 GHz) negoziabile quando il collegamento è molto forte; banda base come canale di incontro e di ripiego. Identificativo a 32 bit, gradino a un byte, sottotipi riservati. Vedi [protocollo-immagini.md](protocollo-immagini.md), punto 7b. | autore |

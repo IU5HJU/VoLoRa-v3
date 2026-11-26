@@ -54,6 +54,46 @@ def guard_khz(a, b):
     return max(sb[0] - sa[1], sa[0] - sb[1])
 
 
+# ---------------------------------------------------------------------------------------------------- frequenze configurabili (nota dell'autore, 26/11/2026)
+# Nel firmware OGNI frequenza dei canali di T3 e T-Beam e' liberamente configurabile; la tabella PROFILE0 e' solo il valore di partenza.
+# Le frequenze a 2,4 GHz del modulo sono configurabili a piacere dentro la banda assegnata ai radioamatori (qui 2400-2450 MHz, band plan ARI),
+# sulla griglia del modulo (2400 + CHAN x passo).
+CHIP_RANGES_KHZ = {"SX1278": [(137000, 175000), (395000, 525000)], "SX1262": [(150000, 960000)]}     # docs/radio-limiti.md
+HAM_2G4_KHZ = (2400000, 2450000)
+
+
+def valid_frequency(chip, khz):
+    """True se la frequenza e' nel campo di sintonia del chip (T3: SX1278; T-Beam: SX1278 o SX1262)."""
+    return any(lo <= khz <= hi for lo, hi in CHIP_RANGES_KHZ[chip])
+
+
+def make_plan(config, chip="SX1278"):
+    """Tabella dei canali da una configurazione {indice: (kHz, larghezza kHz, uso)} (per esempio letta da un file): si valida ma NON si limita alla banda 430-440.
+    Ritorna un dizionario indice -> (kHz, larghezza, uso). ValueError se una frequenza e' fuori dal campo del chip o due canali si sovrappongono."""
+    plan = {}
+    for idx, (f, bw, uso) in config.items():
+        if not 0 <= idx <= 255 or not valid_frequency(chip, f) or bw <= 0:
+            raise ValueError(f"canale {idx}: frequenza {f} kHz o larghezza non valida per {chip}")
+        plan[idx] = (f, float(bw), uso)
+    items = sorted(plan.items(), key=lambda kv: kv[1][0])
+    for (ia, (fa, ba, _)), (ib, (fb, bb, _)) in zip(items, items[1:]):
+        if fa + ba / 2 > fb - bb / 2:
+            raise ValueError(f"i canali {ia} e {ib} si sovrappongono")
+    return plan
+
+
+def chan_for_frequency_2g4(khz, air_code, baud=9600):
+    """CHAN del modulo Ebyte per una frequenza a 2,4 GHz: la frequenza deve stare sulla griglia 2400 + CHAN x passo (1, 2, 3 o 5 MHz secondo la velocita' d'aria)
+    e dentro la banda radioamatoriale 2400-2450 MHz. ValueError altrimenti."""
+    import ebyte_e28 as eb
+    if not HAM_2G4_KHZ[0] <= khz <= HAM_2G4_KHZ[1]:
+        raise ValueError("fuori dalla banda radioamatoriale 2400-2450 MHz")
+    step = eb.channel_step_mhz(air_code, baud) * 1000
+    if (khz - 2400000) % step:
+        raise ValueError(f"la griglia del modulo a questa velocita' e' di {step // 1000} MHz: {khz / 1000:g} MHz non e' un canale")
+    return (khz - 2400000) // step
+
+
 def table_markdown():
     rows = ["| Canale | Frequenza (MHz) | Larghezza max | Gradini ammessi | Uso |", "|---|---|---|---|---|"]
     for i in sorted(PROFILE0):

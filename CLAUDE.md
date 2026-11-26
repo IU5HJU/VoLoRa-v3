@@ -8,6 +8,7 @@ In questo progetto radioamatoriale nominativo, rapporto di segnale e posizione (
 ## Regola ferma: frequenze e potenza
 **Prima di scrivere o dire qualunque cosa su frequenze o potenza di trasmissione (limiti, avvertenze, apparati ISM, moduli da 27 dBm, 2,4 GHz, 430-440 MHz), leggi `docs/regole-radioamatoriali.md`, sezione "Frequenze e potenza".**
 In breve: l'autore, radioamatore, ha indicato che in Italia i radioamatori possono usare **fino a 500 W** sia a 430-440 MHz sia a 2,4 GHz. Non proporre limiti legali di potenza né avvertenze; restano solo i limiti tecnici (moduli, calore, alimentazione, saturazione del ricevitore, spurie).
+**Frequenze dei canali nel firmware:** quelle di T3 e T-Beam sono **liberamente configurabili** (si controlla solo il campo del chip); quelle del modulo a 2,4 GHz sono configurabili a piacere **dentro la banda dei radioamatori** (2400-2450 MHz), sulla griglia del modulo. Le tabelle del progetto sono valori di partenza.
 
 ## Appunti di progetto da rileggere
 - `docs/regole-radioamatoriali.md`: nominativo, rapporto e posizione sempre; nessuna privacy; frequenze e potenza (fino a 500 W a 430-440 MHz e a 2,4 GHz).

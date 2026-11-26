@@ -15,7 +15,7 @@ VERSION = 3
 REVISION = 2                                   # revisione 0.2 dei frame (23/11/2026): opzioni TLV, profili, banda, id a 32 bit
 T_BEACON, T_MESH = 13, 14
 # Sottotipi del frame 14: 1-63 mesh, 64-127 collegamento e cambio di banda, 128-255 riservati (spazio per le funzioni future)
-SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, BAND_SET=64, BAND_ACK=65, BAND_BACK=66)
+SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68)
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
@@ -206,6 +206,17 @@ def enc_band_set(session, profile, channel, rung, k, repeat, mode=BAND_AT_ACK, s
     return _mesh("BAND_SET", struct.pack(">HBBBBBBI", session & 0xFFFF, profile, channel, rung, k, repeat, mode, int(start_utc)))
 
 
+def enc_band_set_freq(session, profile, freq_khz, rung, k, repeat, mode=BAND_AT_ACK, start_utc=0):
+    """Come BAND-SET, ma con la FREQUENZA in kHz al posto dell'indice del canale: serve quando le due stazioni hanno tabelle dei canali diverse
+    (le frequenze sono liberamente configurabili nel firmware). 17 byte."""
+    return _mesh("BAND_SET_FREQ", struct.pack(">HBIBBBBI", session & 0xFFFF, profile, int(freq_khz), rung, k, repeat, mode, int(start_utc)))
+
+
+def enc_band_ack_freq(session, profile, freq_khz):
+    """Conferma del BAND-SET con frequenza esplicita; la stazione deve avere la frequenza nel campo del suo chip. 9 byte."""
+    return _mesh("BAND_ACK_FREQ", struct.pack(">HBI", session & 0xFFFF, profile, int(freq_khz)))
+
+
 def enc_band_ack(session, profile, channel):
     """Conferma sulla banda attuale: l'altra stazione ha il profilo e prova il canale."""
     return _mesh("BAND_ACK", struct.pack(">HBB", session & 0xFFFF, profile, channel))
@@ -256,6 +267,10 @@ def decode(b):
             d.update(call=unpack_call(x[0:6]), session=struct.unpack(">H", x[6:8])[0], margin=struct.unpack("b", x[8:9])[0], node=x[9])
         elif n == "BAND_SET":
             d["session"], d["profile"], d["channel"], d["rung"], d["k"], d["repeat"], d["mode"], d["start"] = struct.unpack(">HBBBBBBI", x[:12])
+        elif n == "BAND_SET_FREQ":
+            d["session"], d["profile"], d["freq_khz"], d["rung"], d["k"], d["repeat"], d["mode"], d["start"] = struct.unpack(">HBIBBBBI", x[:15])
+        elif n == "BAND_ACK_FREQ":
+            d["session"], d["profile"], d["freq_khz"] = struct.unpack(">HBI", x[:7])
         elif n == "BAND_ACK":
             d["session"], d["profile"], d["channel"] = struct.unpack(">HBB", x[:4])
         elif n == "BAND_BACK":

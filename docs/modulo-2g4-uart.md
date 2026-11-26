@@ -88,6 +88,8 @@ Tutto questo è codificato in [`tools/ebyte_e28.py`](../tools/ebyte_e28.py) e pr
 
 ## 9. Il band plan 13 cm
 
+**Frequenze configurabili (nota dell'autore, 26/11/2026):** le frequenze a 2,4 GHz del modulo sono configurabili a piacere dentro 2400-2450 MHz, sulla griglia del modulo (2400 + CHAN × passo); il firmware le convalida con `tools/canali.chan_for_frequency_2g4`. I canali indicati più avanti sono solo i candidati di partenza.
+
 ### 9a. Piano attuale: ari.it/bandplan.html (schermata dell'autore, 26/11/2026)
 **Questo è il riferimento; sostituisce la versione del 2004 qui sotto dove i due differiscono.** È una schermata parziale: si vedono il 23 cm (in alto), il 13 cm e l'inizio del 5 cm; il 70 cm non c'è.
 

@@ -34,3 +34,11 @@ Cosa ne segue per il lavoro:
 - **Restano i limiti tecnici**, che sono scelte di ingegneria e non di normativa: la potenza massima dei moduli e degli amplificatori, il calore, l'alimentazione, la saturazione del ricevitore (nelle prove a banco si usano potenze basse e attenuatori per questo), le spurie e le armoniche ([piano-misure.md](piano-misure.md)), e non disturbare gli altri utenti della banda.
 - Le **frequenze** sono 430-440 MHz (decisione del 21/11/2026, precisata il 23/11/2026) e la banda dei 2,4 GHz per il cambio di banda ([protocollo-immagini.md](protocollo-immagini.md), punto 7b). Come la banda è divisa in segmenti dal band plan non è un vincolo dello studio.
 - Questa nota è come la regola sulla posizione: **non si discute e non si aggiungono avvertenze a riguardo**. Chi usa il progetto resta responsabile della propria licenza.
+
+### Frequenze configurabili nel firmware (nota dell'autore, 26/11/2026)
+**Nota fissa, da rileggere quando si parla di canali e frequenze nel firmware.**
+- **Ogni frequenza dei canali della T3 e del T-Beam è liberamente configurabile** nel firmware. Le tabelle del progetto ([band-plan.md](band-plan.md), `tools/canali.py`) sono solo i **valori di partenza**, non limiti. Il firmware controlla soltanto che la frequenza stia nel **campo di sintonia del chip** (SX1278: 137-175 e 395-525 MHz; SX1262: 150-960 MHz) e che i canali non si sovrappongano.
+- **Le frequenze a 2,4 GHz del modulo sono configurabili a piacere dentro la banda assegnata ai radioamatori** (2400-2450 MHz, secondo il band plan ARI). Il modulo Ebyte le fissa su una **griglia**: 2400 + CHAN × passo, con passo 1 MHz a 1k/5k/10k, 2 MHz a 50k/100k, 3 MHz a 1M, 5 MHz a 2M: "a piacere" vuol dire qualunque canale di quella griglia.
+- Conseguenza sul protocollo: poiché le tabelle possono differire fra due stazioni, il cambio di canale o di banda può portare la **frequenza esplicita in kHz** (BAND-SET-FREQ e BAND-ACK-FREQ) invece dell'indice del canale ([protocollo-immagini.md](protocollo-immagini.md), punto 7b).
+- Non si aggiungono avvertenze o limiti di banda per questa configurabilità: vale la regola già scritta sopra.
+

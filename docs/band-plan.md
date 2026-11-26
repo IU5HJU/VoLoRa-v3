@@ -29,6 +29,8 @@ Nel 2 m (in alto): 145,794-145,806 MHz comunicazioni spaziali (ISS); 145,806-146
 - **I satelliti (435-438 MHz)** sono l'altra ampia fascia, ma vanno lasciati liberi.
 
 ## 3. Tabella dei canali del profilo 0 (deciso il 26/11/2026)
+> **Valori di partenza, non limiti.** Nel firmware le frequenze di T3 e T-Beam sono liberamente configurabili e quelle del modulo a 2,4 GHz sono configurabili a piacere dentro 2400-2450 MHz ([regole-radioamatoriali.md](regole-radioamatoriali.md)). Il codice in `tools/canali.py` controlla solo il campo del chip e le sovrapposizioni.
+
 Decisioni dell'autore: **canale di incontro 433,700 MHz** e **canale di servizio del voto 433,850 MHz**, entrambi da 125 kHz. La tabella è in [`tools/canali.py`](../tools/canali.py), provata in `tests/sim/test_canali.py`. Il `canale` del BAND-SET con profilo 0 è l'indice di questa tabella.
 
 | Canale | Frequenza (MHz) | Larghezza max | Gradini ammessi | Uso |
