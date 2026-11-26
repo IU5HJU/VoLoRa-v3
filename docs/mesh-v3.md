@@ -228,6 +228,8 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 21, OFFERTA 24, GRU
 | 23/11/2026 | Va studiata una **tecnologia di voting** per la modalità VOCE (probabilmente VoLoRa v2): due nodi a copertura **parzialmente** sovrapposta; una sovrapposizione ampia e stabile sulla stessa frequenza non è possibile (lo gestiscono i radioamatori). Logica proposta: [voting-isofrequenza.md](voting-isofrequenza.md). (Punto 10b.) | autore |
 | 22/11/2026 | La precisione dell'orologio richiesta è bassa: NTP o GPS bastano (anche per gli slot). | autore, [applicazione.md](applicazione.md) |
 
+9. **Gradini e chip (26/11/2026, dal confronto con i datasheet):** R3 solo fra chip della stessa famiglia; R0 solo SX1278; R12-R14 solo con TCXO annunciato; FSK a 64 byte sull'SX1278; +17 dBm in continuo sull'SX1278 ([confronto-datasheet.md](confronto-datasheet.md) punto 6).
+
 ## 10b. Voting nella modalità VOCE (da studiare)
 Requisito dell'autore (23/11/2026): quando le stazioni usano la modalità **VOCE** (da individuare, probabilmente quella del **VoLoRa v2**), il protocollo V3 dovrà prevedere una **tecnologia di voting**.
 

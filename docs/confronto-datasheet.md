@@ -51,12 +51,13 @@ Compatibile: l'SX1278 sintonizza 137-175 MHz (Band 3); l'SX1262 no (parte da 150
 - App di misura (`app/volora_misure/core.py`, `tools/misura.py`): per l'SX1278 il filtro FSK si passa a **banda laterale singola** (la metà della banda del segnale). Prima il comando MODE chiedeva il doppio del necessario (filtro due volte più largo, circa 3 dB di rumore in più): sulle schede vere la misura FSK dell'SX1278 sarebbe uscita peggiore del dovuto. Il firmware di misura passa il numero a RadioLib così com'è.
 - `docs/radio-limiti.md`, `docs/scala-modi.md`, `docs/punti-aperti.md`: aggiornati con i valori dei datasheet.
 
-## 6. Decisioni da prendere (per l'autore)
-1. **R3 (LoRa 500/SF6)**, il LoRa più veloce a 433 MHz: tenerlo solo fra chip della stessa famiglia (il campo `chip` dell'HELLO delle immagini già lo permette: la maschera comune lo esclude se i chip differiscono) oppure toglierlo dalla scala e partire da R4 (500/SF7, 21,9 kb/s lordi invece di 37,5)?
-2. **R0 (FSK 150 kb/s) sull'SX1262:** abbassarlo a 125-140 kb/s per tutti, oppure tenerlo come gradino solo SX1278 (il T-Beam con SX1262 parte da R1)? Va misurato sul chip vero.
-3. **R12-R14:** confermare che si usano **solo con TCXO** (la T3 con TCXO nel repository LilyGO) e il nodo li annuncia come capacità.
-4. **FSK oltre 64 byte sull'SX1278:** scrivere la gestione del FIFO nel firmware (frame fino a 255 byte come sull'SX1262) o restare a 64 byte.
-5. **Potenza nei nodi che ritrasmettono:** limite tecnico continuo +17 dBm sull'SX1278 (PA_BOOST), +20 dBm solo a ciclo breve.
+## 6. Decisioni dell'autore (26/11/2026)
+1. **R3 (LoRa 500/SF6):** vale **solo fra chip della stessa famiglia** (SX1278 con SX1278, SX1262 con SX1262). Il campo `chip` dell'HELLO delle immagini lo toglie dalla maschera comune quando i due chip differiscono; in quel caso si parte da R4.
+2. **R0 (FSK 150 kb/s):** gradino **solo SX1278**; il T-Beam con SX1262 parte da R1. Nessuna modifica alla scala.
+3. **R12-R14 (LoRa 31,25 / 15,6 / 7,8 kHz):** **solo con TCXO annunciato** nell'HELLO; senza TCXO non sono nella maschera. R14 resta al limite anche con 2 ppm per scheda (da misurare).
+4. **FSK sull'SX1278:** **si resta a 64 byte** per frame; la gestione del FIFO oltre i 64 byte si rivaluta dopo le misure se l'FSK risulta lo strozzo.
+5. **Potenza dei nodi che ritrasmettono (SX1278):** **+17 dBm in continuo**; +20 dBm solo per frame brevi (beacon, polling) entro il ciclo dell'1% del chip. Limite tecnico, non legale.
+Da fare nel codice: maschera dei gradini per coppia di chip e per TCXO (HELLO), potenza predefinita +17 dBm nel firmware; non ancora scritti.
 
 ## 7. Cosa NON è stato confrontato
 - I valori di sensibilità a 433 MHz dell'SX1278: il datasheet li dà a 169 MHz (Band 3) e a 868 MHz (Band 1), non a 433 (Band 2): si è usata la colonna Band 3, che è la più vicina.
