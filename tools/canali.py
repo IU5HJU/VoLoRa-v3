@@ -63,7 +63,7 @@ def guard_khz(a, b):
 # Nel firmware OGNI frequenza dei canali di T3 e T-Beam e' liberamente configurabile; la tabella PROFILE0 e' solo il valore di partenza.
 # Le frequenze a 2,4 GHz del modulo sono configurabili a piacere dentro la banda assegnata ai radioamatori (qui 2400-2450 MHz, band plan ARI),
 # sulla griglia del modulo (2400 + CHAN x passo).
-CHIP_RANGES_KHZ = {"SX1278": [(137000, 175000), (395000, 525000)], "SX1262": [(150000, 960000)]}     # docs/radio-limiti.md
+CHIP_RANGES_KHZ = {"SX1278": [(137000, 175000), (410000, 525000)], "SX1262": [(150000, 960000)]}     # datasheet Semtech (docs/confronto-datasheet.md); 395-410 MHz funziona in RadioLib ma non e' garantito
 HAM_2G4_KHZ = (2400000, 2450000)
 
 

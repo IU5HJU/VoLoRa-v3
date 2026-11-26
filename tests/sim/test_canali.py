@@ -48,7 +48,8 @@ for bad, chip in (({0: (200000, 125, "x")}, "SX1278"), ({0: (433700, 125, "a"), 
     except ValueError:
         pass
 check(True, "frequenza fuori dal campo del chip o canali sovrapposti: errore")
-check(ch.valid_frequency("SX1262", 868000) and not ch.valid_frequency("SX1278", 868000) and ch.valid_frequency("SX1278", 433000), "campo di sintonia: SX1278 137-175 e 395-525 MHz, SX1262 150-960 MHz")
+check(ch.valid_frequency("SX1262", 868000) and not ch.valid_frequency("SX1278", 868000) and ch.valid_frequency("SX1278", 433000), "campo di sintonia dal datasheet: SX1278 137-175 e 410-525 MHz, SX1262 150-960 MHz")
+check(not ch.valid_frequency("SX1278", 400000), "395-410 MHz non e' garantito dal datasheet SX1278: rifiutato")
 check(ch.chan_for_frequency_2g4(2424000, 3) == 24 and ch.chan_for_frequency_2g4(2424000, 4) == 12 and ch.chan_for_frequency_2g4(2425000, 7) == 5, "frequenza a 2,4 GHz -> CHAN del modulo (1 MHz a 10k, 2 MHz a 50k, 5 MHz a 2M)")
 for khz, ac in ((2450001, 3), (2399000, 3), (2425000, 4), (2423500, 3)):
     try:

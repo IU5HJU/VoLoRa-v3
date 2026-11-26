@@ -26,7 +26,7 @@ def mode_command(code, chip):
     kind, a, b = mode_table()[code]
     if kind == "LORA":
         return f"MODE LORA {a:g} {b} 5", ("LORA", a, b)
-    rxbw = min(a + 2 * b, CAPS_RXBW[chip])
+    rxbw = min((a + 2 * b) / (2 if chip == "SX1278" else 1), CAPS_RXBW[chip])   # SX1278: banda laterale singola; SX1262: doppia (datasheet)
     return f"MODE FSK {a:g} {b:g} {rxbw:g}", ("FSK", a, b)
 
 def sens_estimate(code):

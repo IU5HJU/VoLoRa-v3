@@ -1,12 +1,14 @@
 # Limiti delle radio SX1278 e SX1262 (fase 0)
 
+> **Aggiornamento del 26/11/2026:** i datasheet Semtech sono ora nel repository ([datasheet/](datasheet/README.md)) e il confronto è in [confronto-datasheet.md](confronto-datasheet.md). Dove questa pagina e il confronto differiscono, vale il confronto (campo SX1278 da 410 MHz, filtro FSK a banda laterale singola nell'SX1278, bit rate massimo FSK dell'SX1262 che scala con la frequenza, SF6 non compatibile fra i due chip, FIFO da 64 byte non limite del chip). Il testo seguente è la versione di partenza.
+>
 > **Fonti, e cosa NON è stato verificato.** I datasheet Semtech non erano raggiungibili da questa sessione. I valori sotto vengono da fonti **secondarie**: il codice di RadioLib incluso nel repository [LilyGo-LoRa-Series](https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series) (i controlli sui parametri rispecchiano i limiti dei chip) e le tabelle di quel repository (`docs/en/t_beam/t_beam_hw.md`). Dove una cifra è calcolata, la formula è indicata. **Prima di fissare un'architettura vanno confermati sui datasheet Semtech** (SX1276/77/78/79 e SX1261/2): sensibilità, tabelle di RxBw, PA, correnti.
 
 ## Frequenze
 
 | | SX1278 (T3 V1.6.1, T-Beam V1.2) | SX1262 (T-Beam V1.2 con SX1262) |
 |---|---|---|
-| Campo di sintonia | 137-175 MHz e 395-525 MHz (RadioLib; il datasheet dà 410-525 per la banda alta, la libreria annota che funziona fino a circa 395) | 150-960 MHz |
+| Campo di sintonia | 137-175 MHz e **410**-525 MHz (datasheet, Table 7; RadioLib accetta 395 ma non è garantito) | 150-960 MHz |
 | **430-440 MHz** | dentro il campo | dentro il campo; l'SX1262 ricalibra l'immagine quando la frequenza cambia di una certa soglia (da documentare) |
 
 Le **schede** hanno filtri e antenna per i 433 MHz: il rendimento a 430 e 440 MHz va misurato (punto aperto 7).

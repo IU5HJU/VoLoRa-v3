@@ -19,8 +19,8 @@ Quindici gradini, dal più veloce al più robusto (R0-R14). I modi sono quelli d
 
 | Gradino | Modo | Note |
 |---|---|---|
-| R0-R2 | FSK 150, 100, 50 kbit/s (deviazione 50, 50, 25 kHz) | per collegamenti forti; banda di ricezione entro 250 kHz (SX1278), oltre solo SX1262 |
-| R3 | LoRa BW 500 kHz / SF6 | l'SX1278 usa l'intestazione implicita (lunghezza fissa); frame di lunghezza fissa solo per R3 su SX1278 |
+| R0-R2 | FSK 150, 100, 50 kbit/s (deviazione 50, 50, 25 kHz) | per collegamenti forti; occupano 250, 200 e 100 kHz: entrano nel filtro di entrambi i chip. **R0 (150 kb/s) non è garantito sull'SX1262 a 433 MHz** (bit rate massimo circa 142 kb/s, [confronto-datasheet.md](confronto-datasheet.md)) |
+| R3 | LoRa BW 500 kHz / SF6 | l'SX1278 usa l'intestazione implicita (lunghezza fissa); frame di lunghezza fissa solo per R3 su SX1278. **L'SF6 dell'SX1278 e quello dell'SX1262 non sono compatibili** (datasheet SX1261/2, punto 6.1.1): R3 vale solo fra chip della stessa famiglia, e dal campo `chip` dell'HELLO si toglie R3 dalla maschera comune quando i due chip differiscono |
 | R4-R7 | LoRa 500/SF7, 250/SF7, 250/SF8, 250/SF9 | R5 è come lo Standard della v2, R6 come il Range |
 | R8-R9 | LoRa 125/SF9, 125/SF10 | |
 | **R10** | **LoRa 125/SF12** | **gradino di incontro**: come il profilo Messaggio della v2; l'ultimo senza dubbi sul quarzo |

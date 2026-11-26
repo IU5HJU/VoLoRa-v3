@@ -25,8 +25,9 @@ names = dict(core.mode_names())
 check(len(names) == 19 and "L9" in names and "F6" in names, "elenco dei modi")
 check(core.mode_command("L4") == "MODE LORA 250 7 5", "comando L4")
 check(core.mode_command("l9") == "MODE LORA 125 12 5", "comando L9 minuscolo")
-check(core.mode_command("F2", "SX1278") == "MODE FSK 150 50 250", "FSK 150k con banda limitata a 250 sull'SX1278")
-check(core.mode_command("F1", "SX1262") == "MODE FSK 300 100 467", "FSK 300k con banda limitata a 467 sull'SX1262")
+check(core.mode_command("F2", "SX1278") == "MODE FSK 150 50 125", "FSK 150k: filtro a banda laterale singola sull'SX1278 (250 kHz di segnale = 125 kHz del filtro)")
+check(core.mode_command("F1", "SX1262") == "MODE FSK 300 75 450", "FSK 300k con deviazione 75 kHz: 450 kHz di banda doppia, dentro i 467 dell'SX1262")
+check(core.mode_command("F1", "SX1278") == "MODE FSK 300 75 225", "FSK 300k sull'SX1278: 225 kHz di banda laterale singola (massimo 250)")
 check(abs(core.sens_estimate("L4") + 122) < 1, "sensibilita' L4")
 
 # righe

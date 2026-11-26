@@ -39,7 +39,10 @@ def mode_command(code, chip="SX1278"):
         bw, sf = sm.LORA[int(code[1:]) - 1]
         return f"MODE LORA {bw:g} {sf} 5"
     br, dev = sm.FSK[int(code[1:]) - 1]
-    rxbw = min(br + 2 * dev, CAPS_RXBW.get(chip, 250.0))
+    need = br + 2 * dev                  # banda del segnale, doppia banda laterale
+    if chip == "SX1278":
+        need /= 2                         # il filtro dell'SX1278 e' a banda laterale singola (datasheet, Table 40): il numero e' meta' della banda del segnale
+    rxbw = min(need, CAPS_RXBW.get(chip, 250.0))
     return f"MODE FSK {br:g} {dev:g} {rxbw:g}"
 
 

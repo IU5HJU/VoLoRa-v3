@@ -1,6 +1,6 @@
 # Scala dei modi (bozza, fase 1)
 
-> **Stato: bozza calcolata, nessuna misura.** Le cifre di LoRa vengono dalle formule Semtech (tempo in aria) e dai valori di SNR di demodulazione per SF ricordati dal datasheet, **da verificare** (vedi [radio-limiti.md](radio-limiti.md)). Quelle dell'FSK sono **orientative** (regola grossolana, vedi sotto). Il programma che le calcola è [`tools/scala_modi.py`](../tools/scala_modi.py). Cifra di rumore del ricevitore ipotizzata: 6 dB. La fase 1 serve a **sostituire queste stime con misure**.
+> **Stato: bozza calcolata, nessuna misura.** Confronto con i datasheet Semtech del 26/11/2026 in [confronto-datasheet.md](confronto-datasheet.md): le sensibilità LoRa sono confermate entro 2 dB, tranne L2 (500/SF6) ottimista di 4 dB. Le cifre di LoRa vengono dalle formule Semtech (tempo in aria) e dai valori di SNR di demodulazione per SF ricordati dal datasheet, **da verificare** (vedi [radio-limiti.md](radio-limiti.md)). Quelle dell'FSK sono **orientative** (regola grossolana, vedi sotto). Il programma che le calcola è [`tools/scala_modi.py`](../tools/scala_modi.py). Cifra di rumore del ricevitore ipotizzata: 6 dB. La fase 1 serve a **sostituire queste stime con misure**.
 
 ## LoRa (CR 4/5, pacchetti da 255 byte, preambolo 8, CRC)
 
@@ -30,14 +30,14 @@ Regola usata: banda di ricezione = bit rate + 2 × deviazione, SNR richiesto 12 
 
 | # | bit rate | deviazione | RxBw | sensibilità | 20 kB |
 |---|---|---|---|---|---|
-| F1 | 300 kbit/s | 100 kHz | 500 kHz | circa -99 dBm | 1 s |
+| F1 | 300 kbit/s | 75 kHz | 450 kHz | circa -99 dBm | 1 s |
 | F2 | 150 kbit/s | 50 kHz | 250 kHz | circa -102 dBm | 1 s |
 | F3 | 100 kbit/s | 50 kHz | 200 kHz | circa -103 dBm | 2 s |
 | F4 | 50 kbit/s | 25 kHz | 100 kHz | circa -106 dBm | 3 s |
 | F5 | 19,2 kbit/s | 10 kHz | 39 kHz | circa -110 dBm | 8 s |
 | F6 | 4,8 kbit/s | 5 kHz | 15 kHz | circa -114 dBm | 33 s |
 
-**Avvertenza sulla banda di ricezione (da RadioLib):** l'SX1278 arriva a 250 kHz di banda di ricezione in FSK, l'SX1262 a 467 kHz. Con banda necessaria = bit rate + 2 × deviazione, F1 (circa 500 kHz) **non entra** nemmeno nell'SX1262 e F2/F3 stanno al limite dell'SX1278. La riga F1 va rivista con deviazioni più strette.
+**Banda di ricezione (verificata sui datasheet il 26/11/2026):** il filtro dell'SX1278 arriva a 250 kHz a **banda laterale singola** (500 kHz di segnale), quello dell'SX1262 a 467 kHz a **doppia** banda. La riga F1 con deviazione 100 kHz (500 kHz di banda, indice 0,67) non era ammessa: l'SX1262 si ferma a 467 kHz e l'SX1278 vuole un indice di modulazione di 0,5 al massimo a 300 kb/s. **Corretta a deviazione 75 kHz** (450 kHz, indice 0,5). Inoltre il bit rate massimo FSK dell'SX1262 scala con la frequenza: circa 142 kb/s a 433 MHz, quindi F1 (300 kb/s) e il gradino R0 (150 kb/s) non sono garantiti sull'SX1262. Vedi [confronto-datasheet.md](confronto-datasheet.md).
 
 ## Cosa suggerisce la bozza (da confermare con le misure)
 1. **Le due famiglie si incrociano.** In FSK la sensibilità scende sotto -106 dBm solo a velocità basse, mentre LoRa a 500 kHz (L2, 37,5 kbit/s) stimata a -116 dBm è sia più veloce di F4 sia più sensibile. Quindi **FSK serve solo per il gradino più alto** (F1-F3, da 100 a 300 kbit/s, collegamenti forti); **da L3 in giù conviene LoRa**.
