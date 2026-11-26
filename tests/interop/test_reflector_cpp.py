@@ -49,8 +49,12 @@ try:
     conf = os.path.join(tmp, "ref.conf")
     open(conf, "w").write("".join(f"{i} {k} nodo{i}\n" for i, k in keys.items()))
 
+    tokf = os.path.join(tmp, "admin.token")
+    open(tokf, "w").write("token-di-prova-0123456789\n")
+    os.chmod(tokf, 0o600)
+
     def start(port):
-        p = subprocess.Popen([refl, "--config", conf, "--port", str(port), "--id", "1000", "--voice-mode", "1", "--duration", "40"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        p = subprocess.Popen([refl, "--config", conf, "--port", str(port), "--id", "1000", "--voice-mode", "1", "--duration", "60", "--web", str(port + 1), "--admin-token-file", tokf], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         time.sleep(0.5)
         return p
 
@@ -133,6 +137,15 @@ try:
     run(21)  # la dichiarazione del reflector viaggia nel KEEPALIVE successivo (20 s): i frame V3 non la aspettano
     check(cl[4].link.peer_ext[:2] == b"V3" and cl[5].link.peer_ext[:2] == b"V3", "il reflector C++ risponde (nel KEEPALIVE) con la dichiarazione V3 ai client V3")
     check(cl[6].link.peer_ext == b"", "e non manda nulla in piu' al client v2")
+    import json
+    import urllib.request
+    rq = urllib.request.Request(f"http://127.0.0.1:{port + 1}/api/status", headers={"X-Token": "token-di-prova-0123456789"})
+    st = json.loads(urllib.request.urlopen(rq, timeout=5).read())
+    flags = {c["id"]: c.get("v3") for c in st["clients"]}
+    check(flags.get(4) is True and flags.get(5) is True and flags.get(6) is False, f"la pagina di amministrazione segna V3 solo sui nodi V3 {flags}")
+    check(st["stats"]["v3Forwarded"] == 1 and st["stats"]["v3Announces"] >= 1 and st["stats"]["v3Refused"] >= 1, f"contatori V3 nello stato: {st['stats']}")
+    html = urllib.request.urlopen(f"http://127.0.0.1:{port + 1}/", timeout=5).read().decode()
+    check("<th" in html and ">V3</th>" in html and "c.v3" in html, "la pagina ha la colonna V3")
     p.terminate()
     out = p.communicate(timeout=10)[0]
     check("Traceback" not in out and "AddressSanitizer" not in out, "il reflector non da' errori")

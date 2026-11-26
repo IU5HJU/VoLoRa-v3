@@ -76,7 +76,7 @@ Una chiave **per client** (si può togliere un client senza toccare gli altri); 
 **Raccomandazione:** **C++ con patch sulla v2**, e tenere il Python come **riferimento di prova** (oracolo) per confrontare il comportamento nei test. È la strada con il minor rischio di rompere la compatibilità, perché riusa tutto ciò che è già provato e tocca solo i due moduli necessari.
 
 ## 8. Non fatto, e da decidere
-- **Server di produzione:** deciso il C++ con patch sulla v2 (punto 7); la patch è scritta e provata sul PC (punto 9). Il Python resta riferimento di prova. Mancano: la colonna V3 nella pagina di amministrazione (richiede una patch di `vlreflector_page.h`), una prova su un server vero con nodi veri.
+- **Server di produzione:** deciso il C++ con patch sulla v2 (punto 7); la patch è scritta e provata sul PC (punto 9). Il Python resta riferimento di prova. Manca una prova su un server vero con nodi veri.
 - **Pagine di amministrazione e pubblica** (chi è collegato, chi parla): non portate; vanno uguali alla v2, con in più una colonna "V3" e la rubrica. Quella pubblica non mostra indirizzi, chiavi, id.
 - **Limiti di velocità** per client e di dimensione dei trasferimenti V3 (un'immagine su Internet può essere più grande di quello che passa in radio).
 - **Più modi voce insieme** (oggi un reflector inoltra un solo modo voce: limite della v2 tenuto per compatibilità).
@@ -85,8 +85,9 @@ Una chiave **per client** (si può togliere un client senza toccare gli altri); 
 - **Prova su schede:** nessun gateway V3 esiste ancora; il lato "client V3" è solo nelle prove.
 
 ## 9. La patch C++ (26/11/2026)
-- **Dove:** `reflector/v3.patch` (diff unificato, `patch -p1`) sui soli quattro file `node_link.h/.cpp` e `reflector_core.h/.cpp` della v2. Il submodule non si tocca: `reflector/build.sh <cartella>` copia i file della v2, applica la patch e compila `vlreflector` (stesse opzioni del v2) più le prove, con `-Wall -Wextra`, ASan e UBSan. Se la v2 cambia quei file, `patch` fallisce e la CI lo segnala.
+- **Dove:** `reflector/v3.patch` (diff unificato, `patch -p1`) su sei file della v2: `node_link.h/.cpp`, `reflector_core.h/.cpp`, `tools/vlreflector.cpp` e `tools/vlreflector_page.h`. Il submodule non si tocca: `reflector/build.sh <cartella>` copia i file della v2, applica la patch e compila `vlreflector` (stesse opzioni del v2) più le prove, con `-Wall -Wextra`, ASan e UBSan. Se la v2 cambia quei file, `patch` fallisce e la CI lo segnala.
 - **Cosa aggiunge:** estensione di stato nel NodeLink (`setStatusExtension`, `peerExtension`: i byte dopo i 9 di stato in HELLO e KEEPALIVE, che i client v2 ignorano); nel `ReflectorCore` la dichiarazione V3 del client, la rubrica con scadenza di 10 minuti (6 byte grezzi del nominativo, massimo 20 voci per annuncio), `REFL_ANNUNCIO` / `REFL_INOLTRO` (ttl ridotto di uno) / `REFL_ESITO` e i contatori `v3Forwarded`, `v3Refused`, `v3Announces`. Un client che non ha dichiarato V3 non può iscrivere né ricevere frame V3 (contati come rifiutati, non come pacchetti v2 rovinati).
+- **Pagina di amministrazione:** nella tabella dei nodi c'è la colonna **V3** ("sì" se il nodo ha dichiarato il V3), lo stato JSON porta `v3` per nodo e i contatori `v3Announces`, `v3Forwarded`, `v3Refused`; la riga di fine servizio li riporta. La pagina pubblica non cambia.
 - **Provato sul PC:** le prove della v2 sui moduli patchati restano identiche (79 e 67 controlli); 26 controlli nuovi in `reflector/tests/test_reflector_v3.cpp`; `tests/interop/test_reflector_cpp.py` con due veri `vlnode` v2 (testo, voce RELAYED, nessuna firma errata) e client V3 su socket UDP veri (annuncio, busta, esito consegnato e non trovato, client v2 escluso).
 - **Nota:** il reflector comunica la sua dichiarazione V3 nel KEEPALIVE successivo (fino a 20 s); i frame V3 non la aspettano, perché il reflector riconosce già il client dal suo HELLO.
-- **Non provato:** nessuna scheda vera; nessun server in esercizio; la pagina web non mostra ancora i client V3.
+- **Non provato:** nessuna scheda vera; nessun server in esercizio; la colonna V3 è provata sullo stato JSON e sul testo della pagina, non in un browser.

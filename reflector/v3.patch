@@ -272,3 +272,56 @@ diff -u -r a/lib/voicecore/reflector_core.h b/lib/voicecore/reflector_core.h
    Client* find(uint32_t id);
    const Client* find(uint32_t id) const;
    void endTalk();
+diff -u -r a/tools/vlreflector.cpp b/tools/vlreflector.cpp
+--- a/tools/vlreflector.cpp	2026-11-26 13:09:55.792899543 +0000
++++ b/tools/vlreflector.cpp	2026-11-26 13:10:56.827258323 +0000
+@@ -301,7 +301,7 @@
+       const int ei = findEntryById(entries, c.id);
+       o << (first ? "" : ",") << "{\"id\":" << c.id << ",\"name\":\"" << jsonEscape(c.name) << "\",\"call\":\"" << jsonEscape(ei >= 0 ? entries[static_cast<size_t>(ei)].name : c.name)
+         << "\",\"label\":\"" << jsonEscape(ei >= 0 ? entries[static_cast<size_t>(ei)].label : "") << "\",\"up\":" << (c.up ? "true" : "false") << ",\"seenMs\":" << seen
+-        << ",\"in\":" << c.packetsIn << ",\"out\":" << c.packetsOut << ",\"endpoint\":\"" << (c.haveEndpoint ? jsonEscape(epText(c.endpoint)) : "") << "\",\"public\":\"" << (c.declaredAddr ? ipText(c.declaredAddr) : "") << "\",\"nodeIp\":\"" << jsonEscape(nodeIpText(c)) << "\"}";
++        << ",\"in\":" << c.packetsIn << ",\"out\":" << c.packetsOut << ",\"endpoint\":\"" << (c.haveEndpoint ? jsonEscape(epText(c.endpoint)) : "") << "\",\"public\":\"" << (c.declaredAddr ? ipText(c.declaredAddr) : "") << "\",\"nodeIp\":\"" << jsonEscape(nodeIpText(c)) << "\",\"v3\":" << (c.v3 ? "true" : "false") << "}";
+       first = false;
+     }
+     o << "],\"recent\":[";
+@@ -313,7 +313,7 @@
+     }
+     const ReflectorCore::Stats& s = core->stats();
+     o << "],\"stats\":{\"datagrams\":" << s.datagrams << ",\"unknown\":" << s.unknownClient << ",\"badSignature\":" << s.badSignature << ",\"voiceBlocked\":" << s.voiceBlocked
+-      << ",\"talks\":" << s.talks << "}}";
++      << ",\"talks\":" << s.talks << ",\"v3Announces\":" << s.v3Announces << ",\"v3Forwarded\":" << s.v3Forwarded << ",\"v3Refused\":" << s.v3Refused << "}}";
+     return o.str();
+   }
+ 
+@@ -728,8 +728,8 @@
+     }
+   }
+   const ReflectorCore::Stats& s = core.stats();
+-  snprintf(b, sizeof(b), "fine: datagrammi %u, sconosciuti %u, firme errate %u, ripetuti %u, voce inoltrata %u, testi %u, voce bloccata %u, trasmissioni %u", s.datagrams,
+-           s.unknownClient, s.badSignature, s.replays, s.voiceForwarded, s.textForwarded, s.voiceBlocked, s.talks);
++  snprintf(b, sizeof(b), "fine: datagrammi %u, sconosciuti %u, firme errate %u, ripetuti %u, voce inoltrata %u, testi %u, voce bloccata %u, trasmissioni %u, V3: annunci %u, buste %u, rifiutati %u", s.datagrams,
++           s.unknownClient, s.badSignature, s.replays, s.voiceForwarded, s.textForwarded, s.voiceBlocked, s.talks, s.v3Announces, s.v3Forwarded, s.v3Refused);
+   logLine(b);
+   return 0;
+ }
+diff -u -r a/tools/vlreflector_page.h b/tools/vlreflector_page.h
+--- a/tools/vlreflector_page.h	2026-11-26 13:09:55.798127456 +0000
++++ b/tools/vlreflector_page.h	2026-11-26 13:10:56.828528202 +0000
+@@ -69,7 +69,7 @@
+     <section>
+       <h2>Collegati</h2>
+       <div class="tw"><table>
+-        <thead><tr><th>Nominativo</th><th>Id</th><th>Stato</th><th>Ultimo segnale</th><th>Pacchetti in/out</th><th title="L'indirizzo IP pubblico del nodo, cioe' quello da cui si collega a Internet. Lo dice il nodo stesso (non e' verificato); se il nodo ha un firmware vecchio e il server lo vede da un indirizzo pubblico si usa quello; vuoto negli altri casi">IP del Nodo</th><th></th></tr></thead>
++        <thead><tr><th>Nominativo</th><th>Id</th><th>Stato</th><th>Ultimo segnale</th><th>Pacchetti in/out</th><th title="Il nodo ha dichiarato di capire il protocollo V3 (frame, rubrica delle stazioni sentite, inoltro delle buste)">V3</th><th title="L'indirizzo IP pubblico del nodo, cioe' quello da cui si collega a Internet. Lo dice il nodo stesso (non e' verificato); se il nodo ha un firmware vecchio e il server lo vede da un indirizzo pubblico si usa quello; vuoto negli altri casi">IP del Nodo</th><th></th></tr></thead>
+         <tbody id="clients"></tbody>
+       </table></div>
+       <p class="muted" id="clientsEmpty" hidden>Nessun nodo in elenco.</p>
+@@ -142,7 +142,7 @@
+       const n = cell(tr, c.name); n.style.fontWeight = '600';
+       cell(tr, c.id);
+       const st = document.createElement('td'); const d = document.createElement('span'); d.className = 'dot' + (c.up ? ' up' : ''); st.appendChild(d); st.appendChild(document.createTextNode(c.up ? 'collegato' : 'non collegato')); tr.appendChild(st);
+-      cell(tr, fmtAgo(c.seenMs)); cell(tr, c.in + ' / ' + c.out); cell(tr, c.nodeIp || '-');
++      cell(tr, fmtAgo(c.seenMs)); cell(tr, c.in + ' / ' + c.out); cell(tr, c.v3 ? 'sì' : '-'); cell(tr, c.nodeIp || '-');
+       const act = document.createElement('td'); const del = document.createElement('button'); del.className = 'danger'; del.textContent = 'Togli';
+       del.addEventListener('click', async () => { if (!confirm('Togliere ' + c.name + ' (id ' + c.id + ')? Il nodo non potrà più collegarsi.')) return; await api('/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'id=' + c.id }); refresh(); });
+       act.appendChild(del); tr.appendChild(act);
