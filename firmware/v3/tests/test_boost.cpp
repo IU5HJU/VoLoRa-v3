@@ -56,6 +56,22 @@ int main() {
   b.disable(); b.enable();
   CHECK(b.duty(t) == 0.0f, "enable azzera il ciclo");
   CHECK(std::strstr(kWarning, "RISCHIO") && std::strstr(kWarning, "1%") && std::strstr(kWarning, "VSWR"), "il testo dell'avviso dice rischio, 1%% e antenna");
+  // IOF MODE: +22 dBm, solo SX1262, uno solo livello alla volta
+  CHECK(parseIof("IOF ON RISCHIO") == Cmd::On && parseIof("iof on rischio") == Cmd::On && parseIof("IOF ON") == Cmd::NeedsAck, "IOF ON RISCHIO");
+  CHECK(parseIof("IOF OFF") == Cmd::Off && parseIof("IOF STATUS") == Cmd::Status && parseIof("BOOST ON RISCHIO") == Cmd::Invalid && parse("IOF ON RISCHIO") == Cmd::Invalid, "IOF OFF/STATUS, parole non scambiate");
+  State i78(false);
+  CHECK(!i78.enableIof() && !i78.on() && i78.power() == 17, "SX1278: IOF MODE rifiutato, resta +17 dBm");
+  State i62(true);
+  CHECK(i62.level() == Level::Normal && i62.power() == 17, "SX1262 spento all'avvio");
+  CHECK(i62.enableIof() && i62.iofOn() && i62.on() && !i62.boostOn() && i62.power() == 22, "SX1262: IOF MODE +22 dBm");
+  i62.enable();
+  CHECK(i62.boostOn() && !i62.iofOn() && i62.power() == 20, "BOOST dopo IOF: uno solo, +20 dBm");
+  i62.enableIof(); i62.txStarted(1000, 500000);
+  CHECK(i62.duty(1000) > 0.4f, "IOF MODE: il ciclo si misura");
+  CHECK(!i62.txStarted(2000, 900000) && !i62.txStarted(3000, 900000), "IOF MODE: nessun avviso di ciclo (non e' il limite dell'SX1262)");
+  i62.disable();
+  CHECK(!i62.on() && i62.power() == 17, "disable torna a +17 dBm");
+  CHECK(std::strstr(kIofWarning, "RISCHIO") && std::strstr(kIofWarning, "antenna") && std::strstr(kIofWarning, "22"), "il testo dell'avviso IOF dice rischio, antenna e +22");
   std::printf("firmware/v3 BOOST: %d controlli, %d falliti\n", g_checks, g_fails);
   return g_fails ? 1 : 0;
 }

@@ -33,12 +33,20 @@ In BOOST ogni trasmissione conta in una **finestra scorrevole di 100 s**; sopra 
 | Prove | `firmware/misura/tests/test_core.cpp`, `tests/sim/test_config_nodo.py`, `tests/page/run_nodo.js` |
 
 ## Nel firmware V3 (scheda mobile e banco)
-Il BOOST è nel driver radio V3 (`firmware/v3/src/radio_board.h`) con il nucleo `firmware/v3/src/boost.h` (stesso comando, stessi testi, stesso conteggio del ciclo di lavoro di `misura_core.h`). **Provato sul PC** (`tests/test_boost.cpp`, 26 controlli: comando, potenza, finestra di 100 s, avvisi, nessuno spegnimento automatico); **compilato dalla CI, mai eseguito su una scheda**.
+Il BOOST è nel driver radio V3 (`firmware/v3/src/radio_board.h`) con il nucleo `firmware/v3/src/boost.h` (stesso comando, stessi testi, stesso conteggio del ciclo di lavoro di `misura_core.h`). **Provato sul PC** (`tests/test_boost.cpp`, 26 controlli per il BOOST e 10 per l'IOF MODE: comando, potenza, finestra di 100 s, avvisi, nessuno spegnimento automatico); **compilato dalla CI, mai eseguito su una scheda**.
 - Comandi sulla seriale di `main_mobile.cpp` e `main_bench.cpp`: `BOOST ON RISCHIO`, `BOOST OFF`, `BOOST STATUS`. Sempre **spento all'avvio**, non si salva.
 - La potenza vale per **ogni gradino** (LoRa e FSK): ogni cambio di gradino riconfigura la radio e usa la potenza in vigore (+17 dBm, o +20 dBm in BOOST). Ad accensione e spegnimento si cambia subito la potenza con `setOutputPower`, e in BOOST si porta il limite di corrente a 140 mA (circa 120 mA di assorbimento a +20 dBm). RadioLib (letta nel sorgente 7.8.1; la CI usa la 7.5.0) accetta 20 dBm su SX1278 (PA_BOOST con PA_DAC alto) e SX1262.
 - **SX1278:** ogni trasmissione conta in una finestra di 100 s; sopra l'1% esce `ATTENZIONE BOOST: ciclo di lavoro …` (al massimo ogni 5 s). Il ponte e il protocollo non cambiano e **il BOOST non si spegne da solo** (decisione: solo avviso). Un trasferimento d'immagine in BOOST supera facilmente l'1%: l'avviso comparirà.
 - **SX1262:** +20 dBm è sotto il suo massimo (+22 dBm): il ciclo si misura (si vede in `BOOST STATUS`) ma non c'è avviso di ciclo; restano calore, corrente, antenna e saturazione dei ricevitori vicini.
 - Non c'è ancora un comando BOOST dal telefono (Bluetooth): è una scelta voluta, perché attivarlo richiede di leggere l'avviso sulla seriale.
+
+## IOF MODE (+22 dBm, solo SX1262)
+Un livello **sopra il BOOST**, solo per le schede con l'**SX1262** (T-Beam): **+22 dBm, il massimo del chip**. Nel firmware V3 si attiva con `IOF ON RISCHIO` (poi `IOF OFF`, `IOF STATUS`) sulla seriale; come il BOOST è **sempre spento all'avvio**, non si salva e **non si spegne da solo**. I livelli sono uno solo alla volta: `BOOST ON RISCHIO` dopo `IOF` torna a +20 dBm, `BOOST OFF` o `IOF OFF` a +17 dBm. Sull'**SX1278** il comando è rifiutato (il suo massimo è +20 dBm con il BOOST e solo all'1% di ciclo).
+- **Rischio (solo tecnico):** corrente al limite (circa 120-140 mA; il limite di corrente della radio è portato a 140 mA, il massimo dell'SX1262), calore, batteria sotto sforzo, ricevitori vicini saturati, armoniche e spurie più forti, **antenna adattata obbligatoria**. Nessun limite legale: vale [regole-radioamatoriali.md](regole-radioamatoriali.md).
+- Il ciclo di lavoro si misura (si vede con `IOF STATUS`) ma l'SX1262 non ha il limite dell'1% dell'SX1278: non c'è avviso di ciclo.
+- Nel codice: `firmware/v3/src/boost.h` (`Level::Iof`, `kIofDbm`, `kIofWarning`, `parseIof`), `radio_board.h` (`boostCommand`), prove in `tests/test_boost.cpp` (36 controlli, sul PC). **Mai eseguito su una scheda.**
+
+> **Dedica.** L'IOF MODE è dedicato a **IZ5IOF Andrea**, grande radioamatore e vero amico, che ama spremere tutto il possibile dalle sue apparecchiature per realizzare il collegamento impossibile: ogni volta ci riesce, e puntualmente qualche apparecchiatura ci rimette. Questo livello di potenza è per lui (l'avviso che esce all'attivazione, per questo, dice chiaramente che chi spreme tutto spesso guasta qualcosa).
 
 ## Da fare / da decidere
 - Compilare e provare il firmware di misura con BOOST su T3 e T-Beam (corrente, temperatura, spurie con l'analizzatore), fase 1.

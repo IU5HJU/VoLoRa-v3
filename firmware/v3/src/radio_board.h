@@ -44,14 +44,27 @@ class BoardRadio : public Radio {
   }
   // ----- BOOST (+20 dBm, estrema, docs/boost.md): sempre spento all'avvio, non si salva, non si spegne da solo -----
   const boost::State& boostState() const { return boost_; }
-  // Un comando seriale "BOOST ...". Ritorna false se la riga non e' un comando BOOST.
+  // Un comando seriale "BOOST ..." o "IOF ...". Ritorna false se la riga non e' uno dei due.
   bool boostCommand(const char* line) {
-    const boost::Cmd c = boost::parse(line);
-    if (c == boost::Cmd::Invalid) { if (strncasecmp(line, "BOOST", 5)) return false; Serial.println("ERR BOOST ON RISCHIO | BOOST OFF | BOOST STATUS"); return true; }
+    const boost::Cmd c = boost::parse(line), ci = boost::parseIof(line);
+    if (c == boost::Cmd::Invalid && ci == boost::Cmd::Invalid) {
+      if (!strncasecmp(line, "BOOST", 5)) { Serial.println("ERR BOOST ON RISCHIO | BOOST OFF | BOOST STATUS"); return true; }
+      if (!strncasecmp(line, "IOF", 3)) { Serial.println("ERR IOF ON RISCHIO | IOF OFF | IOF STATUS (solo SX1262)"); return true; }
+      return false;
+    }
     if (c == boost::Cmd::NeedsAck) { Serial.println(boost::kWarning); Serial.println("ERR BOOST non attivato: scrivi BOOST ON RISCHIO"); return true; }
     if (c == boost::Cmd::On) { boost_.enable(); applyPower(); Serial.println(boost::kWarning); Serial.printf("BOOST ATTIVO (RISCHIO): +%d dBm\n", boost_.power()); return true; }
-    if (c == boost::Cmd::Off) { boost_.disable(); applyPower(); Serial.printf("BOOST spento: +%d dBm\n", boost_.power()); return true; }
-    Serial.printf("BOOST %s, potenza %d dBm, ciclo di lavoro %.2f%% su %d s\n", boost_.on() ? "ATTIVO (RISCHIO)" : "spento", boost_.power(), boost_.duty(millis()), boost::DutyGuard::kBuckets);
+    if (ci == boost::Cmd::NeedsAck) {
+      Serial.println(boost::kIofWarning);
+      Serial.println(kBoardSx1262 ? "ERR IOF MODE non attivato: scrivi IOF ON RISCHIO" : "ERR IOF MODE esiste solo sull'SX1262: questa scheda ha l'SX1278 (massimo +20 dBm con BOOST)");
+      return true;
+    }
+    if (ci == boost::Cmd::On) {
+      if (!boost_.enableIof()) { Serial.println("ERR IOF MODE esiste solo sull'SX1262: questa scheda ha l'SX1278 (massimo +20 dBm con BOOST)"); return true; }
+      applyPower(); Serial.println(boost::kIofWarning); Serial.printf("IOF MODE ATTIVO (RISCHIO): +%d dBm\n", boost_.power()); return true;
+    }
+    if (c == boost::Cmd::Off || ci == boost::Cmd::Off) { boost_.disable(); applyPower(); Serial.printf("potenza normale: +%d dBm\n", boost_.power()); return true; }
+    Serial.printf("%s, potenza %d dBm, ciclo di lavoro %.2f%% su %d s\n", boost_.iofOn() ? "IOF MODE ATTIVO (RISCHIO)" : boost_.boostOn() ? "BOOST ATTIVO (RISCHIO)" : "potenza normale", boost_.power(), boost_.duty(millis()), boost::DutyGuard::kBuckets);
     return true;
   }
   double random() override { return esp_random() / 4294967296.0; }

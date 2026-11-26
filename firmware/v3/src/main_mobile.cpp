@@ -144,7 +144,7 @@ static void handleSerial() {
         Serial.printf("%s BLE %s, gradino R%d%s, invio %s, in RAM %u byte, richieste %u (ripetute %u), scartati %u, oggetti ricevuti %u, errori radio %u, coda persa %u\n", call, bleConnected ? "collegato" : "scollegato",
                       station->link().rung, station->link().lost ? " (in ricerca)" : "", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(bridge->held()), s.pulls, s.repulls, s.dropped, s.rxObjects,
                       static_cast<unsigned>(radio.rxErrors()), static_cast<unsigned>(qDropped));
-      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | STATO | BOOST ON RISCHIO|OFF|STATUS");
+      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
     } else if (n < static_cast<int>(sizeof(line)) - 1) line[n++] = c;
   }
 }

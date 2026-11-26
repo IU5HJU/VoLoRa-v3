@@ -60,7 +60,7 @@ static void handleLine(const char* line) {
   } else if (!strncasecmp(line, "STATO", 5)) {
     if (!station) { Serial.println("nessun nominativo"); return; }
     Serial.printf("gradino R%d, in ricerca %s, invio %s, radio: errori di ricezione %u\n", station->link().rung, station->link().lost ? "si" : "no", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(radio.rxErrors()));
-  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | SEND <byte> | STATO | BOOST ON RISCHIO|OFF|STATUS");
+  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | SEND <byte> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
 }
 
 void setup() {
