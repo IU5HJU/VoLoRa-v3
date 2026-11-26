@@ -1,0 +1,274 @@
+diff -u -r a/lib/voicecore/node_link.cpp b/lib/voicecore/node_link.cpp
+--- a/lib/voicecore/node_link.cpp	2026-11-26 12:55:59.928421706 +0000
++++ b/lib/voicecore/node_link.cpp	2026-11-26 12:56:29.156092796 +0000
+@@ -51,11 +51,12 @@
+ 
+ // HELLO e KEEPALIVE portano lo stato dell'autenticazione: [1 se abbiamo autenticato l'altro][il suo id di avvio che abbiamo autenticato].
+ size_t NodeLink::makeStatus(uint8_t type, uint8_t* out, size_t cap) {
+-  uint8_t p[9];
++  uint8_t p[9 + kNodeMaxExtension];
+   p[0] = static_cast<uint8_t>((peerAuth_ ? 1 : 0) | ((peerAuth_ && peerAcceptsMe_) ? 2 : 0));
+   put32(p + 1, peerAuth_ ? peerBoot_ : 0);
+-  if (publicAddr_ != 0) put32(p + 5, publicAddr_);
+-  return build(type, p, publicAddr_ != 0 ? 9 : 5, out, cap);
++  if (publicAddr_ != 0 || extLen_ != 0) put32(p + 5, publicAddr_);
++  for (size_t i = 0; i < extLen_; i++) p[9 + i] = ext_[i];  // V3: l'estensione segue i 9 byte (a zero l'indirizzo, se ignoto)
++  return build(type, p, extLen_ != 0 ? 9 + extLen_ : (publicAddr_ != 0 ? 9 : 5), out, cap);
+ }
+ 
+ size_t NodeLink::makeHello(uint8_t* out, size_t cap) { return makeStatus(kNodeHello, out, cap); }
+@@ -139,6 +140,7 @@
+       peerLastCounter_ = counter;
+       peerAcceptsMe_ = false;  // finche' l'altro non dice di aver autenticato noi
+       peerPublic_ = 0;         // un nuovo avvio: l'indirizzo dichiarato prima non vale piu'
++      peerExtLen_ = 0;         // e nemmeno l'estensione V3
+       haveRx_ = true;
+       lastRxMs_ = nowMs;
+       stats_.authenticated++;
+@@ -179,6 +181,8 @@
+     if ((type == kNodeHello || type == kNodeKeepalive) && len >= 5) {
+       peerAcceptsMe_ = (payload[0] & 1) != 0 && get32(payload + 1) == boot_;
+       if (len >= 9) peerPublic_ = get32(payload + 5);  // l'indirizzo pubblico dichiarato dal nodo (le versioni vecchie mandano 5 byte)
++      peerExtLen_ = len > 9 ? (len - 9 > kNodeMaxExtension ? kNodeMaxExtension : len - 9) : 0;  // V3: quello che segue i 9 byte
++      for (size_t i = 0; i < peerExtLen_; i++) peerExt_[i] = payload[9 + i];
+       // l'altro nodo non ha ancora saputo di essere stato accettato (bit 1): glielo diciamo subito, al massimo una volta al secondo
+       if (!(payload[0] & 2) && (!haveStatusReplyMs_ || nowMs - lastStatusReplyMs_ >= kNodeChallengeGapMs)) {
+         haveStatusReplyMs_ = true;
+diff -u -r a/lib/voicecore/node_link.h b/lib/voicecore/node_link.h
+--- a/lib/voicecore/node_link.h	2026-11-26 12:55:59.924873943 +0000
++++ b/lib/voicecore/node_link.h	2026-11-26 12:55:59.980781729 +0000
+@@ -36,6 +36,7 @@
+ constexpr size_t kNodeMaxPayload = 255;
+ constexpr size_t kNodeMaxDatagram = kNodeHeaderBytes + kNodeMaxPayload + kNodeSigBytes;
+ constexpr size_t kNodeNonceBytes = 8;
++constexpr size_t kNodeMaxExtension = 32;  // V3: byte dopo i 9 di stato in HELLO e KEEPALIVE (i nodi v2 non li leggono)
+ constexpr size_t kNodeKeyBytes = 16;
+ 
+ constexpr uint32_t kNodeHelloMs = 2000;           // finche' il collegamento non e' attivo
+@@ -88,6 +89,14 @@
+   // L'indirizzo IPv4 pubblico del nodo, come lo vede Internet (a.b.c.d = a<<24|b<<16|c<<8|d; 0 = non noto): dietro un router il reflector vede solo
+   // l'indirizzo che gli mette il router, quindi lo dice il nodo stesso. Viaggia nei HELLO e KEEPALIVE firmati; non e' verificato da nessuno.
+   void setPublicAddress(uint32_t ipv4) { publicAddr_ = ipv4; }
++  // V3 (docs/reflector-v3.md del progetto VoLoRa-v3): estensione in coda ai 9 byte di stato di HELLO e KEEPALIVE, e quella dichiarata dall'altro nodo.
++  // Chi non la manda (ogni nodo v2) ha lunghezza 0 e il comportamento di prima.
++  void setStatusExtension(const uint8_t* e, size_t n) {
++    extLen_ = n > kNodeMaxExtension ? kNodeMaxExtension : n;
++    for (size_t i = 0; i < extLen_; i++) ext_[i] = e[i];
++  }
++  const uint8_t* peerExtension() const { return peerExt_; }
++  size_t peerExtensionLen() const { return peerExtLen_; }
+   // Quello dichiarato dall'altro nodo nell'ultimo HELLO o KEEPALIVE accettato (0 = nessuno).
+   uint32_t peerPublicAddress() const { return peerPublic_; }
+   size_t makeHello(uint8_t* out, size_t cap);
+@@ -122,6 +131,10 @@
+   size_t makeStatus(uint8_t type, uint8_t* out, size_t cap);
+   uint32_t publicAddr_ = 0;
+   uint32_t peerPublic_ = 0;
++  uint8_t ext_[kNodeMaxExtension] = {0};
++  size_t extLen_ = 0;
++  uint8_t peerExt_[kNodeMaxExtension] = {0};
++  size_t peerExtLen_ = 0;
+   uint32_t peerSeenId_ = 0;
+   uint32_t peerBoot_ = 0;
+   uint32_t peerLastCounter_ = 0;
+diff -u -r a/lib/voicecore/reflector_core.cpp b/lib/voicecore/reflector_core.cpp
+--- a/lib/voicecore/reflector_core.cpp	2026-11-26 12:55:59.938327710 +0000
++++ b/lib/voicecore/reflector_core.cpp	2026-11-26 12:56:29.180707553 +0000
+@@ -76,6 +76,9 @@
+   memcpy(cfg.key, key, kNodeKeyBytes);
+   c->link.reset(new NodeLink(cfg, boot_ + id + 0x1000, rng_));  // un collegamento nuovo: chi ha la chiave vecchia non e' piu' accettato
+   c->haveEndpoint = false;
++  c->v3 = false;
++  c->v3Caps = 0;
++  c->dir.clear();
+   if (c->wasUp) {
+     c->wasUp = false;
+     say(std::string("client ") + c->name + " scollegato (chiave cambiata)");
+@@ -151,6 +154,7 @@
+     c->haveEndpoint = true;
+     c->endpoint = from;
+     c->lastSeenMs = nowMs;
++    if (type == kNodeHello || type == kNodeKeepalive) learnV3(*c);
+   }
+   const bool up = c->link->linkUp(nowMs);
+   if (up != c->wasUp) {
+@@ -160,6 +164,10 @@
+ 
+   if (rx.kind != NodeLink::Kind::Packet) return;
+   c->packetsIn++;
++  if (rx.packetLen >= 1 && (rx.packet[0] >> 4) == 3) {  // frame V3: solo per i client che lo hanno dichiarato (e' prima di decodePacket, che scarta ogni versione diversa da 2)
++    onV3(*c, rx.packet, rx.packetLen, nowMs);
++    return;
++  }
+   Packet p;
+   if (!decodePacket(rx.packet, rx.packetLen, p)) {
+     stats_.badPacket++;
+@@ -232,6 +240,102 @@
+   }
+ }
+ 
++// ---- V3 -------------------------------------------------------------------------------------------------------------------------------------------------------------
++// L'estensione dichiarata dal client nei suoi HELLO e KEEPALIVE: 'V' '3', revisione, capacita'. Il reflector risponde con la stessa estensione solo a lui.
++void ReflectorCore::learnV3(Client& c) {
++  const uint8_t* e = c.link->peerExtension();
++  if (c.link->peerExtensionLen() >= 4 && e[0] == 'V' && e[1] == '3') {
++    if (!c.v3) say(std::string("client ") + c.name + " dichiara il V3");
++    c.v3 = true;
++    c.v3Caps = e[3];
++    const uint8_t mine[4] = {'V', '3', kV3Revision, static_cast<uint8_t>(kV3CapFrames | kV3CapDirectory)};
++    c.link->setStatusExtension(mine, sizeof(mine));
++  } else {
++    c.v3 = false;
++    c.v3Caps = 0;
++    c.link->setStatusExtension(nullptr, 0);
++  }
++}
++
++void ReflectorCore::sendEsito(Client& to, const uint8_t* dest, uint8_t code) {
++  uint8_t f[2 + kV3CallBytes + 1], out[kNodeMaxDatagram];
++  f[0] = kV3FrameByte0;
++  f[1] = kV3SubEsito;
++  memcpy(f + 2, dest, kV3CallBytes);
++  f[2 + kV3CallBytes] = code;
++  const size_t k = to.link->makePacket(f, sizeof(f), out, sizeof(out));
++  if (k && to.haveEndpoint) net_.send(to.endpoint, out, k);
++}
++
++void ReflectorCore::onV3(Client& c, const uint8_t* d, size_t n, uint32_t nowMs) {
++  if (!c.v3 || n < 2 || d[0] != kV3FrameByte0) {  // un client v2 non puo' inserire frame V3; gli altri frame V3 non sono del reflector
++    stats_.v3Refused++;
++    return;
++  }
++  const uint8_t sub = d[1];
++  if (sub == kV3SubAnnuncio) {
++    // conteggio (1), poi per ogni stazione: nominativo compatto (6) e eta' in secondi (2)
++    if (n < 3) {
++      stats_.v3Refused++;
++      return;
++    }
++    const size_t count = d[2];
++    if (count > kV3MaxDirectory || n < 3 + 8 * count) {
++      stats_.v3Refused++;
++      return;
++    }
++    c.dir.clear();
++    for (size_t i = 0; i < count; i++) {
++      const uint8_t* e = d + 3 + 8 * i;
++      Client::DirEntry en;
++      memcpy(en.call, e, kV3CallBytes);
++      en.seenMs = static_cast<int64_t>(nowMs) - static_cast<int64_t>((e[6] << 8) | e[7]) * 1000;
++      c.dir.push_back(en);
++    }
++    stats_.v3Announces++;
++    return;
++  }
++  if (sub == kV3SubInoltro) {
++    // destinazione (6), origine (6), ttl (1), frame V3 (resto)
++    if (n < 2 + 2 * kV3CallBytes + 1) {
++      stats_.v3Refused++;
++      return;
++    }
++    const uint8_t* dest = d + 2;
++    const uint8_t ttl = d[2 + 2 * kV3CallBytes];
++    Client* best = nullptr;
++    int64_t bestSeen = 0;
++    for (auto& o : clients_) {
++      if (o->id == c.id || !o->v3 || !o->haveEndpoint || !o->link->linkUp(nowMs)) continue;
++      for (const auto& en : o->dir) {
++        const int64_t age = static_cast<int64_t>(nowMs) - en.seenMs;
++        if (memcmp(en.call, dest, kV3CallBytes) == 0 && age <= kV3DirectoryLifeMs && (!best || en.seenMs > bestSeen)) {
++          best = o.get();
++          bestSeen = en.seenMs;
++        }
++      }
++    }
++    if (ttl == 0 || !best) {
++      sendEsito(c, dest, ttl == 0 ? kV3EsitoRifiutato : kV3EsitoNonTrovato);
++      return;
++    }
++    uint8_t f[kNodeMaxPayload], out[kNodeMaxDatagram];
++    memcpy(f, d, n);
++    f[2 + 2 * kV3CallBytes] = static_cast<uint8_t>(ttl - 1);
++    const size_t k = best->link->makePacket(f, n, out, sizeof(out));
++    if (!k) {
++      sendEsito(c, dest, kV3EsitoRifiutato);
++      return;
++    }
++    net_.send(best->endpoint, out, k);
++    best->packetsOut++;
++    stats_.v3Forwarded++;
++    sendEsito(c, dest, kV3EsitoConsegnato);
++    return;
++  }
++  stats_.v3Refused++;  // l'esito lo manda solo il reflector; altri sottotipi non si instradano
++}
++
+ void ReflectorCore::tick(uint32_t nowMs) {
+   for (auto& c : clients_) {
+     if (!c->haveEndpoint) continue;
+@@ -271,6 +375,8 @@
+     i.lastSeenMs = c->lastSeenMs;
+     i.packetsIn = c->packetsIn;
+     i.packetsOut = c->packetsOut;
++    i.v3 = c->v3;
++    i.v3Caps = c->v3Caps;
+     i.declaredAddr = c->link->peerPublicAddress();
+     v.push_back(i);
+   }
+diff -u -r a/lib/voicecore/reflector_core.h b/lib/voicecore/reflector_core.h
+--- a/lib/voicecore/reflector_core.h	2026-11-26 12:55:59.934799003 +0000
++++ b/lib/voicecore/reflector_core.h	2026-11-26 12:56:29.157221508 +0000
+@@ -32,6 +32,16 @@
+   return true;
+ }
+ 
++// V3 (docs/reflector-v3.md del progetto VoLoRa-v3): un client V3 si dichiara nei HELLO e KEEPALIVE con 'V' '3', revisione, capacita'. I frame V3 hanno il byte 0 = 0x3E
++// (versione 3, tipo 14) e il sottotipo nel byte 1: 80 annuncio delle stazioni sentite, 81 busta di inoltro, 82 esito. Solo i client V3 li vedono e li possono mandare.
++constexpr uint8_t kV3Revision = 1;
++constexpr uint8_t kV3CapFrames = 1, kV3CapDirectory = 2;
++constexpr uint8_t kV3FrameByte0 = 0x3E, kV3SubAnnuncio = 80, kV3SubInoltro = 81, kV3SubEsito = 82;
++constexpr uint8_t kV3EsitoConsegnato = 0, kV3EsitoNonTrovato = 1, kV3EsitoRifiutato = 2;
++constexpr size_t kV3CallBytes = 6;               // nominativo compatto (6 bit per carattere), confrontato come 6 byte
++constexpr size_t kV3MaxDirectory = 20;
++constexpr int64_t kV3DirectoryLifeMs = 600000;   // una voce della rubrica vale 10 minuti
++
+ typedef uint64_t Endpoint;  // indirizzo e porta di un client, come li tiene chi ha il socket (per IPv4: indirizzo * 65536 + porta)
+ 
+ class IReflectorNet {
+@@ -55,6 +65,9 @@
+     uint32_t badMode = 0;         // modo non inoltrato
+     uint32_t badPacket = 0;       // non e' un pacchetto radio valido
+     uint32_t talks = 0;           // trasmissioni iniziate
++    uint32_t v3Forwarded = 0;     // buste V3 inoltrate
++    uint32_t v3Refused = 0;       // frame V3 scartati (da un client v2, o non del reflector)
++    uint32_t v3Announces = 0;     // annunci della rubrica ricevuti
+   };
+ 
+   // Una trasmissione (finita o in corso): chi l'ha fatta arrivare e con quale nominativo.
+@@ -78,6 +91,8 @@
+     uint32_t lastSeenMs = 0;
+     uint32_t packetsIn = 0;
+     uint32_t packetsOut = 0;
++    bool v3 = false;             // il client ha dichiarato il V3
++    uint8_t v3Caps = 0;
+     uint32_t declaredAddr = 0;  // l'indirizzo pubblico che il nodo dice di avere (a<<24|b<<16|c<<8|d), 0 = non lo dice; non verificato
+   };
+ 
+@@ -118,7 +133,17 @@
+     uint32_t lastSeenMs = 0;
+     bool wasUp = false;
+     uint32_t packetsIn = 0, packetsOut = 0;
++    bool v3 = false;                 // ha dichiarato il V3
++    uint8_t v3Caps = 0;
++    struct DirEntry {
++      uint8_t call[kV3CallBytes];
++      int64_t seenMs;                // istante in cui il gateway ha sentito la stazione (puo' essere negativo: l'eta' supera il tempo trascorso)
++    };
++    std::vector<DirEntry> dir;       // la rubrica dell'ultimo annuncio
+   };
++  void learnV3(Client& c);
++  void onV3(Client& c, const uint8_t* d, size_t n, uint32_t nowMs);
++  void sendEsito(Client& to, const uint8_t* dest, uint8_t code);
+   Client* find(uint32_t id);
+   const Client* find(uint32_t id) const;
+   void endTalk();

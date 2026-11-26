@@ -53,6 +53,12 @@ jobs:
         run: python3 tests/sim/test_reflector_v3.py
       - name: Interoperabilita' del reflector V3 con il vlnode della v2
         run: python3 tests/interop/test_reflector_vs_vlnode.py
+      - name: Reflector V3 in C++ (patch sulla v2 e prove con ASan/UBSan)
+        run: |
+          reflector/build.sh "$RUNNER_TEMP/refl"
+          for t in test_reflector_core test_node_link test_reflector_v3; do "$RUNNER_TEMP/refl/build/$t"; done
+      - name: Interoperabilita' del reflector V3 in C++ con vlnode e client V3
+        run: python3 tests/interop/test_reflector_cpp.py
       - name: Prove moduli UART finti
         run: python3 tests/app/test_uartlink.py
       - name: "Applicazione, logica"
