@@ -212,9 +212,13 @@ def enc_band_set_freq(session, profile, freq_khz, rung, k, repeat, mode=BAND_AT_
     return _mesh("BAND_SET_FREQ", struct.pack(">HBIBBBBI", session & 0xFFFF, profile, int(freq_khz), rung, k, repeat, mode, int(start_utc)))
 
 
-def enc_band_ack_freq(session, profile, freq_khz):
-    """Conferma del BAND-SET con frequenza esplicita; la stazione deve avere la frequenza nel campo del suo chip. 9 byte."""
-    return _mesh("BAND_ACK_FREQ", struct.pack(">HBI", session & 0xFFFF, profile, int(freq_khz)))
+RSSI_UNKNOWN = -128
+
+
+def enc_band_ack_freq(session, profile, freq_khz, rssi_dbm=RSSI_UNKNOWN):
+    """Conferma del BAND-SET con frequenza esplicita, oppure CONTROPROPOSTA: il ricevitore, che ha scansionato i canali (modo RSSI del modulo), mette la frequenza che preferisce
+    e l'RSSI misurato su di essa (-128 = non misurato). Se la frequenza e' diversa da quella proposta, il mittente la conferma con un nuovo BAND-SET-FREQ. 10 byte."""
+    return _mesh("BAND_ACK_FREQ", struct.pack(">HBIb", session & 0xFFFF, profile, int(freq_khz), max(-128, min(127, int(rssi_dbm)))))
 
 
 def enc_band_ack(session, profile, channel):
@@ -270,7 +274,7 @@ def decode(b):
         elif n == "BAND_SET_FREQ":
             d["session"], d["profile"], d["freq_khz"], d["rung"], d["k"], d["repeat"], d["mode"], d["start"] = struct.unpack(">HBIBBBBI", x[:15])
         elif n == "BAND_ACK_FREQ":
-            d["session"], d["profile"], d["freq_khz"] = struct.unpack(">HBI", x[:7])
+            d["session"], d["profile"], d["freq_khz"], d["rssi_dbm"] = struct.unpack(">HBIb", x[:8])
         elif n == "BAND_ACK":
             d["session"], d["profile"], d["channel"] = struct.unpack(">HBB", x[:4])
         elif n == "BAND_BACK":

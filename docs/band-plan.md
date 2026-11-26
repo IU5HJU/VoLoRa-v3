@@ -38,7 +38,7 @@ Decisioni dell'autore: **canale di incontro 433,700 MHz** e **canale di servizio
 | 0 | 433,700 | 125 kHz | R2, R8-R14 | incontro: beacon, polling, HELLO e trasferimenti stretti |
 | 1 | 433,850 | 125 kHz | R2, R8-R14 | servizio fra i nodi (VOTO) e trasferimenti stretti con ascolto prima di parlare |
 | 2 | 433,955 | 62,5 kHz | R11-R14 | trasferimenti con i gradini stretti |
-| 3-15 | — | — | — | riservati (tabella estesa) |
+| 3-15 | — | — | — | riservati (deciso il 26/11/2026): per ogni altro canale si usa la frequenza esplicita (BAND-SET-FREQ) |
 
 - **Tutti e tre i canali stanno nel segmento 433,600-434,000 MHz** (tutti i modi, canali digitali 433,625-433,775) e oltre il segmento FM/Digital Voice della v2 (fino a 433,575 MHz). Guardia minima fra i canali: 11,25 kHz.
 - **L'incontro (R10) è sul canale 0**, come deciso: HELLO e beacon sempre lì. I trasferimenti negoziano il canale nell'HELLO (BAND-SET con profilo 0).
