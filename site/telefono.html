@@ -76,7 +76,7 @@
       <input id="img" type="file" accept="image/*">
       <label for="target">Dimensione massima dopo la compressione</label>
       <select id="target"><option value="2000">2 kB (miniatura)</option><option value="5000">5 kB</option><option value="10000" selected>10 kB</option><option value="20000">20 kB</option><option value="40000">40 kB</option><option value="64000">64 kB (il massimo)</option></select>
-      <p class="hint">L'immagine è ridimensionata e compressa nel telefono. Più è piccola, meno dura in radio: a R5 circa 1 s ogni kB, ai gradini lenti molto di più. Per ora JPEG normale (un solo livello); il JPEG progressivo a livelli è ancora da aggiungere.</p>
+      <p class="hint">L'immagine è ridimensionata e compressa nel telefono. Più è piccola, meno dura in radio: a R5 circa 1 s ogni kB, ai gradini lenti molto di più. È un <strong>JPEG progressivo a tre livelli</strong>: il primo livello (circa un terzo dei byte) è già un'immagine intera ma sfocata; se il tempo non basta, arriva solo quello.</p>
       <img id="prev" class="prev" alt="" hidden>
       <p id="img_n" class="hint"></p>
     </div>
@@ -97,6 +97,7 @@
     <pre id="log"></pre>
   </section>
 </main>
+<script src="jpeg_prog.js"></script>
 <script>
 'use strict';
 // Servizio BLE della specifica docs/ble-telefono.md (UUID scelti a caso il 26/11/2026)
@@ -123,9 +124,9 @@ function packPos(p) {      // 7 byte, come tools/frame_mesh.pack_pos
   return [0, ...Array.from(enc.encode(p.loc))];
 }
 function utf8Cut(s, max) { let b = enc.encode(s); if (b.length <= max) return b; while (b.length > max) { s = s.slice(0, -1); b = enc.encode(s); } return b; }
-function encBegin(obj, kind, data, dest, name, w, h) {
-  const d = enc.encode(dest.slice(0, 12)), n = utf8Cut(name || '', 40);
-  return new Uint8Array([C.BEGIN, ...u16(obj), kind, ...u24(data.length), ...u32(crc32(data)), ...u16(w || 0), ...u16(h || 0), 0, d.length, ...d, n.length, ...n]);
+function encBegin(obj, kind, data, dest, name, w, h, ends) {
+  const d = enc.encode(dest.slice(0, 12)), n = utf8Cut(name || '', 40), le = (ends || []).slice(0, 8);
+  return new Uint8Array([C.BEGIN, ...u16(obj), kind, ...u24(data.length), ...u32(crc32(data)), ...u16(w || 0), ...u16(h || 0), le.length, ...le.flatMap(u24), d.length, ...d, n.length, ...n]);
 }
 const cmdObj = (code, obj) => new Uint8Array([code, ...u16(obj)]);
 function decEvent(b) {
@@ -320,9 +321,14 @@ async function comprimi(file, target) {
   for (const lato of [320, 256, 192, 160, 128, 96, 64, 48, 32]) {
     const s = Math.min(1, lato / Math.max(bmp.width, bmp.height)), w = Math.max(1, Math.round(bmp.width * s)), h = Math.max(1, Math.round(bmp.height * s));
     cv.width = w; cv.height = h; cx.drawImage(bmp, 0, 0, w, h);
-    for (const q of [0.8, 0.6, 0.45, 0.3, 0.2]) {
+    for (const q of [0.85, 0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.15]) {
       const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', q));
-      if (blob && blob.size <= target) return { blob, w, h };
+      if (!blob) continue;
+      const base = new Uint8Array(await blob.arrayBuffer());
+      let prog;
+      // il JPEG della canvas e' normale: lo si trasforma, SENZA PERDITE, in progressivo a tre livelli (site/jpeg_prog.js); se non riesce resta un livello solo
+      try { prog = window.JpegProg.transcode(base); } catch (e) { log('JPEG progressivo non riuscito: ' + e.message); prog = { data: base, ends: [base.length] }; }
+      if (prog.data.length <= target) return { data: prog.data, ends: prog.ends, w, h };
     }
   }
   return null;
@@ -334,10 +340,10 @@ async function aggiornaImmagine() {
   try {
     const r = await comprimi(f, parseInt($('target').value, 10));
     if (!r) { $('img_n').className = 'err'; $('img_n').textContent = 'Non riesco a farla stare in questa dimensione: scegli un limite più alto.'; refreshButtons(); return; }
-    const data = new Uint8Array(await r.blob.arrayBuffer());
-    S.payload = { kind: KIND.img, data, name: f.name.replace(/\.[^.]*$/, '') + '.jpg', w: r.w, h: r.h };
-    $('prev').src = URL.createObjectURL(r.blob); $('prev').hidden = false;
-    $('img_n').textContent = `${r.w}×${r.h} pixel, ${data.length} byte.`;
+    S.payload = { kind: KIND.img, data: r.data, name: f.name.replace(/\.[^.]*$/, '') + '.jpg', w: r.w, h: r.h, ends: r.ends };
+    $('prev').src = URL.createObjectURL(new Blob([r.data], { type: 'image/jpeg' })); $('prev').hidden = false;
+    const pct = r.ends.map(e => Math.round(100 * e / r.data.length) + '%').join(', ');
+    $('img_n').textContent = `${r.w}×${r.h} pixel, ${r.data.length} byte, ${r.ends.length} ${r.ends.length > 1 ? 'livelli (' + pct + ' cumulati)' : 'livello'}.`;
   } catch (e) { $('img_n').className = 'err'; $('img_n').textContent = 'Immagine non leggibile.'; }
   refreshButtons();
 }
@@ -354,7 +360,7 @@ $('invia').addEventListener('click', async () => {
   S.tx = { obj, data: p.data, state: 'begin', kind: p.kind };
   S.pulls.length = 0; $('barra').hidden = true; $('barra').value = 0;
   msg('Chiedo alla scheda…'); refreshButtons();
-  try { await writeCmd(encBegin(obj, p.kind, p.data, dest, p.name, p.w, p.h)); log('BEGIN ' + obj + ' ' + p.data.length + ' byte'); }
+  try { await writeCmd(encBegin(obj, p.kind, p.data, dest, p.name, p.w, p.h, p.ends)); log('BEGIN ' + obj + ' ' + p.data.length + ' byte' + (p.ends && p.ends.length > 1 ? ', ' + p.ends.length + ' livelli' : '')); }
   catch (e) { S.tx.state = 'error'; msg('Invio non riuscito: ' + e, 'err'); refreshButtons(); }
 });
 $('annulla').addEventListener('click', async () => { if (S.tx) { try { await writeCmd(cmdObj(C.CANCEL, S.tx.obj)); } catch (e) { log(String(e)); } S.pulls.length = 0; } });

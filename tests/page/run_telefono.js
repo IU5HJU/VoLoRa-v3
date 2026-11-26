@@ -42,7 +42,7 @@ const MOCK = `
       if (board.dropAtBlock === s.idx && !board.dropped) { board.dropped = true; board.drop(); return; }
       if (s.idx >= s.n) {
         const all = new Uint8Array(s.size); for (const [k, v] of s.sent) all.set(v, k * BLOCK);
-        board.done.push({ obj: s.obj, kind: s.kind, data: all, crcOk: crc32(all) === s.crc, dest: s.dest, name: s.name, pos: board.posBytes });
+        board.done.push({ obj: s.obj, kind: s.kind, lends: s.lends, data: all, crcOk: crc32(all) === s.crc, dest: s.dest, name: s.name, pos: board.posBytes });
         ev(0x86, be(s.obj, 2), 0); board.sess = null; return;
       }
       if (s.idx % 2 === 0) ev(0x85, be(s.obj, 2), Math.floor(100 * s.idx / s.n), 5, be(10, 3));
@@ -56,10 +56,11 @@ const MOCK = `
     else if (b[0] === 0x02) { board.pos = true; board.posBytes = Array.from(b.slice(1)); }
     else if (b[0] === 0x10) {
       const obj = rd(b, 1, 2), kind = b[3], size = rd(b, 4, 3), crc = rd(b, 7, 4), nl = b[15];
+      const lends = Array.from({ length: nl }, (_, i) => rd(b, 16 + 3 * i, 3));
       let p = 16 + 3 * nl; const dl = b[p]; const dest = new TextDecoder().decode(b.slice(p + 1, p + 1 + dl)); p += 1 + dl; const nn = b[p]; const name = new TextDecoder().decode(b.slice(p + 1, p + 1 + nn));
       if (!board.pos || board.noPosition) { ev(0x82, be(obj, 2), 4); return; }
       if (board.sess) { ev(0x82, be(obj, 2), 1); return; }
-      board.sess = { obj, kind, size, crc, dest, name, n: Math.ceil(size / BLOCK), idx: 0, cache: new Map(), partial: new Map(), asked: new Set(), sent: new Map() };
+      board.sess = { obj, kind, size, crc, dest, name, lends, n: Math.ceil(size / BLOCK), idx: 0, cache: new Map(), partial: new Map(), asked: new Set(), sent: new Map() };
       ev(0x81, be(obj, 2), be(7, 3), 5, be(BLOCK, 2)); prefetch(); setTimeout(radioStep, 15);
     } else if (b[0] === 0x12) { const s = board.sess; if (s && s.obj === rd(b, 1, 2)) { board.sess = null; ev(0x86, be(s.obj, 2), 2); } }
     else if (b[0] === 0x13) { const s = board.sess; board.resumed++; if (s) { s.asked.clear(); s.partial.clear(); prefetch(); setTimeout(radioStep, 15); } }
@@ -96,7 +97,7 @@ const MOCK = `
   const server = http.createServer((req, res) => {
     const p = path.join(site, decodeURIComponent(req.url.split('?')[0]));
     if (!p.startsWith(site) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { 'Content-Type': 'text/html' }); fs.createReadStream(p).pipe(res);
+    res.writeHead(200, { 'Content-Type': p.endsWith('.js') ? 'text/javascript' : 'text/html' }); fs.createReadStream(p).pipe(res);
   }).listen(0);
   const port = server.address().port;
   const browser = await chromium.launch(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {});
@@ -207,6 +208,11 @@ const MOCK = `
     check(await wait(() => window.__board.done.length === 5, 15000), `[${scheme}] immagine consegnata in radio`);
     b = await B();
     check(b.done[4].kind === 2 && b.done[4].crcOk && b.done[4].data[0] === 0xFF, `[${scheme}] tipo immagine, CRC giusto, inizia con il marcatore JPEG`);
+    const dd = b.done[4].data, le = b.done[4].lends;
+    let sof2 = false; for (let i = 2; i + 4 < dd.length && dd[i] === 0xFF; ) { if (dd[i + 1] === 0xC2) { sof2 = true; break; } if (dd[i + 1] === 0xDA) break; i += 2 + ((dd[i + 2] << 8) | dd[i + 3]); }
+    check(sof2, `[${scheme}] l'immagine mandata alla scheda e' un JPEG PROGRESSIVO (SOF2): la canvas lo scrive normale e la pagina lo trasforma senza perdite`);
+    check(le.length === 3 && le[2] === dd.length && le[0] < le[1] && le[0] % 16 === 0 && le[1] % 16 === 0, `[${scheme}] il BEGIN porta tre livelli (fine a ${le.join(', ')} byte), i primi due su confini di pezzo`);
+    check(dd[dd.length - 2] === 0xFF && dd[dd.length - 1] === 0xD9 && (await page.textContent('#img_n')).includes('3 livelli'), `[${scheme}] il file finisce con EOI e la pagina dice quanti livelli ha`);
 
     const noScroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     check(noScroll, `[${scheme}] nessuno scorrimento orizzontale a 390 px`);

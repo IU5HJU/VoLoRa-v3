@@ -65,6 +65,8 @@ jobs:
         run: pip install pillow numpy
       - name: Immagine a livelli (JPEG progressivo)
         run: python3 tests/sim/test_immagine_livelli.py
+      - name: Trasformatore JPEG progressivo in JavaScript
+        run: python3 tests/sim/test_jpeg_prog_js.py
       - name: Limiti dei chip dai datasheet
         run: python3 tests/sim/test_limiti_chip.py
       - name: Prove moduli UART finti
