@@ -1,0 +1,7 @@
+init call=IU5HJU chip=SX1278 rung=5 mask=4095 pos=1 ok=1 retx=-
+rx 43981 2 2950294720 IK5XYZ 5000
+out 87abcd02001388afd9ecc006494b3558595a
+cmd 14abcd
+disc
+rx 1 0 3996799345 IK5XYZ 4
+stats bad=0 dropped=0 maxheld=0 pulls=0 repulls=0 sent=0 stalled=0.0

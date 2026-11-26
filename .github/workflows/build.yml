@@ -63,6 +63,10 @@ jobs:
         run: python3 tests/sim/test_ble_bridge.py
       - name: Installa Pillow e numpy (immagine a livelli)
         run: pip install pillow numpy
+      - name: Nucleo del firmware V3 (C++, ASan e UBSan, contro i vettori del riferimento Python)
+        run: make -C firmware/v3 test
+      - name: I vettori del firmware V3 sono aggiornati
+        run: python3 tests/sim/test_vettori_firmware.py
       - name: Immagine a livelli (JPEG progressivo)
         run: python3 tests/sim/test_immagine_livelli.py
       - name: Trasformatore JPEG progressivo in JavaScript

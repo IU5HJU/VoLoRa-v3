@@ -22,6 +22,7 @@ Le cifre sulle prestazioni radio sono da verificare: la fase 1 serve a misurarle
 
 ## Fase 2: base comune dei firmware
 - Firmware di misura già scritto (non provato su schede): [firmware-misura.md](firmware-misura.md).
+- **Firmware V3 (26/11/2026): iniziato dal nucleo** (ponte telefono-scheda in C++ uguale al riferimento Python, byte per byte, provato sul PC): [firmware-v3.md](firmware-v3.md). Mai eseguito su una scheda.
 - Strato radio unico LoRa/FSK, driver SX1278 e SX1262.
 - Build di più firmware (uno per ruolo e per scheda) dallo stesso codice.
 - Livello di compatibilità v2 per voce, messaggio vocale e testo, verificato con i test della v2; **la v2 non si modifica** ([compatibilita-v2.md](compatibilita-v2.md)).
