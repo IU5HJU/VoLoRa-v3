@@ -148,6 +148,7 @@ Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio ac
 **Cosa resta vero:** se i due nodi non si sentono nemmeno sulla frequenza principale, il muto non ha modo di sapere che l'altro ha già ritrasmesso (Internet non è un mezzo affidabile): **doppio accesso sicuro**; la zona di sovrapposizione fra un nodo muto e uno che vota va evitata, o i due nodi devono potersi sentire in RF.
 
 ### Il nodo a scheda singola è la situazione di partenza (decisioni del 26/11/2026)
+*(Il ruolo gateway o pappagallo, per la v2 e per il V3, è una scelta del sysop: [configurazione-nodo.md](configurazione-nodo.md).)*
 I radioamatori che si affacciano al progetto installeranno probabilmente il firmware su **una scheda già usata per altro**: il nodo a **scheda singola** è quindi il caso di partenza, non l'eccezione. Regole decise dall'autore (codice in [`tools/nodo_semplice.py`](../tools/nodo_semplice.py), provato in `tests/sim/test_nodo_semplice.py`):
 
 1. **Con Internet:** il nodo **manda la voce in rete e usa l'infrastruttura della v2** (reflector, senza modificarla). Non ritrasmette in RF, quindi non entra nell'elezione; la rete riconosce le copie (stessa sessione e stesso nominativo, come già fa la v2). Internet è solo un aiuto: se manca, il nodo funziona lo stesso (punto 2).
