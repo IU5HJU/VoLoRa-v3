@@ -214,14 +214,15 @@ def main():
         r2 = run_elezione("qualita", "rf", a.distanza, a.scenari, a.seed, nodi_si_sentono=True)
         print(f"| {1000 * W:.0f} ms | {100 * r1['doppio_accesso']:.1f} % | {100 * r2['doppio_accesso']:.1f} % | {1000 * r1['ritardo_medio_s']:.0f} ms |")
     W = w0
-    print("\nVoto via radio sul canale di servizio a 144,900 MHz (2 m), FSK stretto; antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo:")
-    print("| distanza fra i nodi | nodi si sentono | gradino del voto | durata del voto (2 slot) | entra in 200 ms | doppio accesso | nodo migliore |")
-    print("|---|---|---|---|---|---|---|")
-    for dk in (5.0, 10.0, 20.0, 30.0, 50.0, 70.0):
-        r = run_voto_radio(dk, scenari=a.scenari, seed=a.seed)
-        durata = r["durata_voto_s"]
-        gr = "-" if r["gradino_mediano"] is None else r["gradino_mediano"]
-        print(f"| {dk:g} km | {100 * (1 - r['senza_collegamento']):.0f} % | {gr} | {1000 * durata:.0f} ms | {'si' if durata <= W else 'NO'} | {100 * r['doppio_accesso']:.1f} % | {100 * r['migliore_se_unico']:.0f} % |")
+    for band, titolo in (("2m", "144,900 MHz (2 m), FSK stretto"), ("70cm", "433,850 MHz (70 cm), FSK R2 e LoRa 125 kHz")):
+        print(f"\nVoto via radio sul canale di servizio a {titolo}; antenne in alto: perdita extra 10 dB; VOTO da 12 byte; un VOTO su 33 si perde; un solo tentativo:")
+        print("| distanza fra i nodi | nodi si sentono | gradino del voto | durata del voto (2 slot) | entra in 200 ms | doppio accesso | nodo migliore |")
+        print("|---|---|---|---|---|---|---|")
+        for dk in (5.0, 10.0, 20.0, 30.0, 50.0, 70.0):
+            r = run_voto_radio(dk, scenari=a.scenari, seed=a.seed, band=band)
+            durata = r["durata_voto_s"]
+            gr = "-" if r["gradino_mediano"] is None else r["gradino_mediano"]
+            print(f"| {dk:g} km | {100 * (1 - r['senza_collegamento']):.0f} % | {gr} | {1000 * durata:.0f} ms | {'si' if durata <= W else 'NO'} | {100 * r['doppio_accesso']:.1f} % | {100 * r['migliore_se_unico']:.0f} % |")
     print("\nCambi di nodo lungo un percorso fra i due (media per prova):")
     for h in (0.0, 3.0, 6.0):
         print(f"  isteresi {h:g} dB: {run_percorso(h, dist_km=a.distanza, seed=a.seed):.1f}")

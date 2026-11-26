@@ -17,7 +17,7 @@ def check(c, m):
         fails += 1
 
 
-check(ch.frequency_khz(ch.CH_MEETING) == 433700 and ch.frequency_khz(ch.CH_SERVICE) == 433850, "incontro a 433,700 MHz; il canale 1 (433,850 MHz) e' ora per trasferimenti stretti")
+check(ch.frequency_khz(ch.CH_MEETING) == 433700 and ch.frequency_khz(ch.CH_SERVICE) == 433850, "incontro a 433,700 MHz; il canale 1 (433,850 MHz) e' il secondo canale di servizio del voto o, a 2 m, per trasferimenti stretti")
 check(ch.SERVICE_2M_KHZ == 144900 and ch.valid_frequency("SX1278", 144900) and not ch.valid_frequency("SX1262", 144900), "il canale di servizio del voto (144,900 MHz) e' nel campo dell'SX1278 (T3, T-Beam SX1278) ma NON in quello dell'SX1262 (da 150 MHz): il T-Beam con SX1262 non puo' fare il voto a 2 m")
 h3 = ch.harmonic_khz(ch.SERVICE_2M_KHZ, 3)
 nearest = min(min(abs(h3 - ch.span_khz(i)[0]), abs(h3 - ch.span_khz(i)[1])) for i in ch.PROFILE0)
@@ -57,5 +57,10 @@ for khz, ac in ((2450001, 3), (2399000, 3), (2425000, 4), (2423500, 3)):
     except ValueError:
         pass
 check(True, "fuori da 2400-2450 MHz o fuori dalla griglia del modulo: errore")
+# doppio canale di servizio del voto
+check(ch.service_options("SX1278") == ["2m", "70cm"] and ch.service_options("SX1262") == ["70cm"], "canale di servizio: l'SX1278 puo' usare 144,900 e 433,850 MHz, l'SX1262 solo 433,850 MHz")
+a, b = ch.caps_for_chip("SX1278"), ch.caps_for_chip("SX1262")
+check(ch.common_service(a, a) == "2m" and ch.common_service(a, a, prefer="70cm") == "70cm" and ch.common_service(a, b) == "70cm" and ch.common_service(b, b) == "70cm" and ch.common_service(ch.CAP_SERVICE_2M, ch.CAP_SERVICE_70CM) is None,
+      "due nodi votano sul canale preferito se lo hanno entrambi, altrimenti sull'altro; senza canale in comune non votano")
 print("canali: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

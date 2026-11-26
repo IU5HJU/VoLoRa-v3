@@ -85,6 +85,8 @@ check(dt["relayed"] and dt["hops"] == 2 and dt["flags"] & 1 and dt["offset"] == 
 dt = sim.decode(sim.enc_data(3, 10, b"x" * 16, 1))
 check(not dt["relayed"] and dt["hops"] == 0, "DATA normale: non ripetuto, 0 salti")
 
+d = fm.decode(fm.enc_node_info("IK5XYZ", 3, 144900, 3))
+check(len(fm.enc_node_info("IK5XYZ", 3, 144900, 3)) == 14 and d["nome"] == "NODE_INFO" and d["call"] == "IK5XYZ" and d["node"] == 3 and d["service_khz"] == 144900 and d["caps"] == 3, "NODO: 14 byte, nominativo, identificativo, canale di servizio e capacita'")
 # ---- revisione 0.2: opzioni, profili fisici, cambio di banda ----
 check(fm.short_id(fm.object_id("IU5HJU", 7)) == fm.object_id("IU5HJU", 7) & 0xFFFF and fm.object_id("IU5HJU", 7) > 0xFFFF, "identificativo a 32 bit; la forma corta (sessione) e' la parte bassa")
 opts = [fm.opt_revision(), fm.opt_profiles([(fm.PROFILE_SUBGHZ, 0x7FFF), (fm.PROFILE_2G4, 0x00FF)])]

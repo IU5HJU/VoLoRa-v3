@@ -13,10 +13,14 @@ CH_MEETING, CH_SERVICE, CH_NARROW = 0, 1, 2
 # indice -> (frequenza centrale kHz, larghezza massima occupata kHz, uso)
 PROFILE0 = {
     CH_MEETING: (433700, 125.0, "incontro: beacon, polling, HELLO e trasferimenti stretti"),
-    CH_SERVICE: (433850, 125.0, "trasferimenti stretti con ascolto prima di parlare (il VOTO non e' piu' qui: vedi SERVICE_2M_KHZ)"),
+    CH_SERVICE: (433850, 125.0, "canale di servizio del voto (variante 70 cm) o trasferimenti stretti con ascolto prima di parlare"),
     CH_NARROW: (433955, 62.5, "trasferimenti con i gradini stretti (R11-R14)"),
 }
 SERVICE_2M_KHZ = 144900                # canale di servizio del VOTO, fisso, in banda 2 m (deciso il 26/11/2026; 144,850 era un canale dei gateway voce digitale: spostato a 144,900): la stessa antenna bibanda serve le due radio con un duplexer
+# Canale di servizio del voto: DUE possibilita' (26/11/2026). 2 m: una sola antenna bibanda col duplexer, ma solo con un SX1278 (137-175 MHz).
+# 70 cm: va con qualunque chip (anche SX1262), ma servono due antenne separate perche' la radio del voto e quella principale sono nella stessa banda.
+SERVICE_CHANNELS = {"2m": (SERVICE_2M_KHZ, "FSK stretto (9,6 kHz)"), "70cm": (433850, "FSK R2 o LoRa 125 kHz")}
+CAP_SERVICE_2M, CAP_SERVICE_70CM = 1, 2        # maschera di capacita' del nodo (frame NODE_INFO)
 RESERVED_FROM = 3                      # 3-15: riservati (tabella estesa, frequenze da definire)
 
 
@@ -71,6 +75,28 @@ def harmonic_khz(khz, n):
 def valid_frequency(chip, khz):
     """True se la frequenza e' nel campo di sintonia del chip (T3: SX1278; T-Beam: SX1278 o SX1262)."""
     return any(lo <= khz <= hi for lo, hi in CHIP_RANGES_KHZ[chip])
+
+
+def service_options(chip):
+    """Canali di servizio utilizzabili con un chip: ['2m', '70cm'] con l'SX1278, ['70cm'] con l'SX1262 (che parte da 150 MHz)."""
+    return [k for k, (khz, _) in SERVICE_CHANNELS.items() if valid_frequency(chip, khz)]
+
+
+def caps_for_chip(chip):
+    m = 0
+    for k in service_options(chip):
+        m |= CAP_SERVICE_2M if k == "2m" else CAP_SERVICE_70CM
+    return m
+
+
+def common_service(caps_a, caps_b, prefer="2m"):
+    """Canale di servizio che due nodi possono usare insieme: il preferito se ce l'hanno entrambi, altrimenti l'altro, altrimenti None (non possono votare)."""
+    both = caps_a & caps_b
+    order = ("2m", "70cm") if prefer == "2m" else ("70cm", "2m")
+    for k in order:
+        if both & (CAP_SERVICE_2M if k == "2m" else CAP_SERVICE_70CM):
+            return k
+    return None
 
 
 def make_plan(config, chip="SX1278"):

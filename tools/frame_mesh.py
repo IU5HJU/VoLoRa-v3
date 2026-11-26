@@ -15,7 +15,7 @@ VERSION = 3
 REVISION = 2                                   # revisione 0.2 dei frame (23/11/2026): opzioni TLV, profili, banda, id a 32 bit
 T_BEACON, T_MESH = 13, 14
 # Sottotipi del frame 14: 1-63 mesh, 64-127 collegamento e cambio di banda, 128-255 riservati (spazio per le funzioni future)
-SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68)
+SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, NODE_INFO=8, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68)
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
@@ -179,6 +179,12 @@ def enc_offer_relay(obj, call, pos, rung_src, rung_dst, margin_src, margin_dst, 
                  _s8(margin_src) + _s8(margin_dst) + bytes([codes]) + struct.pack(">H", mem_kb))
 
 
+def enc_node_info(call, node_id, service_khz, caps):
+    """NODO (identificazione di un nodo fisso): nominativo, identificativo (0-255, quello del VOTO), frequenza del suo canale di servizio in kHz e capacita'
+    (bit 0: puo' votare a 2 m, bit 1: puo' votare a 70 cm). Servono a sapere con quali vicini si vota: due nodi votano solo sullo stesso canale. 14 byte."""
+    return _mesh("NODE_INFO", pack_call(call) + struct.pack(">BIB", node_id & 0xFF, int(service_khz), caps & 0xFF))
+
+
 def enc_group(obj, code, rung, k_symbols, symbol_size, seed, start_utc, members):
     """members = [(nominativo, stato ADMIT/EXCLUDE/RESERVE, turno 0-63)]. start_utc in secondi Unix (32 bit)."""
     b = struct.pack(">HBBHBHI", short_id(obj), code, rung, k_symbols, symbol_size, seed, int(start_utc)) + bytes([len(members)])
@@ -267,6 +273,9 @@ def decode(b):
             d["members"] = [(unpack_call(x[14 + 7 * i:20 + 7 * i]), x[20 + 7 * i] & 3, x[20 + 7 * i] >> 2) for i in range(cnt)]
             if len(x) < 14 + 7 * cnt:
                 return None
+        elif n == "NODE_INFO":
+            d["call"] = unpack_call(x[0:6])
+            d["node"], d["service_khz"], d["caps"] = struct.unpack(">BIB", x[6:12])
         elif n == "VOTE":
             d.update(call=unpack_call(x[0:6]), session=struct.unpack(">H", x[6:8])[0], margin=struct.unpack("b", x[8:9])[0], node=x[9])
         elif n == "BAND_SET":

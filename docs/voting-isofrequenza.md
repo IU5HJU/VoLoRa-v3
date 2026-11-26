@@ -83,23 +83,38 @@ Lettura:
 | 400 ms | 22 % | 5 % | 131 ms |
 | 800 ms | 11 % | 2 % | 289 ms |
 
-**Il voto via radio** sul canale di servizio **144,900 MHz (2 m), fisso** (deciso il 26/11/2026; prima 433,850 MHz, poi 144,850 MHz). Il piano ARI dei 2 m ha mostrato che 144,8500 MHz è un canale dei gateway Internet per voce digitale: il canale è stato spostato nei sette canali liberi del segmento MGM (144,8750-144,9500 MHz) a **144,900 MHz** ([band-plan.md](band-plan.md), punto 3b). Perché: un nodo con due radio avrebbe bisogno di due antenne, difficili da avere libere; con la radio del voto a 2 m e quella della mobile a 70 cm, **una sola antenna collineare bibanda** e un **duplexer 2 m / 70 cm** servono le due radio (il chip SX1278 sintonizza anche 137-175 MHz). Voto con modo FSK stretto (9,6 kHz di banda occupata, adatto ai segmenti digitali dei 2 m). VOTO da 12 byte, un voto su 33 perso, antenne in alto con 10 dB di perdita extra, un solo tentativo; perdita in spazio libero calcolata a 144,9 MHz (circa 9,5 dB meno che a 433 MHz).
-*(Risultati rifatti il 26/11/2026 per il canale a 2 m; le stime precedenti a 433,850 MHz non valgono più.)*
+**Il voto via radio ha due canali di servizio possibili** (deciso il 26/11/2026; il nodo ne sceglie uno in base all'hardware):
 
-| Distanza fra i nodi | Nodi che si sentono | Modo del voto | Durata (2 slot) | Doppio accesso | Nodo migliore |
-|---|---|---|---|---|---|
-| 5-10 km | 100 % | FSK 4,8k dev 2,4 | 90 ms | 3,0-3,1 % | 97 % |
-| 20 km | 100 % | FSK 4,8k dev 2,4 | 90 ms | 4,0 % | 95 % |
-| 30 km | 97 % | FSK 4,8k dev 2,4 | 90 ms | 5,7 % | 95 % |
-| 50 km | 81 % | FSK 4,8k dev 2,4 (o 2,4k) | 90 ms | 19,5 % | 94 % |
-| 70 km | 46 % | FSK 4,8k dev 2,4 (o 2,4k) | 90 ms | 55 % | 90 % |
+| | **A. 144,900 MHz (2 m)** | **B. 433,850 MHz (70 cm)** |
+|---|---|---|
+| Chip | solo **SX1278** (137-175 MHz) | **qualunque** (SX1278 e SX1262) |
+| Antenne | **una sola** antenna collineare bibanda + duplexer 2 m / 70 cm | **due antenne separate** (la radio del voto e quella principale sono nella stessa banda) |
+| Banda occupata | 9,6 kHz (FSK stretta, segmento MGM da 12 kHz) | 100-125 kHz (FSK R2 o LoRa 125 kHz) |
+| Distanza utile del voto | affidabile fino a circa 30 km | affidabile oltre 50 km |
+| Disturbo alla radio principale | basso: bande diverse, duplexer | **alto**: 150 kHz di distanza dal canale 0 (433,700 MHz) |
+| Terza armonica | 434,700 MHz (filtro passa-basso) | — |
+
+**Regola:** due nodi votano **solo sullo stesso canale**. Ogni nodo annuncia il proprio canale e le capacità nel frame **NODO** (`NODE_INFO`, 14 byte, sottotipo 8 del frame 14); la **zona** ha un canale preferito (di partenza il 2 m) e basta che **un solo nodo con SX1262** ci sia perché la zona debba usare i 70 cm. Senza canale in comune i due nodi non votano e valgono le regole della sovrapposizione non ammessa. Funzioni in [`tools/canali.py`](../tools/canali.py): `service_options(chip)`, `common_service(...)`.
+
+**Risultati del simulatore** (VOTO da 12 byte, un voto su 33 perso, antenne in alto con 10 dB di perdita extra, un solo tentativo):
+
+| Distanza | A. 2 m: nodi che si sentono | A. durata / doppio accesso | B. 70 cm: nodi che si sentono | B. modo, durata / doppio accesso |
+|---|---|---|---|---|
+| 5 km | 100 % | 90 ms / 3,1 % | 100 % | FSK R2, 27 ms / 3,1 % |
+| 10 km | 100 % | 90 ms / 3,0 % | 100 % | LoRa 125/SF7, 102 ms / 3,0 % |
+| 20 km | 100 % | 90 ms / 4,0 % | 100 % | 102 ms / 2,4 % |
+| 30 km | 97 % | 90 ms / 5,7 % | 100 % | 102 ms / 3,9 % |
+| 50 km | 81 % | 90 ms / 19,5 % | 100 % | 185 ms / 1,2 % |
+| 70 km | 46 % | 125 ms / 55 % | 98 % | 309 ms (**fuori dai 200 ms**) / 5,9 % |
+
+In 2 m la perdita è minore di 9,5 dB ma il modo è stretto (9,6 kHz) e meno sensibile, quindi il voto arriva meno lontano; in 70 cm si può usare un LoRa da 125 kHz, più sensibile. Il canale A è la scelta comoda (una antenna); il B è la scelta per nodi più lontani e per le T-Beam con SX1262.
 
 Dove i nodi non si sentono sul canale di servizio il voto non è possibile (doppio accesso sicuro): la **zona di sovrapposizione non è ammessa**. Con questo modello il voto è affidabile **fino a circa 30 km**; oltre servono antenne con più guadagno o un modo più sensibile (più lento: FSK 2,4k, 70 ms per frame).
 
-**Come è fatto un nodo (hardware):** due schede (RX a 433 MHz e TX/servizio), **un duplexer 2 m / 70 cm** e **una collineare bibanda**. Cose da controllare:
+**Come è fatto un nodo (hardware).** *Variante A (2 m):* due schede (RX a 433 MHz e TX/servizio), **un duplexer 2 m / 70 cm** e **una collineare bibanda**. *Variante B (70 cm):* due schede e **due antenne** ben separate; la radio del voto trasmette a 150 kHz dalla radio principale: **durante il voto (circa 100 ms) il ricevitore principale è in forte disturbo** (blocking), si può perdere un pacchetto di voce (la v2 ha la correzione d'errore) e va misurato. Per la variante A, cose da controllare:
 - **Terza armonica:** 3 × 144,900 = **434,700 MHz**, che cade in 70 cm, a circa 0,7 MHz dai nostri canali: serve un **filtro passa-basso** sulla radio a 2 m (o la sezione VHF del duplexer, se ha una buona reiezione a 434 MHz). La T3 a 433 MHz ha il suo filtro tarato su 433, non su 145.
 - **Quale chip:** il voto a 144,900 MHz lo può fare solo un **SX1278** (T3 e T-Beam con SX1278: campo 137-175 MHz). **L'SX1262 parte da 150 MHz**: un T-Beam con SX1262 **non** può fare la radio di servizio a 2 m (può fare la radio principale a 433 MHz). Da confermare sul datasheet (il limite viene da RadioLib).
-- **Le schede a 433 MHz a 144 MHz:** l'adattamento e il filtro della T3 sono per i 433 MHz; il rendimento a 144,85 MHz va **misurato** (stessa cosa del punto aperto 7 per i 430 e 440 MHz).
+- **Le schede a 433 MHz a 144 MHz:** l'adattamento e il filtro della T3 sono per i 433 MHz; il rendimento a 144,9 MHz va **misurato** (stessa cosa del punto aperto 7 per i 430 e 440 MHz).
 - **Isolamento del duplexer** fra le due porte: la radio a 2 m trasmette mentre quella a 70 cm ascolta la mobile; va misurato quanto disturba il ricevitore a 433 MHz.
 
 Il doppio accesso residuo (circa 1-4 %) è soprattutto la **perdita del VOTO del vincitore** (3 % nel modello): si abbassa **ripetendo il voto**, a spese della durata. **È il metodo scelto:** vota il margine, non il caso, e non dipende da Internet. Il voto lungo il percorso a 50 km quasi riempie i 200 ms: oltre, serve un gradino più veloce (antenne migliori) o la zona di sovrapposizione non è ammessa.
