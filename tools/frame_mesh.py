@@ -17,7 +17,7 @@ VERSION = 3
 REVISION = 2                                   # revisione 0.2 dei frame (23/11/2026): opzioni TLV, profili, banda, id a 32 bit
 T_BEACON, T_MESH = 13, 14
 # Sottotipi del frame 14: 1-63 mesh, 64-127 collegamento e cambio di banda, 128-255 riservati (spazio per le funzioni future)
-SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, NODE_INFO=8, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68, SYSOP=70)
+SUB = dict(POLL=1, POLL_REPLY=2, REQ_RELAY=3, OFFER_RELAY=4, GROUP=5, GROUP_ACK=6, VOTE=7, NODE_INFO=8, FORZA_IMG=9, BAND_SET=64, BAND_ACK=65, BAND_BACK=66, BAND_SET_FREQ=67, BAND_ACK_FREQ=68, SYSOP=70)
 SUBNAME = {v: k for k, v in SUB.items()}
 ADMIT, EXCLUDE, RESERVE = 0, 1, 2            # stato di un membro nel GRUPPO
 CODE_SELECTIVE, CODE_FOUNTAIN = 1, 2          # maschera dei codici supportati
@@ -187,6 +187,15 @@ def enc_node_info(call, node_id, service_khz, caps):
     return _mesh("NODE_INFO", pack_call(call) + struct.pack(">BIB", node_id & 0xFF, int(service_khz), caps & 0xFF))
 
 
+FORZA_DA_MOBILE, FORZA_DA_NODO = 0, 1
+
+
+def enc_forza_img(call, origine, richiesta):
+    """Richiesta a un nodo di trasmettere un'immagine, da una mobile V3 (origine 0) o da un altro nodo V3 (origine 1). Il nodo la accetta solo se la sua configurazione lo consente
+    per quell'origine (forza_v3_da) e mai a QSO v2 in corso. richiesta = numero della richiesta (16 bit). 11 byte."""
+    return _mesh("FORZA_IMG", pack_call(call) + struct.pack(">BH", origine & 0xFF, richiesta & 0xFFFF))
+
+
 def enc_group(obj, code, rung, k_symbols, symbol_size, seed, start_utc, members):
     """members = [(nominativo, stato ADMIT/EXCLUDE/RESERVE, turno 0-63)]. start_utc in secondi Unix (32 bit)."""
     b = struct.pack(">HBBHBHI", short_id(obj), code, rung, k_symbols, symbol_size, seed, int(start_utc)) + bytes([len(members)])
@@ -248,7 +257,7 @@ def _sysop_body(call, cmd, arg, counter):
 
 def enc_sysop(key, call, cmd, arg, counter):
     """Comando del SYSOP via radio, FIRMATO (HMAC-SHA256 troncato a 8 byte, chiave condivisa come i comandi del sysop della v2) e con contatore anti-ripetizione.
-    cmd: 1 blocca il nodo in v2, 2 sblocca, 3 imposta l'attesa a fine QSO (arg = minuti 1-255), 4 consente o no il comando di una mobile V3 (arg 0/1). 23 byte.
+    cmd: 1 blocca il nodo in v2, 2 sblocca, 3 imposta l'attesa a fine QSO (arg = minuti 1-255), 4 consente il comando forzato (arg: bit 0 mobile V3, bit 1 altro nodo V3). 23 byte.
     E' un frame V3: non modifica i comandi del sysop della v2."""
     body = _sysop_body(call, cmd, arg, counter)
     return _mesh("SYSOP", body + hmac.new(key, body, hashlib.sha256).digest()[:8])
@@ -305,6 +314,9 @@ def decode(b):
             d["call"] = unpack_call(x[0:6])
             d["cmd"], d["arg"], d["counter"] = struct.unpack(">BHI", x[6:13])
             d["mac"] = bytes(x[13:21])
+        elif n == "FORZA_IMG":
+            d["call"] = unpack_call(x[0:6])
+            d["origine"], d["richiesta"] = struct.unpack(">BH", x[6:9])
         elif n == "NODE_INFO":
             d["call"] = unpack_call(x[0:6])
             d["node"], d["service_khz"], d["caps"] = struct.unpack(">BIB", x[6:12])

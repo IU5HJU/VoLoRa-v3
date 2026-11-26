@@ -4,6 +4,8 @@
 
 Il codice e i documenti della v2 sono nel submodule `third_party/VoLoRa-v2` (versione `v0.1.0-rc.1`), **in sola lettura**: il progetto V3 non li modifica.
 
+> **Principio d'uso (26/11/2026).** Un nodo V3 si usa **come un nodo v2, con le solite funzioni**, e in più ha una capacità maggiore di relazionarsi con gli altri nodi e con le radio mobili grazie alle caratteristiche del V3 ([configurazione-nodo.md](configurazione-nodo.md)).
+
 ## 1. Cosa significa
 1. **Nessuna modifica ai formati v2:** né ai pacchetti (modi 1-7, flag, sessione, nominativo, posizione), né al significato del bit `RELAYED`, né ai comandi del sysop, né al reflector.
 2. **Le stazioni, i ripetitori e i nodi v2 già installati continuano a funzionare senza aggiornamenti.** Nessun campo nuovo nei pacchetti v2.

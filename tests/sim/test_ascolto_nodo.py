@@ -36,12 +36,14 @@ for bad in (0, 256):
     except ValueError:
         pass
 check(True, "l'attesa a fine QSO deve stare fra 1 e 255 minuti")
-c = an.Ascolto(consenti_forza_v3=False, lock=True)
-check(c.on_comando_mobile_v3(10.0, 30.0) is False and c.modo(11.0) == "v2_lock", "senza il consenso della configurazione il comando della mobile V3 non fa nulla")
-d = an.Ascolto(consenti_forza_v3=True, lock=True)
-check(d.on_comando_mobile_v3(10.0, 30.0) is True and d.modo(20.0) == "v3_forzato" and d.profilo(20.0) == "v3" and d.modo(40.1) == "v2_lock", "col consenso la mobile V3 forza l'invio di immagini anche in modo v2 con lock, poi il nodo torna in v2")
-e = an.Ascolto(consenti_forza_v3=True)
+c = an.Ascolto(forza_v3_da=0, lock=True)
+check(c.on_comando_v3(10.0, 30.0) is False and c.on_comando_v3(10.0, 30.0, "nodo") is False and c.modo(11.0) == "v2_lock", "senza il consenso della configurazione il comando di una mobile V3 o di un altro nodo non fa nulla")
+d = an.Ascolto(forza_v3_da=an.FORZA_MOBILE, lock=True)
+check(d.on_comando_v3(10.0, 30.0) is True and d.modo(20.0) == "v3_forzato" and d.profilo(20.0) == "v3" and d.modo(40.1) == "v2_lock", "col consenso la mobile V3 forza l'invio di immagini anche in modo v2 con lock, poi il nodo torna in v2")
+check(an.Ascolto(forza_v3_da=an.FORZA_MOBILE).on_comando_v3(1.0, 5.0, "nodo") is False and an.Ascolto(forza_v3_da=an.FORZA_NODO).on_comando_v3(1.0, 5.0, "nodo") is True and an.Ascolto(forza_v3_da=3).on_comando_v3(1.0, 5.0, "nodo") is True,
+      "l'origine conta: il consenso alla mobile non vale per un altro nodo, e viceversa; con 3 valgono entrambi")
+e = an.Ascolto(forza_v3_da=3)
 e.on_v2_voce(50.0)
-check(e.on_comando_mobile_v3(51.0, 30.0) is False and e.on_comando_mobile_v3(60.0, 30.0) is True, "mai a QSO in corso: rifiutato con la voce in onda, accettato dopo 3 s di silenzio")
+check(e.on_comando_v3(51.0, 30.0) is False and e.on_comando_v3(60.0, 30.0, "nodo") is True, "mai a QSO in corso: rifiutato con la voce in onda, accettato dopo 3 s di silenzio")
 print("ascolto del nodo: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

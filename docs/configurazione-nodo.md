@@ -1,5 +1,7 @@
 # Configurazione di un nodo (scelta del sysop)
 
+> **Principio (26/11/2026).** Un nodo V3 si può usare **come un nodo v2, con le solite funzioni**; in più ha una **capacità maggiore di relazionarsi con gli altri nodi e con le radio mobili** grazie alle caratteristiche del protocollo V3 (beacon, polling, ripetizione a gruppo, voto, immagini, cambio di banda).
+
 > **Stato (26/11/2026): schema e regole scritti e provati sul PC** ([`tools/config_nodo.py`](../tools/config_nodo.py), `tests/sim/test_config_nodo.py`). **Non c'è ancora un firmware V3 né una pagina di configurazione**: la scelta si farà con le spunte del firmware (e della pagina di installazione). Nessuna parte è provata su schede.
 
 Il nodo deve rispettare la **v2** (l'infrastruttura v2 non si modifica) e fare quello che il **V3** chiede. Il sysop decide, secondo l'installazione e la necessità di ogni nodo, **due cose indipendenti**.
@@ -39,7 +41,7 @@ La configurazione diventa le **capacità** del frame NODO (un byte, [mesh-v3.md]
   "nominativo": "IU5HJU",
   "attesa_fine_qso_min": 10,
   "lock_v2": false,
-  "consenti_forza_v3": false,
+  "forza_v3_da": 0,
   "v2_ruolo": "gateway",
   "v3_ruolo": "pappagallo",
   "topologia": "singola",
@@ -56,9 +58,9 @@ Una radio ascolta **un profilo alla volta**: la voce dal vivo della v2 (Range, S
 1. **A riposo** (nessuna trasmissione radio e nessun flusso dalla rete) la radio **alterna v2 e V3 a turni dall'orologio** (di partenza 2 s + 2 s).
 2. **Quando c'è voce v2** (dalla radio o da Internet) il nodo **resta in modo v2** fino alla fine del QSO (3 s di silenzio o END, come la v2) **più un'attesa impostabile da 1 a 255 minuti**; poi torna ai turni.
 3. **Lock:** il nodo resta in v2 **senza limite di tempo** finché non lo sblocca l'**interfaccia seriale**, l'**interfaccia web** o un **comando SYSOP via radio**.
-4. **Comando di una mobile V3:** se la configurazione lo consente (`consenti_forza_v3`), una mobile V3 può **forzare il nodo a trasmettere immagini** anche in modo v2, anche con il lock; poi il nodo torna in v2. *(Assunto da me: mai mentre c'è un QSO in corso, cioè una trasmissione v2 negli ultimi 3 s.)*
+4. **Comando di una mobile V3 o di un altro nodo:** se la configurazione lo consente (`forza_v3_da`: 1 = mobile V3, 2 = altro nodo V3, 3 = entrambi, 0 = nessuno), il comando **forza il nodo a trasmettere immagini** anche in modo v2, anche con il lock; poi il nodo torna in v2. Il frame è `FORZA_IMG` (sottotipo 9 del frame 14, 11 byte) con l'origine (mobile o nodo). *(Assunto da me: mai mentre c'è un QSO in corso, cioè una trasmissione v2 negli ultimi 3 s.)*
 
-**Comando SYSOP via radio (frame V3 firmato).** La v2 non si modifica, quindi il comando di sblocco **non può essere un comando della v2**: è un frame V3 **SYSOP** (sottotipo 70 del frame 14, 23 byte) con **firma HMAC-SHA256 troncata a 8 byte** e **contatore anti-ripetizione**, come i comandi del sysop della v2. Comandi: **1 blocca in v2**, **2 sblocca**, **3 imposta l'attesa a fine QSO** (1-255 minuti), **4 consente o no il comando della mobile V3**. È l'unico frame V3 **firmato** per ora; per gli altri la firma resta un'opzione prevista e non attiva. La chiave (16 byte) la tiene il sysop.
+**Comando SYSOP via radio (frame V3 firmato).** La v2 non si modifica, quindi il comando di sblocco **non può essere un comando della v2**: è un frame V3 **SYSOP** (sottotipo 70 del frame 14, 23 byte) con **firma HMAC-SHA256 troncata a 8 byte** e **contatore anti-ripetizione**, come i comandi del sysop della v2. Comandi: **1 blocca in v2**, **2 sblocca**, **3 imposta l'attesa a fine QSO** (1-255 minuti), **4 consente il comando forzato** (argomento: bit 0 mobile V3, bit 1 altro nodo V3). È l'unico frame V3 **firmato** per ora; per gli altri la firma resta un'opzione prevista e non attiva. La chiave (16 byte) la tiene il sysop.
 
 ## 6. Punti aperti
 - ~~**"Nodo con gateway con seconda scheda":**~~ **Deciso il 26/11/2026:** la seconda scheda è la **radio del voto** (topologia doppia); il gateway Internet lo fa la scheda principale con il suo Wi-Fi.

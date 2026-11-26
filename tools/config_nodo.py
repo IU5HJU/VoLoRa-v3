@@ -33,7 +33,7 @@ class NodeConfig:
     reflector_v3: str = ""                   # indirizzo del reflector V3 (da definire)
     attesa_fine_qso_min: int = 10            # minuti da 1 a 255 in modo v2 dopo la fine del QSO, prima di tornare ai turni
     lock_v2: bool = False                    # blocca il nodo in v2 finche' non lo sblocca la seriale, il web o un comando SYSOP firmato
-    consenti_forza_v3: bool = False          # una mobile V3 puo' forzare l'invio di immagini anche in modo v2 (mai a QSO in corso)
+    forza_v3_da: int = 0                     # maschera: 1 = una mobile V3, 2 = un altro nodo V3 possono forzare l'invio di immagini anche in modo v2 (mai a QSO in corso)
     slot_v2_s: float = 2.0                   # turni dell'ascolto a riposo (scheda singola)
     slot_v3_s: float = 2.0
     note: str = field(default="", repr=False)
@@ -54,6 +54,8 @@ def validate(cfg):
         err.append("profilo v2: range, standard o messaggio")
     if not 1 <= cfg.attesa_fine_qso_min <= 255:
         err.append("attesa a fine QSO: da 1 a 255 minuti")
+    if not 0 <= cfg.forza_v3_da <= 3:
+        err.append("forza_v3_da: 0 nessuno, 1 mobile, 2 nodo, 3 entrambi")
     if cfg.slot_v2_s <= 0 or cfg.slot_v3_s <= 0:
         err.append("i turni dell'ascolto devono durare piu' di zero secondi")
     if cfg.chip not in ch.CHIP_RANGES_KHZ or not ch.valid_frequency(cfg.chip, cfg.freq_nodo_khz):
@@ -90,7 +92,7 @@ def validate(cfg):
 def ascolto(cfg):
     """L'ascolto a turni del nodo a scheda singola secondo la configurazione (tools/ascolto_nodo.py)."""
     import ascolto_nodo as an
-    return an.Ascolto(cfg.slot_v2_s, cfg.slot_v3_s, cfg.attesa_fine_qso_min, cfg.consenti_forza_v3, cfg.lock_v2)
+    return an.Ascolto(cfg.slot_v2_s, cfg.slot_v3_s, cfg.attesa_fine_qso_min, cfg.forza_v3_da, cfg.lock_v2)
 
 
 def caps(cfg):

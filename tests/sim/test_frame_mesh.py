@@ -92,6 +92,8 @@ sy = fm.enc_sysop(key, "IU5HJU", fm.SYSOP_SET_ATTESA, 30, 5)
 d = fm.verify_sysop(key, sy, 4)
 check(len(sy) == 23 and d is not None and d["cmd"] == fm.SYSOP_SET_ATTESA and d["arg"] == 30 and d["call"] == "IU5HJU", "SYSOP: comando firmato, 23 byte, firma e contatore verificati")
 check(fm.verify_sysop(key, sy, 5) is None and fm.verify_sysop(bytes(16), sy, 4) is None and fm.verify_sysop(key, sy[:-1] + bytes([sy[-1] ^ 1]), 4) is None, "SYSOP: contatore gia' usato, chiave sbagliata o firma alterata: rifiutato")
+fi = fm.decode(fm.enc_forza_img("IK5XYZ", fm.FORZA_DA_NODO, 7))
+check(len(fm.enc_forza_img("IK5XYZ", 0, 1)) == 11 and fi["nome"] == "FORZA_IMG" and fi["call"] == "IK5XYZ" and fi["origine"] == fm.FORZA_DA_NODO and fi["richiesta"] == 7, "FORZA_IMG: 11 byte, da una mobile V3 o da un altro nodo")
 # ---- revisione 0.2: opzioni, profili fisici, cambio di banda ----
 check(fm.short_id(fm.object_id("IU5HJU", 7)) == fm.object_id("IU5HJU", 7) & 0xFFFF and fm.object_id("IU5HJU", 7) > 0xFFFF, "identificativo a 32 bit; la forma corta (sessione) e' la parte bassa")
 opts = [fm.opt_revision(), fm.opt_profiles([(fm.PROFILE_SUBGHZ, 0x7FFF), (fm.PROFILE_2G4, 0x00FF)])]
