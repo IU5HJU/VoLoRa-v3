@@ -12,13 +12,12 @@ Azioni del mittente (tuple, il primo elemento dice quale):
   ("probe", [frame...])                    raffica di PROBE e PROBE-REPORT del ricevitore; risposta: report decodificato o None
   ("modeset", frame, gradino)              MODE-SET e MODE-ACK; il ricevitore passa al nuovo gradino dopo l'ACK; risposta: ACK decodificato o None
   ("burst", [frame...])                    frame trasmessi di seguito (dati, abort); nessuna risposta
-  ("status", frame_inviati, k)             richiesta dello STATUS dopo una finestra; risposta: STATUS decodificato o None
+  ("status",)                              attesa dello STATUS dopo una finestra; risposta: STATUS decodificato o None
   ("wait", secondi)                        il mittente aspetta
   ("rand",)                                un numero casuale in [0, 1)
   ("setrung", gradino)                     il mittente passa a un altro gradino
   ("holdclear",)                           il mittente smette di tenere il gradino
   ("legacy",)                              (solo simulatore, confronto) vecchia ricerca che torna a R10
-  ("oracle",)                              (solo simulatore) il ricevitore ha sentito il DONE?
   ("note", testo)                          riga di diario
 Ad ogni ripresa il mezzo aggiorna `sender.t` (ora), `sender.rung` (gradino) e `sender.lost` (in ricerca).
 Il mittente finisce con `Failure(motivo)` oppure con la restituzione (livelli consegnati, byte consegnati).
@@ -151,6 +150,10 @@ class Receiver:
         self.probe_rung = 0
         self.pending = None
         self.done = None          # (CRC giusto?, livelli, byte) dopo un DONE
+        self.k = 1                # pezzi per frame DATA: si impara dal HELLO (al gradino in cui ci si trova) e dal MODE-SET
+        self.peer_chip = None
+        self.win_max = -1         # indice piu' alto di frame sentito nella finestra (0-15)
+        self.win_last = -1        # indice del frame con il flag di ultima finestra, se sentito
 
     def mask(self):
         return lim.rung_mask(self.chip, self.tcxo)
@@ -167,6 +170,8 @@ class Receiver:
         self.sess = f["sess"]
         if tp == T["HELLO"] and not f["reply"]:
             self.s_caps = f
+            self.peer_chip = f["chip"]
+            self.k = min(pi.pieces_per_frame(rung, self.chip), pi.pieces_per_frame(rung, self.peer_chip))
             hold = t + max(60.0, 12.0 * pi.frame_airtime_s(rung, PROBE_BYTES)) if lost else None     # in ricerca: resta qui il tempo di 12 frame, poi riprende il calendario
             kw = dict(rssi=rssi, snr=snr) if self.incontro == "hello" else {}
             return Reply(enc_hello(self.sess, self.call, self.chip, self.mask(), pi.max_frame(pi.RENDEZVOUS, self.chip), 100, reply=True, **kw), hold_until=hold)
@@ -181,6 +186,7 @@ class Receiver:
             return Reply()
         if tp == T["MODE_SET"]:
             self.pending = (f["rung"], f["k"])
+            self.k = f["k"]
             return Reply(enc_mode_ack(self.sess, f["rung"]), rung_after=f["rung"])
         if tp == T["OFFER"]:
             self.info = f
@@ -190,6 +196,9 @@ class Receiver:
             self.window_heard += 1
             self.rssi.append(rssi)
             self.snr.append(snr)
+            self.win_max = max(self.win_max, f["widx"])
+            if f["flags"] & F_LAST_WINDOW:
+                self.win_last = f["widx"]
             off, pl = f["offset"], f["payload"]
             for i in range(math.ceil(len(pl) / pi.PIECE)):
                 if off + i < len(self.have):
@@ -206,9 +215,14 @@ class Receiver:
             return Reply(enc_status(self.sess, n_ok, 0, 0, 0, 0, f["layers"], flags=1))
         return Reply()
 
-    def status(self, sent_blocks, k):
-        """STATUS alla fine di una finestra: base = primo pezzo mancante, un bit per blocco di k pezzi. `sent_blocks` e' il numero di frame della finestra
-        (semplificazione del simulatore: nel protocollo vero il ricevitore lo deve ricavare dai frame, vedi docs/firmware-v3.md)."""
+    def sent_blocks(self):
+        """Quanti frame sono partiti nella finestra, ricavato dagli indici di finestra dei frame sentiti: dal frame di ultima finestra se si e' sentito, altrimenti dal piu' alto
+        indice sentito (se si perdono gli ultimi frame la perdita risulta un po' piu' bassa del vero)."""
+        return (self.win_last if self.win_last >= 0 else self.win_max) + 1
+
+    def status(self):
+        """STATUS alla fine di una finestra: base = primo pezzo mancante, un bit per blocco di k pezzi; la perdita e' misurata sui frame della finestra."""
+        sent_blocks, k = self.sent_blocks(), self.k
         have = self.have
         base = 0
         while base < len(have) and have[base] is not None:
@@ -226,6 +240,7 @@ class Receiver:
         ld = sum(1 for e in self.info["layer_ends"] if base >= e) if self.info else 0
         self.rssi, self.snr = [], []
         self.window_heard = 0
+        self.win_max = self.win_last = -1
         return enc_status(self.sess, base, bm, rs, sn, loss, ld)
 
     def probe_report(self):
@@ -245,6 +260,10 @@ class Sender:
         self.sess, self.call, self.chip, self.tcxo = sess, call, chip, tcxo
         self.obj, self.layer_ends, self.budget, self.window, self.ricerca, self.probes_r10 = obj, list(layer_ends), budget, window, ricerca, probes_r10
         self.npieces = math.ceil(len(obj) / pi.PIECE)
+        if self.npieces > 4096:
+            raise ValueError("oggetto oltre i 64 kB: il campo del primo pezzo e' di 12 bit")
+        if window > 16:
+            raise ValueError("la finestra ha al massimo 16 frame (4 bit di indice)")
         # il mezzo li aggiorna a ogni ripresa
         self.t, self.rung, self.lost = 0.0, pi.RENDEZVOUS, False
         # cio' che il mittente impara
@@ -485,20 +504,20 @@ class Sender:
                     fl |= F_LAYER_END
                 if run[-1] + 1 == self.npieces:
                     fl |= F_LAST_OBJECT
-                wire.append(enc_data(self.sess, run[0], payload, fl))
+                wire.append(enc_data(self.sess, run[0], payload, fl, widx=fi))
                 frontier = max(frontier, run[-1] + 1)
             yield ("burst", wire)
             # il ricevitore manda lo STATUS dopo l'ultimo frame, o (a timer) se ne ha sentito qualcuno
             st = None
             for attempt in range(STATUS_RETRIES):
-                st = yield ("status", len(frames), k)
+                st = yield ("status",)
                 if st is not None:
                     break
                 # STATUS perso o nessun frame sentito: il mittente ripete l'ultimo frame con il flag di ultima finestra
                 yield ("wait", pi.frame_airtime_s(self.rung, 20) + GUARD_S)
                 last = frames[-1]
                 payload = self.obj[last[0] * pi.PIECE:(last[-1] + 1) * pi.PIECE]
-                yield ("burst", [enc_data(self.sess, last[0], payload, F_LAST_WINDOW | F_RETX)])
+                yield ("burst", [enc_data(self.sess, last[0], payload, F_LAST_WINDOW | F_RETX, widx=len(frames) - 1)])
             if st is None:
                 yield ("note", "nessun STATUS: scendo di un gradino")
                 ok = yield from self.step_down()
@@ -567,8 +586,5 @@ class Sender:
         done = enc_done(self.sess, self.call, li, nbytes, zlib.crc32(self.obj[:nbytes]) & 0xFFFFFFFF)
         rf = yield ("exchange", done, T["STATUS"], 4)
         if rf is None:
-            # la consegna e' avvenuta se il ricevitore lo ha sentito: verifica dal lato del ricevitore (solo simulatore)
-            delivered = yield ("oracle",)
-            if not delivered:
-                raise Failure("DONE non confermato")
+            raise Failure("DONE non confermato")         # il mittente non sa se il ricevitore ha sentito il DONE: lo dichiara non confermato
         self.result = (li, nbytes)

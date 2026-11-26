@@ -129,7 +129,7 @@ static int rxReplay(const std::string& path) {
       EXPECT(o[2] == "-" ? r.rungAfter < 0 : r.rungAfter == atoi(o[2].c_str()), "gradino dopo la risposta", o[2], std::to_string(r.rungAfter));
     } else if (w[0] == "status") {
       uint8_t b[64];
-      const size_t len = rx.status(atoi(w[1].c_str()), atoi(w[2].c_str()), b, sizeof(b));
+      const size_t len = rx.status(b, sizeof(b));
       EXPECT(hex(b, len) == sec[1], "STATUS", sec[1], hex(b, len));
     } else if (w[0] == "probe") {
       uint8_t b[64];
@@ -154,13 +154,12 @@ static std::string actionStr(Sender& s, const Action& a, double* waitVal) {
       return r;
     }
     case Action::ModeSet: return "modeset " + hex(a.frame, a.len) + " " + std::to_string(a.target);
-    case Action::Status: return "status " + std::to_string(a.sentBlocks) + " " + std::to_string(a.k);
+    case Action::Status: return "status";
     case Action::Wait: *waitVal = a.seconds; return "wait";
     case Action::Rand: return "rand";
     case Action::SetRung: return "setrung " + std::to_string(a.target);
     case Action::HoldClear: return "holdclear";
     case Action::Legacy: return "legacy";
-    case Action::Oracle: return "oracle";
     default: return "<nessuna>";
   }
 }

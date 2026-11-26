@@ -76,8 +76,12 @@ def enc_accept(sess, layers, window, k):
     return _hdr(T["ACCEPT"], sess) + bytes([layers, window, k])
 
 
-def enc_data(sess, offset, payload, flags=0):
-    return _hdr(T["DATA"], sess, flags) + struct.pack(">H", offset) + payload
+def enc_data(sess, offset, payload, flags=0, widx=0):
+    """Il campo del primo pezzo e' di 16 bit: 12 bit di indice (oggetti fino a 4096 pezzi da 16 byte = 64 kB, il tetto del progetto) e 4 bit con l'INDICE DEL FRAME NELLA FINESTRA
+    (0-15, la finestra ha al massimo 16 frame): cosi' il ricevitore sa quanti frame sono partiti anche se gli ultimi si perdono, senza allungare l'intestazione."""
+    if not 0 <= offset < 4096 or not 0 <= widx < 16:
+        raise ValueError("primo pezzo da 0 a 4095, indice di finestra da 0 a 15")
+    return _hdr(T["DATA"], sess, flags) + struct.pack(">H", offset | widx << 12) + payload
 
 
 def enc_status(sess, base, bitmap64, rssi, snr, loss_pct, layers_done, flags=0):
@@ -149,7 +153,8 @@ def decode(b):
         elif tipo == T["ACCEPT"]:
             d.update(layers=body[0], window=body[1], k=body[2])
         elif tipo == T["DATA"]:
-            d["offset"] = struct.unpack(">H", body[:2])[0]
+            v = struct.unpack(">H", body[:2])[0]
+            d["offset"], d["widx"] = v & 0x0FFF, v >> 12
             d.update(relayed=bool(d["flags"] & fm.F_RELAYED), hops=d["flags"] >> fm.HOP_SHIFT)
             d["payload"] = body[2:]
         elif tipo == T["STATUS"]:

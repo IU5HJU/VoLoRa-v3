@@ -104,6 +104,7 @@ class Result:
         self.rung_time = {}
         self.rung_changes = []
         self.t_hello = 0.0
+        self.unconfirmed = False   # il ricevitore ha avuto tutto ma il mittente non ha sentito la conferma del DONE
 
     def summary(self):
         return (f"{'RIUSCITO' if self.ok else 'FALLITO: ' + self.reason} in {pi.fmt_time(self.time_s)} (trasferimento {pi.fmt_time(self.transfer_s)}); livelli consegnati {self.layers_delivered}, "
@@ -270,10 +271,10 @@ class Simulator:
             if f is not None:
                 self.recv(f)
 
-    def do_status(self, sent_blocks, k):
+    def do_status(self):
         self.guard()
         if self.receiver.window_heard > 0:
-            stf = self.receiver.status(sent_blocks, k)
+            stf = self.receiver.status()
             rf = self.air(self.R, self.S, stf)
             self.guard()
             if rf is not None:
@@ -299,7 +300,7 @@ class Simulator:
         if k == "burst":
             return self.do_burst(a[1])
         if k == "status":
-            return self.do_status(a[1], a[2])
+            return self.do_status()
         if k == "wait":
             return self.advance(a[1])
         if k == "rand":
@@ -311,8 +312,6 @@ class Simulator:
             return None
         if k == "legacy":
             return self.do_legacy()
-        if k == "oracle":
-            return self.receiver.done is not None
         if k == "note":
             return self.tr("S", a[1])
         raise ValueError(a)
@@ -336,6 +335,10 @@ class Simulator:
         except Failure as e:
             self.res.reason = str(e)
             self.tr("--", f"FALLITO: {e}")
+            if self.receiver.done is not None and str(e).startswith("DONE non confermato"):
+                self.res.unconfirmed = True          # (informazione del simulatore: il mittente non lo sa)
+                self.res.layers_delivered, self.res.bytes_delivered = self.receiver.done[1], self.receiver.done[2]
+                self.res.crc_ok = bool(self.receiver.done[0])
         self.res.t_hello = snd.t_hello
         self.res.time_s = self.t
         self.res.transfer_s = self.t - (snd.t_transfer0 if snd.t_transfer0 is not None else self.t)

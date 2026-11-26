@@ -48,7 +48,8 @@ struct Msg {
   // ACCEPT
   uint8_t layers = 0, window = 0;
   // DATA
-  uint16_t offset = 0;
+  uint16_t offset = 0;              // primo pezzo (12 bit)
+  uint8_t widx = 0;                 // indice del frame nella finestra (4 bit)
   const uint8_t* payload = nullptr;
   size_t payloadLen = 0;
   // STATUS
@@ -144,8 +145,10 @@ inline size_t encOffer(uint8_t* out, size_t cap, uint16_t sess, const uint8_t* c
 inline size_t encAccept(uint8_t* out, size_t cap, uint16_t sess, uint8_t layers, uint8_t window, uint8_t k) {
   detail::Writer w(out, cap); w.hdr(ACCEPT, sess, 0); w.u8(layers); w.u8(window); w.u8(k); return w.done();
 }
-inline size_t encData(uint8_t* out, size_t cap, uint16_t sess, uint16_t offset, const uint8_t* payload, size_t n, uint8_t flags) {
-  detail::Writer w(out, cap); w.hdr(DATA, sess, flags); w.u16(offset); w.bytes(payload, n); return w.done();
+// `offset` da 0 a 4095 (oggetti fino a 64 kB), `widx` da 0 a 15: indice del frame nella finestra, nei 4 bit alti del campo (cosi' il ricevitore sa quanti frame sono partiti)
+inline size_t encData(uint8_t* out, size_t cap, uint16_t sess, uint16_t offset, const uint8_t* payload, size_t n, uint8_t flags, uint8_t widx = 0) {
+  if (offset > 4095 || widx > 15) return 0;
+  detail::Writer w(out, cap); w.hdr(DATA, sess, flags); w.u16(static_cast<uint32_t>(offset) | (static_cast<uint32_t>(widx) << 12)); w.bytes(payload, n); return w.done();
 }
 inline size_t encStatus(uint8_t* out, size_t cap, uint16_t sess, uint16_t base, uint64_t bitmap, int rssi, int snr, int lossPct, uint8_t layersDone, uint8_t flags) {
   detail::Writer w(out, cap); w.hdr(STATUS, sess, flags); w.u16(base); w.u64(bitmap); w.s8(rssi); w.s8(snr); w.u8(lossPct > 100 ? 100 : lossPct); w.u8(layersDone); return w.done();
@@ -201,7 +204,7 @@ inline bool decode(const uint8_t* b, size_t n, Msg* m) {
       return true;
     }
     case ACCEPT: if (bn < 3) return false; m->layers = d[0]; m->window = d[1]; m->k = d[2]; return true;
-    case DATA: if (bn < 2) return false; m->offset = static_cast<uint16_t>(rd(d, 2)); m->payload = d + 2; m->payloadLen = bn - 2; return true;
+    case DATA: if (bn < 2) return false; m->offset = static_cast<uint16_t>(rd(d, 2) & 0x0FFF); m->widx = static_cast<uint8_t>(rd(d, 2) >> 12); m->payload = d + 2; m->payloadLen = bn - 2; return true;
     case STATUS:
       if (bn < 14) return false;
       m->base = static_cast<uint16_t>(rd(d, 2)); m->bitmap = (static_cast<uint64_t>(rd(d + 2, 4)) << 32) | rd(d + 6, 4);

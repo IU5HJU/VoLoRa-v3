@@ -116,7 +116,7 @@ def resumen(d):
     elif t == 6:
         s += f" {d['layers']} {d['window']} {d['k']}"
     elif t == 7:
-        s += f" {d['offset']} {int(d['relayed'])} {d['hops']} {_h(d['payload'])}"
+        s += f" {d['offset']} {d['widx']} {int(d['relayed'])} {d['hops']} {_h(d['payload'])}"
     elif t == 8:
         s += f" {d['base']} {d['bitmap']} {d['rssi']} {d['snr']} {d['loss_pct']} {d['layers_done']}"
     elif t == 10:
@@ -158,8 +158,8 @@ def genera_frames(out):
             for pos, op in ((None, None), (pos_l, None), (pos_g, opts)):
                 b = si.enc_offer(sess, "IU5HJU", 2, 9577, 16, 599, 320, 240, list(ends), 0xCAFEBABE, pos=None if pos is None else fm.unpack_pos(pos), opts=list(fm.unpack_opts(op).items()) if op else None)
                 enc.append(f"OFFER {sess} {'IU5HJU'.encode().hex()} 2 9577 16 599 320 240 {','.join(str(e) for e in ends) or '-'} {0xCAFEBABE} {ch(pos) if pos else '-'} {ch(op) if op else '-'} {b.hex()}")
-        for off, fl, pl in ((0, 0, b"x" * 16), (65535, si.F_LAST_WINDOW | si.F_LAYER_END, b"\x00" * 48), (300, si.F_RETX | (3 << 5) | fm.F_RELAYED, bytes(range(32))), (1, 0, b"")):
-            enc.append(f"DATA {sess} {off} {fl} {ch(pl)} {si.enc_data(sess, off, pl, fl).hex()}")
+        for off, fl, pl, wi in ((0, 0, b"x" * 16, 0), (4095, si.F_LAST_WINDOW | si.F_LAYER_END, b"\x00" * 48, 15), (300, si.F_RETX | (3 << 5) | fm.F_RELAYED, bytes(range(32)), 7), (1, 0, b"", 1)):
+            enc.append(f"DATA {sess} {off} {fl} {ch(pl)} {wi} {si.enc_data(sess, off, pl, fl, widx=wi).hex()}")
         for base, bm, rssi, snr, loss, lay, fl in ((0, 0, -100, 5, 0, 0, 0), (65535, (1 << 64) - 1, -128, 127, 100, 3, si.F_LAST_WINDOW), (12, 0xABCDEF0123456789, -77, -9, 37, 2, 0)):
             enc.append(f"STATUS {sess} {base} {bm} {rssi} {snr} {loss} {lay} {fl} {si.enc_status(sess, base, bm, rssi, snr, loss, lay, fl).hex()}")
     with open(os.path.join(out, "frames_enc.txt"), "w") as f:

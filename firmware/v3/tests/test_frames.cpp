@@ -53,7 +53,7 @@ static std::string resumen(const uint8_t* b, size_t n) {
       break;
     }
     case ACCEPT: o << " " << static_cast<int>(m.layers) << " " << static_cast<int>(m.window) << " " << static_cast<int>(m.k); break;
-    case DATA: o << " " << m.offset << " " << ((m.flags & F_RELAYED) ? 1 : 0) << " " << (m.flags >> kHopShift) << " " << hexOrDot(m.payload, m.payloadLen); break;
+    case DATA: o << " " << m.offset << " " << static_cast<int>(m.widx) << " " << ((m.flags & F_RELAYED) ? 1 : 0) << " " << (m.flags >> kHopShift) << " " << hexOrDot(m.payload, m.payloadLen); break;
     case STATUS: o << " " << m.base << " " << m.bitmap << " " << static_cast<int>(m.rssi) << " " << static_cast<int>(m.snr) << " " << static_cast<int>(m.lossPct) << " " << static_cast<int>(m.layersDone); break;
     case DONE: o << " " << hexOrDot(m.call, m.callLen) << " " << static_cast<int>(m.layers) << " " << m.nbytes << " " << m.crc; break;
     case ABORT: o << " " << static_cast<int>(m.reason); break;
@@ -106,7 +106,7 @@ static void codifica(const std::string& dir) {
       const uint8_t* o = opt(t[12], &os);
       len = encOffer(out, sizeof(out), static_cast<uint16_t>(I(1)), call.data(), call.size(), static_cast<uint8_t>(I(3)), static_cast<uint32_t>(I(4)), static_cast<uint8_t>(I(5)), static_cast<uint16_t>(I(6)),
                      static_cast<uint16_t>(I(7)), static_cast<uint16_t>(I(8)), ends, nl, static_cast<uint32_t>(I(10)), p, o, os.size());
-    } else if (ty == "DATA") { const std::vector<uint8_t> pl = unhex(t[4]); len = encData(out, sizeof(out), static_cast<uint16_t>(I(1)), static_cast<uint16_t>(I(2)), pl.data(), pl.size(), static_cast<uint8_t>(I(3))); }
+    } else if (ty == "DATA") { const std::vector<uint8_t> pl = unhex(t[4]); len = encData(out, sizeof(out), static_cast<uint16_t>(I(1)), static_cast<uint16_t>(I(2)), pl.data(), pl.size(), static_cast<uint8_t>(I(3)), static_cast<uint8_t>(I(5))); }
     else if (ty == "STATUS") len = encStatus(out, sizeof(out), static_cast<uint16_t>(I(1)), static_cast<uint16_t>(I(2)), I(3), S(4), S(5), S(6), static_cast<uint8_t>(I(7)), static_cast<uint8_t>(I(8)));
     else { std::printf("FALLITO: tipo sconosciuto %s\n", ty.c_str()); g_fails++; return; }
     n++;

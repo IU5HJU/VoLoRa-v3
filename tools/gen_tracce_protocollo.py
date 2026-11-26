@@ -111,9 +111,9 @@ def registra(nome, sc, out):
             L["R"].append(f"holdu {fx(rep.hold_until)}")      # il mezzo la applica al collegamento del ricevitore subito dopo
         return rep
 
-    def status(n, k):
-        fr = o_st(n, k)
-        L["rx"].append(f"status {n} {k} | {fr.hex()}")
+    def status():
+        fr = o_st()
+        L["rx"].append(f"status | {fr.hex()}")
         return fr
 
     def probe_report():
@@ -178,11 +178,9 @@ def act_str(a):
         return f"modeset {a[1].hex()} {a[2]}"
     if k == "burst":
         return "burst " + ",".join(x.hex() for x in a[1])
-    if k == "status":
-        return f"status {a[1]} {a[2]}"
     if k == "wait":
         return f"wait {fx(a[1])}"
-    if k in ("rand", "holdclear", "legacy", "oracle"):
+    if k in ("status", "rand", "holdclear", "legacy"):
         return k
     if k == "setrung":
         return f"setrung {a[1]}"

@@ -104,6 +104,7 @@ class Receiver {
     return scanOrderFor(sx1262_, mask(), peerSx1262_, peerMask_, out);
   }
   bool windowHeard() const { return windowHeard_ > 0; }
+  int k() const { return k_; }
   bool hasDone() const { return hasDone_; }
   bool doneOk() const { return doneOk_; }
 
@@ -114,6 +115,7 @@ class Receiver {
       case HELLO:
         if (!f.reply) {
           haveCaps_ = true; peerSx1262_ = f.chip != 0; peerMask_ = f.rungMask;
+          { const int a = piecesPerFrame(rung, sx1262_), b = piecesPerFrame(rung, peerSx1262_); k_ = a < b ? a : b; }
           if (lost) { const double h = 12.0 * frameAirtimeS(rung, kProbeBytes); r.hasHold = true; r.holdUntil = t + (h > 60.0 ? h : 60.0); }
           int rs = 0, sn = 0;
           if (hello_) { rs = s8round(rssi); sn = s8round(snr); }
@@ -128,6 +130,7 @@ class Receiver {
         probeHeard_++; probeCount_ = f.count; probeRung_ = f.rung;
         return r;
       case MODE_SET:
+        k_ = f.k;
         r.len = encModeAck(buf_, sizeof(buf_), sess_, f.rung); r.frame = buf_; r.rungAfter = f.rung;
         return r;
       case OFFER:
@@ -139,6 +142,8 @@ class Receiver {
         return r;
       case DATA: {
         windowHeard_++;
+        if (f.widx > winMax_) winMax_ = f.widx;
+        if (f.flags & F_LAST_WINDOW) winLast_ = f.widx;
         addSample(rssi, snr);
         const size_t np = (f.payloadLen + kPiece - 1) / kPiece;
         for (size_t i = 0; i < np; i++) {
@@ -172,8 +177,11 @@ class Receiver {
     }
   }
 
-  // STATUS alla fine di una finestra: base = primo pezzo mancante, un bit per blocco di k pezzi. `sentBlocks` e' il numero di frame della finestra (semplificazione del simulatore).
-  size_t status(int sentBlocks, int k, uint8_t* out, size_t cap) {
+  // quanti frame sono partiti nella finestra, dagli indici dei frame sentiti: dal frame di ultima finestra se si e' sentito, altrimenti dal piu' alto indice sentito
+  int sentBlocks() const { return (winLast_ >= 0 ? winLast_ : winMax_) + 1; }
+  // STATUS alla fine di una finestra: base = primo pezzo mancante, un bit per blocco di k pezzi; la perdita e' misurata sui frame della finestra.
+  size_t status(uint8_t* out, size_t cap) {
+    const int sentBlocks = this->sentBlocks(), k = k_;
     int base = 0;
     while (base < nPieces_ && hasPiece(base)) base++;
     uint64_t bm = 0;
@@ -188,7 +196,7 @@ class Receiver {
     const double loss = sentBlocks ? 100.0 * (1 - static_cast<double>(windowHeard_ < sentBlocks ? windowHeard_ : sentBlocks) / sentBlocks) : 0.0;
     int ld = 0;
     if (haveOffer_) for (int i = 0; i < nl_; i++) if (base >= layerEnds_[i]) ld++;
-    sumR_ = sumS_ = 0; nSamples_ = 0; windowHeard_ = 0;
+    sumR_ = sumS_ = 0; nSamples_ = 0; windowHeard_ = 0; winMax_ = winLast_ = -1;
     return encStatus(out, cap, sess_, static_cast<uint16_t>(base), bm, s8round(rs), s8round(sn), static_cast<int>(loss), static_cast<uint8_t>(ld), 0);
   }
   // il PROBE-REPORT a timer, dopo la raffica: 0 se non ha sentito nessun PROBE
@@ -220,12 +228,13 @@ class Receiver {
   long double sumR_ = 0, sumS_ = 0;
   int nSamples_ = 0, windowHeard_ = 0, probeHeard_ = 0, probeCount_ = 0, probeRung_ = 0;
   bool hasDone_ = false, doneOk_ = false;
+  int k_ = 1, winMax_ = -1, winLast_ = -1;
   uint8_t buf_[64];
 };
 
 // ------------------------------------------------------------------------------------------------------------------------------------ il mittente
 struct Action {
-  enum Kind { None, Exchange, Probe, ModeSet, Burst, Status, Wait, Rand, SetRung, HoldClear, Legacy, Oracle } kind = None;
+  enum Kind { None, Exchange, Probe, ModeSet, Burst, Status, Wait, Rand, SetRung, HoldClear, Legacy } kind = None;
   const uint8_t* frame = nullptr;   // Exchange, ModeSet: il frame
   size_t len = 0;
   uint8_t expect = 0;               // Exchange: tipo atteso
@@ -233,7 +242,6 @@ struct Action {
   int count = 0;                    // Probe, Burst: numero di frame (si leggono con Sender::frameAt)
   int target = 0;                   // ModeSet, SetRung
   double seconds = 0;               // Wait
-  int sentBlocks = 0, k = 0;        // Status
 };
 struct Answer {
   enum Kind { None, FrameIn, Rnd, Bool } kind = None;
@@ -281,12 +289,12 @@ class Sender {
     if (b.abort) { *len = encAbort(out, cap, sess_, 1); return true; }
     const size_t from = static_cast<size_t>(b.start) * kPiece, to = (static_cast<size_t>(b.start) + b.pieces) * kPiece;
     const size_t end = to < objLen_ ? to : objLen_;
-    *len = encData(out, cap, sess_, static_cast<uint16_t>(b.start), obj_ + from, end > from ? end - from : 0, b.flags);
+    *len = encData(out, cap, sess_, static_cast<uint16_t>(b.start), obj_ + from, end > from ? end - from : 0, b.flags, b.widx);
     return *len != 0;
   }
 
  private:
-  struct BurstItem { bool abort; int start; int pieces; uint8_t flags; };
+  struct BurstItem { bool abort; int start; int pieces; uint8_t flags; uint8_t widx; };
 
   // ----- comodi -----
   uint16_t mask() const { return rungMask(sx1262_, tcxo_); }
@@ -307,7 +315,7 @@ class Sender {
   }
   Action mkSetRung(int r) { Action a; a.kind = Action::SetRung; a.target = r; return a; }
   Action mkBurst(int n) { Action a; a.kind = Action::Burst; a.count = n; return a; }
-  Action mkStatus(int n, int k) { Action a; a.kind = Action::Status; a.sentBlocks = n; a.k = k; return a; }
+  Action mkStatus() { Action a; a.kind = Action::Status; return a; }
   Action mkOffer(uint32_t crc) {
     txLen_ = encOffer(tx_, sizeof(tx_), sess_, call_, callLen_, 0, static_cast<uint32_t>(objLen_), kPiece, static_cast<uint16_t>(nPieces_), 0, 0, layerEnds_, static_cast<size_t>(nl_), crc, nullptr, nullptr, 0);
     return exchange(tx_, txLen_, ACCEPT, 2);
@@ -479,7 +487,7 @@ class Sender {
       int runStart = -1, runLen = 0;
       auto push = [&](int p) -> bool {                      // false = finestra piena
         if (runLen > 0 && p == runStart + runLen && runLen < k) { runLen++; return true; }
-        if (runLen > 0) { Sender::BurstItem& b = s.burst_[nRuns++]; b = Sender::BurstItem{false, runStart, runLen, 0}; }
+        if (runLen > 0) { Sender::BurstItem& b = s.burst_[nRuns++]; b = Sender::BurstItem{false, runStart, runLen, 0, 0}; }
         if (nRuns >= s.window_) { runLen = 0; return false; }
         runStart = p; runLen = 1;
         return true;
@@ -487,7 +495,7 @@ class Sender {
       bool full = false;
       for (int p = base; p < lim && !full; p++) if (!s.acked(p)) full = !push(p);
       for (int j = 0; j < newCount && !full; j++) full = !push(newStart + j);
-      if (!full && runLen > 0) { Sender::BurstItem& b = s.burst_[nRuns++]; b = Sender::BurstItem{false, runStart, runLen, 0}; }
+      if (!full && runLen > 0) { Sender::BurstItem& b = s.burst_[nRuns++]; b = Sender::BurstItem{false, runStart, runLen, 0, 0}; }
       for (int i = 0; i < nRuns; i++) {                     // flag e fronte
         Sender::BurstItem& b = s.burst_[i];
         uint8_t fl = 0;
@@ -497,6 +505,7 @@ class Sender {
         for (int e = 0; e < s.nl_; e++) if (s.layerEnds_[e] == endp) fl |= F_LAYER_END;
         if (endp == s.nPieces_) fl |= F_LAST_OBJECT;
         b.flags = fl;
+        b.widx = static_cast<uint8_t>(i);
         if (endp > frontier) frontier = endp;
       }
     }
@@ -516,7 +525,7 @@ class Sender {
       ridBest = s.hasRssiEst_ ? (s.rung_ < s.predictedBest(s.rssiEst_, al, nAl, 3.0) ? s.rung_ : s.predictedBest(s.rssiEst_, al, nAl, 3.0)) : s.rung_;
       est0 = estimateSeconds(static_cast<uint32_t>(s.layerEnds_[0]) * kPiece, ridBest, s.sx1262_);
       if (est0 > s.budget_) {
-        s.burst_[0] = Sender::BurstItem{true, 0, 0, 0};
+        s.burst_[0] = Sender::BurstItem{true, 0, 0, 0, 0};
         VL_CO_YIELD(s.mkBurst(1));
         VL_CO_FAIL(FAIL_BUDGET);
       }
@@ -533,11 +542,11 @@ class Sender {
         VL_CO_YIELD(s.mkBurst(nRuns));
         stOk = false;
         for (st_attempt = 0; st_attempt < kStatusRetries; st_attempt++) {
-          VL_CO_YIELD(s.mkStatus(nRuns, k));
+          VL_CO_YIELD(s.mkStatus());
           if (s.ans_.kind == Answer::FrameIn) { st = s.ans_.msg; stOk = true; break; }
           VL_CO_YIELD(s.wait(frameAirtimeS(s.rung_, 20) + kGuardS));
           lastStart = s.burst_[nRuns - 1].start; lastPieces = s.burst_[nRuns - 1].pieces;
-          s.burst_[0] = Sender::BurstItem{false, lastStart, lastPieces, static_cast<uint8_t>(F_LAST_WINDOW | F_RETX)};
+          s.burst_[0] = Sender::BurstItem{false, lastStart, lastPieces, static_cast<uint8_t>(F_LAST_WINDOW | F_RETX), static_cast<uint8_t>(nRuns - 1)};
           VL_CO_YIELD(s.mkBurst(1));
         }
         if (!stOk) {
@@ -608,10 +617,7 @@ class Sender {
       li = 0;
       for (int e = 0; e < s.nl_; e++) if (base >= s.layerEnds_[e]) li++;
       VL_CO_YIELD(s.mkDone(li, &nbytes));
-      if (s.ans_.kind != Answer::FrameIn) {
-        VL_CO_YIELD(s.simple(Action::Oracle));          // (solo simulatore) il ricevitore ha sentito il DONE?
-        if (!s.ans_.b) VL_CO_FAIL(FAIL_DONE);
-      }
+      if (s.ans_.kind != Answer::FrameIn) VL_CO_FAIL(FAIL_DONE);       // il mittente non sa se il ricevitore ha sentito il DONE: lo dichiara non confermato
       s.resLayers_ = li; s.resBytes_ = nbytes;
       VL_CO_END;
     } };

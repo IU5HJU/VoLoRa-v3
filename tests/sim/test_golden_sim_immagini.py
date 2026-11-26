@@ -1,5 +1,6 @@
-"""Il simulatore rifatto sopra mittente, ricevitore e collegamento indipendenti (tools/img_proto.py) da' ESATTAMENTE gli stessi risultati di prima su 134 scenari
-(riferimento catturato prima del rifacimento: tests/sim/golden_sim_immagini.json).   python3 -I tests/sim/test_golden_sim_immagini.py"""
+"""Il simulatore sopra mittente, ricevitore e collegamento indipendenti (tools/img_proto.py) da' ESATTAMENTE i risultati di riferimento su 134 scenari (tests/sim/golden_sim_immagini.json).
+Il riferimento e' stato catturato prima della separazione (identico) e rigenerato il 26/11/2026 dopo tre correzioni del protocollo (indice di finestra nei frame DATA, k del ricevitore, DONE senza oracolo):
+cambiano 8 scenari di pochi secondi, nessun esito.   python3 -I tests/sim/test_golden_sim_immagini.py"""
 import json
 import os
 import sys
