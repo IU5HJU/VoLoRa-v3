@@ -52,6 +52,12 @@ inline double sensitivityDbm(int rung) {
   if (r.lora) return -174 + 10 * std::log10(r.a * 1000) + 6.0 + snr[static_cast<int>(r.b)];
   return -174 + 10 * std::log10((r.a + 2 * r.b) * 1000) + 6.0 + 12;
 }
+// Rumore alla bocca del ricevitore (dBm): banda del gradino piu' cifra di rumore di 6 dB.
+inline double noiseFloorDbm(int rung) {
+  const Rung& r = kRungs[rung];
+  const double bw = r.lora ? r.a : (r.a + 2 * r.b);
+  return -174 + 10 * std::log10(bw * 1000) + 6.0;
+}
 inline int piecesPerFrame(int rung, bool sx1262) { return chunkSize(rung, sx1262) / kPiece; }
 
 // Tempo stimato per trasferire nbytes: frame, ritrasmissioni (perdita media), una STATUS per finestra e i tempi di commutazione.

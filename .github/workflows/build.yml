@@ -106,6 +106,10 @@ jobs:
             board: T3 V1.6.1
           - env: tbeam1262
             board: T-Beam V1.2 SX1262
+          - env: bench_t3
+            board: T3 prova a banco
+          - env: bench_tbeam1262
+            board: T-Beam prova a banco
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

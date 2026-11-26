@@ -104,6 +104,7 @@ class Receiver {
     return scanOrderFor(sx1262_, mask(), peerSx1262_, peerMask_, out);
   }
   bool windowHeard() const { return windowHeard_ > 0; }
+  bool probesHeard() const { return probeHeard_ > 0; }
   int k() const { return k_; }
   bool hasDone() const { return hasDone_; }
   bool doneOk() const { return doneOk_; }
@@ -277,6 +278,8 @@ class Sender {
   bool finished() const { return fin_; }
   FailKind failure() const { return fail_; }
   bool ok() const { return fin_ && fail_ == FAIL_NONE; }
+  // calendario della ricerca (solo R10 finche' non si conosce l'altra stazione)
+  int scanOrderOrRendezvous(uint8_t* out) const { if (!peerKnown_) { out[0] = kRendezvous; return 1; } return scanOrder(out); }
   int layersDelivered() const { return resLayers_; }
   uint32_t bytesDelivered() const { return resBytes_; }
   double tHello() const { return tHello_; }
@@ -347,7 +350,7 @@ class Sender {
       for (;;) {
         VL_CO_YIELD(s.mkHello());
         if (s.ans_.kind == Answer::FrameIn) {
-          s.caps_ = s.ans_.msg; s.peerSx1262_ = s.ans_.msg.chip != 0;
+          s.caps_ = s.ans_.msg; s.peerSx1262_ = s.ans_.msg.chip != 0; s.peerKnown_ = true;
           if (s.ans_.msg.hasMeasure) { s.hasHelloMetrics_ = true; s.helloRssi_ = s.ans_.msg.rssi; s.helloSnr_ = s.ans_.msg.snr; }
           s.kNow_ = s.kFor(kRendezvous); s.tHello_ = s.t_ - t0;
           VL_CO_FINISH;
@@ -648,7 +651,7 @@ class Sender {
   Answer ans_;
   // quello che il mittente impara
   Msg caps_;
-  bool peerSx1262_ = false, hasHelloMetrics_ = false, hasRssiEst_ = false, justReconnected_ = false;
+  bool peerKnown_ = false, peerSx1262_ = false, hasHelloMetrics_ = false, hasRssiEst_ = false, justReconnected_ = false;
   int helloRssi_ = 0, helloSnr_ = 0, rssiEst_ = 0, kNow_ = 0, probeRung_ = 0;
   double tHello_ = 0, tTransfer0_ = 0;
   int resLayers_ = 0;
