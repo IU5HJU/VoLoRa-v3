@@ -41,8 +41,42 @@ Un client V3 si **dichiara** nei suoi HELLO e KEEPALIVE, dopo i 9 byte di stato 
 ## 6. Sicurezza
 Una chiave **per client** (si può togliere un client senza toccare gli altri); firma su ogni datagramma; contatore anti-ripetizione; sfida dopo un riavvio; **nessuna risposta a chi non è in elenco**. I frame V3 sono accettati **solo** dai client che li hanno dichiarati e **solo** quelli del reflector (annuncio e busta): gli altri frame V3 si scartano. Il contenuto **non è cifrato** (come la radio: la firma impedisce di inserire pacchetti, non di leggerli). La chiave SYSOP dei comandi via radio è un'altra cosa.
 
-## 7. Non fatto, e da decidere
-- **Server di produzione.** Il riferimento è in Python; la v2 ha un reflector in C++ con le pagine web. **Da decidere:** estendere il C++ della v2 (stesso codice, la stessa installazione) o tenere Python.
+## 7. Valutazione del reflector C++ della v2 (26/11/2026)
+**Domanda:** estendere il C++ della v2 (stessa installazione, stesse pagine web) o tenere Python?
+
+**Com'è fatto** (letto e compilato in una copia, il submodule non si tocca):
+| Parte | File | Righe |
+|---|---|---|
+| Collegamento VoLoRa-IP | `node_link.h/.cpp` | 143 + 194 |
+| Logica del reflector (senza socket né orologio) | `reflector_core.h/.cpp` | 144 + 280 |
+| File dei client, password, HTTP | `reflector_config`, `admin_auth`, `http_mini`, `sha256` | circa 600 |
+| Server UDP e pagine web | `tools/vlreflector.cpp`, `vlreflector_page.h`, `vlreflector_public.h` | 735 + 212 + 96 |
+| Prove | `test_reflector_core` (79 controlli), `test_node_link` (67), `test_reflector_config`, `reflector_smoke.sh` | 480 + 301 + 78 + 138 |
+
+- **Provato qui:** i test del reflector e del collegamento **passano con ASan e UBSan** (79 e 67 controlli, 0 falliti); il reflector si compila **senza avvisi** (`-Wall -Wextra`) con **soli 8 file** di `lib/voicecore` (`admin_auth`, `http_mini`, `packet`, `position`, `reflector_config`, `reflector_core`, `node_link`, `sha256`) più il server: binario da circa 200 kB, nessuna dipendenza dalla parte audio/radio.
+- **Struttura buona per estenderla:** la logica (`ReflectorCore`) è separata dai socket (`IReflectorNet`) e il server la usa solo con la sua interfaccia pubblica (client, statistiche, chi parla): **le pagine web non vanno toccate** per far funzionare il V3.
+
+**Dove si tocca** (solo due moduli):
+1. **`NodeLink`** (circa 25 righe): il payload di stato di HELLO e KEEPALIVE è un buffer fisso da 9 byte (`uint8_t p[9]`): va reso più lungo per l'estensione e va letto quanto c'è oltre i 9 byte (oggi si ignora). La lettura dei primi 9 byte non cambia: è quello che ho provato con i `vlnode` veri.
+2. **`ReflectorCore`** (circa 200 righe): campi in più per client (dichiarazione V3, rubrica delle stazioni sentite con scadenza), un ramo **prima** di `decodePacket` (che scarta ogni pacchetto con versione diversa da 2 e conterebbe i frame V3 come "non validi"), i due frame `REFL_ANNUNCIO` e `REFL_INOLTRO` e l'esito, nuovi contatori. Le destinazioni si confrontano sui **6 byte** del nominativo compatto, senza portare in C++ la tabella dei 6 bit.
+3. **Facoltativo:** una colonna "V3" e la rubrica nella pagina di amministrazione (`vlreflector_page.h`).
+
+**Il modo di tenerlo: una patch sopra la v2, non una copia.** Il reflector V3 si costruisce **applicando una patch (circa 300 righe) ai file della v2 del submodule** in una cartella di compilazione: il submodule resta intatto, la modifica è piccola e rivedibile, e **se la v2 cambia la patch non si applica e la CI lo dice**. Si evita la copia che col tempo si scosta dall'originale.
+
+**Confronto**
+| | C++ con patch sulla v2 | Python (il riferimento di oggi) |
+|---|---|---|
+| Pagine web, password, ricarica con SIGHUP, systemd | **già pronte e provate** | da riscrivere (circa 1300 righe) |
+| Prove | si riusano le 146 verifiche e lo smoke test | solo le mie 23 e l'interoperabilità |
+| Sostituzione del servizio | stesso nome, opzioni, file, servizio systemd | comando diverso |
+| Lavoro | patch di circa 300 righe e prove (circa 150 righe) | nessuno ora, ma molto per arrivare alle stesse funzioni |
+| Rischio | patch da tenere allineata alla v2 (la v2 è ferma al tag `v0.1.0-rc.1`) | meno collaudato |
+| Velocità, memoria | più che sufficienti per UDP a pochi pacchetti al secondo | idem |
+
+**Raccomandazione:** **C++ con patch sulla v2**, e tenere il Python come **riferimento di prova** (oracolo) per confrontare il comportamento nei test. È la strada con il minor rischio di rompere la compatibilità, perché riusa tutto ciò che è già provato e tocca solo i due moduli necessari.
+
+## 8. Non fatto, e da decidere
+- **Server di produzione.** Il riferimento è in Python; la v2 ha un reflector in C++ con le pagine web. **Valutato nel punto 7: raccomandato il C++ con una patch sulla v2** (il Python resta riferimento di prova). **Da decidere con te.**
 - **Pagine di amministrazione e pubblica** (chi è collegato, chi parla): non portate; vanno uguali alla v2, con in più una colonna "V3" e la rubrica. Quella pubblica non mostra indirizzi, chiavi, id.
 - **Limiti di velocità** per client e di dimensione dei trasferimenti V3 (un'immagine su Internet può essere più grande di quello che passa in radio).
 - **Più modi voce insieme** (oggi un reflector inoltra un solo modo voce: limite della v2 tenuto per compatibilità).
