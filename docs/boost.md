@@ -46,7 +46,7 @@ Un livello **sopra il BOOST**, solo per le schede con l'**SX1262** (T-Beam): **+
 - Il ciclo di lavoro si misura (si vede con `IOF STATUS`) ma l'SX1262 non ha il limite dell'1% dell'SX1278: non c'è avviso di ciclo.
 - Nel codice: `firmware/v3/src/boost.h` (`Level::Iof`, `kIofDbm`, `kIofWarning`, `parseIof`), `radio_board.h` (`boostCommand`), prove in `tests/test_boost.cpp` (36 controlli, sul PC). **Mai eseguito su una scheda.**
 
-> **Dedica.** L'IOF MODE è dedicato a **IZ5IOF Andrea**, grande radioamatore e vero amico, che ama spremere tutto il possibile dalle sue apparecchiature per realizzare il collegamento impossibile: ogni volta ci riesce, e puntualmente qualche apparecchiatura ci rimette. Questo livello di potenza è per lui (l'avviso che esce all'attivazione, per questo, dice chiaramente che chi spreme tutto spesso guasta qualcosa).
+> **Dedica.** L'IOF MODE è dedicato a **IZ5IOF Andrea**, grande radioamatore e vero amico, che ama spremere tutto il possibile dalle sue apparecchiature per realizzare il collegamento impossibile: ogni volta ci riesce, e puntualmente qualche apparecchiatura ci rimette. Questo livello di potenza è per lui (l'avviso che esce sulla seriale all'attivazione porta il suo nome e dice chiaramente che chi spreme tutto spesso guasta qualcosa).
 
 ## Da fare / da decidere
 - Compilare e provare il firmware di misura con BOOST su T3 e T-Beam (corrente, temperatura, spurie con l'analizzatore), fase 1.

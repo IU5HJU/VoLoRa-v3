@@ -71,7 +71,7 @@ int main() {
   CHECK(!i62.txStarted(2000, 900000) && !i62.txStarted(3000, 900000), "IOF MODE: nessun avviso di ciclo (non e' il limite dell'SX1262)");
   i62.disable();
   CHECK(!i62.on() && i62.power() == 17, "disable torna a +17 dBm");
-  CHECK(std::strstr(kIofWarning, "RISCHIO") && std::strstr(kIofWarning, "antenna") && std::strstr(kIofWarning, "22"), "il testo dell'avviso IOF dice rischio, antenna e +22");
+  CHECK(std::strstr(kIofWarning, "RISCHIO") && std::strstr(kIofWarning, "antenna") && std::strstr(kIofWarning, "22") && std::strstr(kIofWarning, "IZ5IOF Andrea"), "il testo dell'avviso IOF dice rischio, antenna, +22 e la dedica");
   std::printf("firmware/v3 BOOST: %d controlli, %d falliti\n", g_checks, g_fails);
   return g_fails ? 1 : 0;
 }

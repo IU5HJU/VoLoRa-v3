@@ -25,6 +25,7 @@ constexpr const char* kWarning =
 
 // IOF MODE (solo SX1262): +22 dBm, il massimo del chip, un gradino sopra il BOOST. Dedicato a IZ5IOF Andrea (vedi docs/boost.md).
 constexpr const char* kIofWarning =
+    "IOF MODE: dedicato a IZ5IOF Andrea, che spreme tutto dalle sue apparecchiature per il collegamento impossibile. "
     "ATTENZIONE IOF MODE +22 dBm: il MASSIMO dell'SX1262, un gradino sopra il BOOST, con RISCHIO per la radio e per la scheda. "
     "Corrente al limite (circa 120-140 mA), calore, batteria sotto sforzo; ricevitori vicini saturati; armoniche e spurie piu' forti. "
     "Antenna adattata obbligatoria: mai senza antenna. Chi spreme tutto spesso guasta qualcosa: i danni sono a carico tuo. "
