@@ -134,7 +134,7 @@ Programma: `python3 tools/sim_mesh.py offerte`. La RICHIESTA-RIPETITORI arriva a
 
 - **I soli slot dal nominativo vanno male con pochi slot:** con 5 candidati e 8 slot due scelgono quasi sempre lo stesso (problema dei compleanni): solo il 28 % arriva intero al primo giro. Servirebbero 32 slot, e il giro durerebbe 52 s.
 - **L'ascolto da solo regge** (78 % al primo giro intero) perché solo una parte delle coppie è nascosta.
-- **La combinazione vince:** slot dal nominativo **più ascolto** (chi sente uno già in onda aspetta il primo slot libero) dà il 98 % al primo giro con 8 slot e 13 s per giro. È la **proposta** per le OFFERTE; il simulatore lo conferma, non l'ho ancora fissato come decisione.
+- **La combinazione vince:** slot dal nominativo **più ascolto** (chi sente uno già in onda aspetta il primo slot libero) dà il 98 % al primo giro con 8 slot e 13 s per giro. È la scelta per le OFFERTE (**decisa il 26/11/2026**).
 - **Gli slot per qualità** danno le due migliori offerte prima (8 s) ma perdono più offerte (94 % entro 3 giri): utili se basta avere le prime due; ai tentativi successivi si aggiunge un sorteggio altrimenti si ripetono le stesse collisioni.
 
 ## Risultati: l'errore dell'orologio nei turni (26/11/2026)
@@ -149,7 +149,7 @@ Programma: `python3 tools/sim_mesh.py turni`. Tre membri trasmettono a turno; og
 
 - **La guardia serve circa 5σ.** Senza guardia, con orologio NTP, solo il 39 % dei turni è utile; con 0,2 s di guardia il 100 %.
 - **La regola "basta un secondo" (applicazione.md) regge, ma i turni devono essere lunghi:** con errore di 1 s un turno da 2 s rende il 38 %, uno da 30 s l'89 %. Un turno non è un frame: è una raffica di frame, per esempio 10-30 s. Con NTP basta qualunque turno da qualche secondo.
-- **Conseguenza per il GRUPPO:** la durata del turno e la guardia vanno scelte dalla qualità dell'orologio dei membri (incertezza che l'applicazione già calcola per ogni sorgente); proposta: guardia = 5σ del peggiore dei membri e turno almeno 10 volte la guardia.
+- **Conseguenza per il GRUPPO:** la durata del turno e la guardia vanno scelte dalla qualità dell'orologio dei membri (incertezza che l'applicazione già calcola per ogni sorgente); **deciso il 26/11/2026:** guardia = 5σ del peggiore dei membri e turno almeno 10 volte la guardia.
 
 ## Prossimi passi
 Una sovrapposizione fra le due fasi del gruppo e la perdita dei pacchetti dentro le fasi; poi collegare la scelta del gruppo ai frame di [mesh-v3.md](mesh-v3.md) (RICHIESTA-RIPETITORI, OFFERTA, GRUPPO).
