@@ -59,6 +59,8 @@ jobs:
           for t in test_reflector_core test_node_link test_reflector_v3; do "$RUNNER_TEMP/refl/build/$t"; done
       - name: Interoperabilita' del reflector V3 in C++ con vlnode e client V3
         run: python3 tests/interop/test_reflector_cpp.py
+      - name: Ponte BLE telefono-scheda
+        run: python3 tests/sim/test_ble_bridge.py
       - name: Limiti dei chip dai datasheet
         run: python3 tests/sim/test_limiti_chip.py
       - name: Prove moduli UART finti

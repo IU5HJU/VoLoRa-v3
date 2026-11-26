@@ -198,6 +198,7 @@ Lunghezze reali: BEACON 7, POLL 14, POLL-REPLY 22, RICHIESTA 21, OFFERTA 24, GRU
 ## 10. Registro delle decisioni
 | Data | Decisione | Fonte |
 |---|---|---|
+| 26/11/2026 | **Telefono ↔ scheda via BLE** (non Bluetooth classico) per testo, file piccoli e immagini; il telefono comprime, la scheda trasporta byte con credito e ripresa. | autore, [ble-telefono.md](ble-telefono.md) |
 | 26/11/2026 | **Modalità BOOST +20 dBm**: estrema, per ogni profilo, di base spenta (potenza normale +17 dBm), si attiva solo con conferma del rischio tecnico. | autore, [boost.md](boost.md) |
 | 26/11/2026 | **Gradini e chip** (dal confronto con i datasheet): R3 solo fra chip della stessa famiglia; R0 solo SX1278; R12-R14 solo con TCXO annunciato; FSK a 64 byte sull'SX1278; +17 dBm in continuo sull'SX1278. | autore, [confronto-datasheet.md](confronto-datasheet.md) punto 6 |
 | 23/11/2026 | Il beacon contiene il **solo nominativo**. Poi, fra stazioni che si sono ascoltate, si scambiano nominativo, rapporto e posizione. | autore |
