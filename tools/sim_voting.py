@@ -97,6 +97,47 @@ def run_elezione(politica, canale, dist_km=20.0, scenari=3000, seed=1, extra=25.
             "ritardo_medio_s": statistics.mean(ritardi) if ritardi else float("nan")}
 
 
+T_MUTO = W + 0.1       # s: attesa del nodo senza voto, dopo la finestra del voto, prima di ritrasmettere
+
+
+def run_nodo_muto(dist_km, strategia, scenari=3000, seed=1, extra_mobile=25.0, extra_nodi=10.0):
+    """Un nodo A che sa votare e un nodo B senza canale di voto (scheda singola): come si comportano in zona di sovrapposizione?
+    strategie di B:
+      'come_votante' : nessun accordo, ognuno ritarda per qualita' e ascolta in RF (nessun voto: elezione solo RF);
+      'attesa'       : B aspetta T_MUTO (dopo la finestra del voto di A) e ritrasmette solo se in RF non sente partire A;
+      'time_sharing' : B vota sul canale 70 cm con la sua unica radio (perde per circa un voto di durata l'ascolto della mobile): doppio accesso come due votanti.
+    Ritorna il doppio accesso quando entrambi sentono la mobile, e per i casi in cui la sente solo B quanto ritarda in piu'."""
+    rng = random.Random(seed)
+    sens = pi.sensitivity_dbm(RUNG)
+    both = doppi = solo_b = n = 0
+    extra_delay = []
+    for _ in range(scenari):
+        x, y = rng.uniform(0.0, dist_km), rng.uniform(-0.3 * dist_km, 0.3 * dist_km)
+        d1, d2 = math.hypot(x, y), math.hypot(dist_km - x, y)
+        pa, pb = _prx(rng, d1, extra_mobile), _prx(rng, d2, extra_mobile)
+        hear = _prx(rng, dist_km, extra_nodi, sigma=4.0) >= sens
+        da, db = pa >= sens, pb >= sens
+        if not (da or db):
+            continue
+        n += 1
+        if da and db:
+            both += 1
+            if strategia == "time_sharing":
+                doppi += 1 if rng.random() < 0.03 else 0
+            elif strategia == "come_votante":
+                tx = elezione([ritardo("qualita", pa, rng), ritardo("qualita", pb, rng)], [[True, hear], [hear, True]], "rf")
+                doppi += 1 if len(tx) > 1 else 0
+            else:                                              # attesa: A parte entro W; B ascolta fino a T_MUTO
+                dA = ritardo("qualita", pa, rng)
+                doppi += 0 if (hear and T_MUTO - dA >= VULN) else 1
+        elif db and not da:
+            solo_b += 1
+            if strategia in ("attesa",):
+                extra_delay.append(T_MUTO - ritardo("qualita", pb, rng))
+    return {"casi": n, "sovrapposti": both / n if n else float("nan"), "doppio_accesso": doppi / both if both else float("nan"),
+            "solo_b": solo_b / n if n else float("nan"), "ritardo_in_piu_s": statistics.mean(extra_delay) if extra_delay else 0.0}
+
+
 GUARD_VOTO = 0.010     # s fra uno slot di voto e il successivo
 VOTE_BYTES = 12        # frame_mesh.enc_vote
 
@@ -223,6 +264,14 @@ def main():
             durata = r["durata_voto_s"]
             gr = "-" if r["gradino_mediano"] is None else r["gradino_mediano"]
             print(f"| {dk:g} km | {100 * (1 - r['senza_collegamento']):.0f} % | {gr} | {1000 * durata:.0f} ms | {'si' if durata <= W else 'NO'} | {100 * r['doppio_accesso']:.1f} % | {100 * r['migliore_se_unico']:.0f} % |")
+    print("\nUn nodo senza canale di voto (scheda singola) accanto a un nodo che vota: doppio accesso nella zona di sovrapposizione (nodi in alto, perdita extra 10 dB):")
+    print("| distanza fra i nodi | come votante (solo RF) | il muto aspetta 300 ms e ascolta | in time-sharing sul canale 70 cm | zona con sola copertura del muto | ritardo in piu' del muto |")
+    print("|---|---|---|---|---|---|")
+    for dk in (5.0, 10.0, 20.0, 30.0, 50.0):
+        r1 = run_nodo_muto(dk, "come_votante", a.scenari, a.seed)
+        r2 = run_nodo_muto(dk, "attesa", a.scenari, a.seed)
+        r3 = run_nodo_muto(dk, "time_sharing", a.scenari, a.seed)
+        print(f"| {dk:g} km | {100 * r1['doppio_accesso']:.0f} % | {100 * r2['doppio_accesso']:.0f} % | {100 * r3['doppio_accesso']:.1f} % | {100 * r2['solo_b']:.0f} % dei casi | {1000 * r2['ritardo_in_piu_s']:.0f} ms |")
     print("\nCambi di nodo lungo un percorso fra i due (media per prova):")
     for h in (0.0, 3.0, 6.0):
         print(f"  isteresi {h:g} dB: {run_percorso(h, dist_km=a.distanza, seed=a.seed):.1f}")

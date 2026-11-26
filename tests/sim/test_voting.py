@@ -42,5 +42,13 @@ check(vr2["doppio_accesso"] < vr["doppio_accesso"] and vr2["durata_voto_s"] > vr
 far = sv.run_voto_radio(20.0, extra_nodi=60.0, scenari=800, seed=3)
 check(far["doppio_accesso"] == 1.0 and far["senza_collegamento"] == 1.0, "nodi che non si sentono sul canale di servizio: nessun voto, doppio accesso (zona non ammessa)")
 check(sv.run_elezione("qualita", "rete", nodi_si_sentono=False, **kw) == net, "stessa semente, stesso risultato")
+# ---- nodo senza canale di voto ----
+nv = {k: sv.run_nodo_muto(20.0, k, scenari=1500, seed=3) for k in ("come_votante", "attesa", "time_sharing")}
+check(nv["attesa"]["doppio_accesso"] < nv["come_votante"]["doppio_accesso"] and nv["attesa"]["doppio_accesso"] < 0.03,
+      f"il nodo muto che aspetta e ascolta evita il doppio accesso quando i nodi si sentono: {nv['attesa']['doppio_accesso'] * 100:.1f} % contro {nv['come_votante']['doppio_accesso'] * 100:.1f} % senza regola")
+check(nv["time_sharing"]["doppio_accesso"] < 0.08, f"il nodo a scheda singola che vota in time-sharing sul canale 70 cm: {nv['time_sharing']['doppio_accesso'] * 100:.1f} % (come due votanti)")
+far = sv.run_nodo_muto(50.0, "attesa", scenari=1500, seed=3)
+check(far["doppio_accesso"] > nv["attesa"]["doppio_accesso"], f"se i nodi non si sentono neanche sulla radio principale il muto non puo' evitare il doppio accesso: {far['doppio_accesso'] * 100:.0f} % a 50 km")
+check(nv["attesa"]["solo_b"] > 0.1 and nv["attesa"]["ritardo_in_piu_s"] > 0.1, f"dove sente solo il muto ritarda di circa {nv['attesa']['ritardo_in_piu_s'] * 1000:.0f} ms in piu' (zona con la sola sua copertura: {nv['attesa']['solo_b'] * 100:.0f} %)")
 print("voting: tutte le prove passate" if not fails else f"{fails} prove fallite")
 sys.exit(1 if fails else 0)

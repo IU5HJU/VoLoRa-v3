@@ -125,6 +125,28 @@ Per il solo ritardo (senza voto) c'è un **compromesso** fra ritardo e doppio ac
 
 **Percorso:** una stazione che si muove da un nodo all'altro, scegliendo ogni volta il nodo migliore, **cambia nodo in media 9 volte**; con l'**isteresi di 3 dB 3,7 volte**, con 6 dB 1,3. L'isteresi serve (la scelta non deve rimbalzare con il fading), ma non va esagerata: oltre una certa soglia si resta troppo a lungo con il nodo peggiore.
 
+## 4b. Un nodo senza canale di voto (scheda singola)
+**Caso:** un nodo con una sola radio, che non può avere il canale di servizio (né a 2 m, né a 70 cm). Il suo frame NODO dice `caps = 0`. Con la regola attuale "si vota solo sullo stesso canale" **non vota**: è un nodo **muto**. Cosa succede in una zona di sovrapposizione con un nodo A che vota?
+
+**Comportamento senza regole nuove (strategia "come votante").** Il muto sceglie il ritardo per qualità come gli altri e ascolta in RF, ma non può scambiare VOTI: l'elezione è solo RF. Se i due nodi si sentono sulla frequenza principale, l'ascolto evita quasi sempre il doppio accesso, ma non sempre (le due partenze cadono nella stessa finestra): **circa 9-15 % di doppi accessi**; se non si sentono, **doppio accesso sicuro**.
+
+**Proposta: il muto aspetta e ascolta.** Chi non può votare ritrasmette **solo dopo la finestra del voto** (200 ms) più 100 ms, cioè dopo **300 ms**, e **solo se in RF non ha sentito partire un altro nodo** (nessun pacchetto con `RELAYED` dell'altro). I nodi che votano restano sulla loro regola: chi vince parte entro 200 ms. Il muto è così **sempre secondo**:
+- **Doppio accesso 0-1 % se i due nodi si sentono** sulla frequenza principale (fino a 30 km nel modello); **9 % a 50 km**, dove non si sentono più.
+- **Se la mobile è coperta solo dal muto** (zona senza sovrapposizione) ritrasmette con **circa 170-270 ms di ritardo in più**: il ritardo della v2 è compensato dal loop del microfono (200 ms deciso), quindi è un costo accettabile ma da misurare.
+- **Il muto non vince mai**, anche quando ha il segnale migliore: la qualità del collegamento con la mobile ne soffre in circa metà dei casi di sovrapposizione.
+
+**Alternativa: voto in time-sharing sul canale a 70 cm (433,850 MHz) con la sola radio.** Il nodo a scheda singola vota come gli altri (doppio accesso circa 3 %), ma **mentre vota (circa 100 ms) non ascolta la mobile**: può perdere un pacchetto di voce (la v2 ha la correzione d'errore), ed è utile solo se anche gli altri nodi della zona votano a 70 cm.
+
+| Distanza fra i nodi | Solo RF (come votante) | Il muto aspetta e ascolta | Time-sharing a 70 cm | Zona con la sola copertura del muto | Ritardo in più del muto |
+|---|---|---|---|---|---|
+| 5 km | 15 % | 0 % | 3,1 % | 3 % | 267 ms |
+| 10 km | 9 % | 0 % | 2,8 % | 12 % | 241 ms |
+| 20 km | 9 % | 0 % | 2,4 % | 30 % | 204 ms |
+| 30 km | 12 % | 1 % | 3,2 % | 37 % | 187 ms |
+| 50 km | 21 % | 9 % | 6,1 % | 43 % | 171 ms |
+
+**Cosa resta vero:** se i due nodi non si sentono nemmeno sulla frequenza principale, il muto non ha modo di sapere che l'altro ha già ritrasmesso (Internet non è un mezzo affidabile): **doppio accesso sicuro**; la zona di sovrapposizione fra un nodo muto e uno che vota va evitata, o i due nodi devono potersi sentire in RF.
+
 ## 5. Cose da decidere o studiare
 1. ~~Ritardo massimo~~ **Deciso il 23/11/2026: 200 ms** (compensati dal loop del microfono della v2). Resta la scala in dB (20 dB nel modello).
 2. ~~Canale per l'annuncio~~ **Deciso il 23/11/2026: via radio**, mai da Internet. **Deciso il 25/11/2026: frequenza dedicata nella banda 430-440 MHz**, una per zona, concordata fra chi installa i nodi, con gradino veloce (R3-R7) e antenne in alto. **Deciso il 26/11/2026: 144,900 MHz in banda 2 m, fisso** (corregge 433,850 MHz: un nodo con due radio richiedeva due antenne; poi corregge 144,850 MHz, canale dei gateway voce digitale; vedi sopra). **Radio di servizio deciso il 26/11/2026: la scheda di trasmissione del nodo** (a riposo fino alla ritrasmissione); da verificare sul ripetitore a due schede.
