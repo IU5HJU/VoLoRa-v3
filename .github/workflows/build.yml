@@ -102,10 +102,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - env: t3
-            board: T3 V1.6.1
-          - env: tbeam1262
-            board: T-Beam V1.2 SX1262
+          - env: mobile_t3
+            board: T3 V1.6.1 completa
+          - env: mobile_tbeam1262
+            board: T-Beam V1.2 SX1262 completa
+          - env: ble_sim_t3
+            board: T3 solo BLE (radio simulata)
+          - env: ble_sim_tbeam1262
+            board: T-Beam solo BLE (radio simulata)
           - env: bench_t3
             board: T3 prova a banco
           - env: bench_tbeam1262
@@ -125,7 +129,7 @@ jobs:
           key: pio-v3-${{ runner.os }}-${{ hashFiles('firmware/v3/platformio.ini') }}
       - name: Installa PlatformIO
         run: pip install platformio==6.1.19
-      - name: Compila (guscio BLE + nucleo; la radio e' simulata)
+      - name: Compila (guscio + nucleo)
         working-directory: firmware/v3
         run: pio run -e ${{ matrix.env }}
 

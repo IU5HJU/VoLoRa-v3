@@ -27,6 +27,8 @@ struct Radio {
   virtual double random() = 0;                                     // un numero casuale in [0, 1)
 };
 
+constexpr double kPendingRetryS = 0.02;
+
 class Station {
  public:
   // `unsupported`: gradini che la radio non sa fare (per esempio R3 sull'SX1278): non si annunciano, quindi non si usano
@@ -43,14 +45,24 @@ class Station {
   // ----- comandi -----
   // Manda un oggetto (il buffer deve restare valido fino alla fine). false se un invio e' gia' in corso o l'oggetto e' troppo grande.
   bool startSend(const uint8_t* obj, size_t len, const uint16_t* layerEnds, int nl, double budgetS, uint16_t sess, int probesR10 = kProbeCount) {
+    new (&mem_) MemSource(obj, len);
+    return startSend(&mem_, len, layerEnds, nl, budgetS, sess, probesR10);
+  }
+  // Variante con sorgente esterna (per esempio il telefono): `src` deve restare valida fino alla fine dell'invio.
+  bool startSend(ObjectSource* obj, size_t len, const uint16_t* layerEnds, int nl, double budgetS, uint16_t sess, int probesR10 = kProbeCount, uint8_t objType = 0, const uint8_t* pos7 = nullptr) {
     if ((snd_ && !snd_->finished()) || len == 0 || len > 65536 || nl < 1 || nl > kMaxLayers) return false;
     if (snd_) snd_->~Sender();
-    snd_ = new (sndMem_) Sender(sess, call_, callLen_, sx1262_, tcxo_, obj, len, layerEnds, nl, budgetS, window_, probesR10, unsupported_);
+    snd_ = new (sndMem_) Sender(sess, call_, callLen_, sx1262_, tcxo_, obj, len, layerEnds, nl, budgetS, window_, probesR10, unsupported_, objType);
+    if (pos7) snd_->setPosition(pos7);
     ex_ = Exec();
     ex_.st = Exec::Resume;
     ans_ = Answer();
     return true;
   }
+  // Annulla l'invio in corso (il mezzo lascia perdere: nessun ABORT in aria, il ricevente chiude per silenzio)
+  void cancelSend() { if (snd_ && !snd_->finished()) { snd_->~Sender(); snd_ = nullptr; ex_ = Exec(); ans_ = Answer(); } }
+  int piecesAcked() const { return snd_ ? snd_->piecesAcked() : 0; }
+  int piecesTotal() const { return snd_ ? snd_->nPieces() : 0; }
   bool sending() const { return snd_ && !snd_->finished(); }
   bool sendFinished() const { return snd_ && snd_->finished(); }
   bool sendOk() const { return snd_ && snd_->ok(); }
@@ -58,6 +70,7 @@ class Station {
   int layersDelivered() const { return snd_ ? snd_->layersDelivered() : 0; }
   uint32_t bytesDelivered() const { return snd_ ? snd_->bytesDelivered() : 0; }
   const Receiver& receiver() const { return rx_; }
+  Receiver& receiver() { return rx_; }
   const Link& link() const { return link_; }
 
   // ----- eventi -----
@@ -208,7 +221,11 @@ class Station {
           uint8_t buf[260];
           size_t n = 0;
           if (ex_.act.kind == Action::Exchange || ex_.act.kind == Action::ModeSet) { memcpy(buf, ex_.act.frame, ex_.act.len); n = ex_.act.len; }
-          else if (!snd_->frameAt(ex_.act, ex_.sent, buf, sizeof(buf), &n)) { ans_ = Answer(); ex_.st = Exec::Resume; continue; }
+          else {
+            const FrameRes fr = snd_->frameAt(ex_.act, ex_.sent, buf, sizeof(buf), &n);
+            if (fr == FR_PENDING) { ex_.notBefore = now + kPendingRetryS; return; }      // i byte non sono ancora arrivati dal telefono
+            if (fr == FR_ERR) { ans_ = Answer(); ex_.st = Exec::Resume; continue; }
+          }
           if (ex_.act.kind == Action::Probe || ex_.act.kind == Action::Burst) ex_.sent++;
           startTx(buf, n, Tx::Sender);
           return;
@@ -242,6 +259,7 @@ class Station {
   Receiver rx_;
   alignas(Sender) unsigned char sndMem_[sizeof(Sender)];
   Sender* snd_ = nullptr;
+  MemSource mem_{nullptr, 0};
   Exec ex_;
   Answer ans_;
   Pending reply_;

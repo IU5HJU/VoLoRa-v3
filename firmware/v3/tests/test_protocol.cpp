@@ -150,7 +150,7 @@ static std::string actionStr(Sender& s, const Action& a, double* waitVal) {
     case Action::Exchange: return "exchange " + hex(a.frame, a.len) + " " + std::to_string(a.expect) + " " + std::to_string(a.tries);
     case Action::Probe: case Action::Burst: {
       std::string r = a.kind == Action::Probe ? "probe " : "burst ";
-      for (int i = 0; i < a.count; i++) { if (!s.frameAt(a, i, b, sizeof(b), &len)) return r + "<errore>"; r += (i ? "," : "") + hex(b, len); }
+      for (int i = 0; i < a.count; i++) { if (s.frameAt(a, i, b, sizeof(b), &len) != FR_OK) return r + "<errore>"; r += (i ? "," : "") + hex(b, len); }
       return r;
     }
     case Action::ModeSet: return "modeset " + hex(a.frame, a.len) + " " + std::to_string(a.target);
@@ -175,7 +175,8 @@ static int txReplay(const std::string& dir, const std::string& name) {
   const std::vector<uint8_t> obj = unhex(lines(dir + "/" + name + ".obj.txt")[0]);
   std::vector<uint16_t> ends;
   for (const std::string& e : split(h["layers"], ',')) ends.push_back(static_cast<uint16_t>(atoi(e.c_str())));
-  Sender snd(static_cast<uint16_t>(atoi(h["sess"].c_str())), call.data(), call.size(), h["sx1262"] == "1", h["tcxo"] == "1", obj.data(), obj.size(), ends.data(), static_cast<int>(ends.size()),
+  MemSource msrc(obj.data(), obj.size());
+  Sender snd(static_cast<uint16_t>(atoi(h["sess"].c_str())), call.data(), call.size(), h["sx1262"] == "1", h["tcxo"] == "1", &msrc, obj.size(), ends.data(), static_cast<int>(ends.size()),
              D(h["budget"]), atoi(h["window"].c_str()), atoi(h["probes"].c_str()));
   int n = 0;
   for (size_t i = 1; i < L.size(); i++) {

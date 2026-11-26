@@ -72,6 +72,6 @@ La pagina è [`site/telefono.html`](../site/telefono.html) (si pubblica con il s
 
 ## 9. Da decidere
 1. ~~**Telefono**~~ **Deciso il 26/11/2026: pagina web per prima** (Android e computer); l'applicazione nativa, anche per l'iPhone, dopo.
-2. **Cache della scheda:** 3 blocchi da 1 kB di partenza; da misurare con RAM e latenza reali (blocchi più grandi se il BLE è lento, o più cache).
+2. **Cache della scheda:** 3 blocchi da 1 kB nel ponte semplice (modello a tempo); **8 blocchi (8 kB) nel ponte collegato alla radio vera** (`live_bridge.h`: una finestra del protocollo vuole fino a 5 blocchi). Da misurare con RAM e latenza reali (blocchi più grandi se il BLE è lento, o più cache).
 3. **Più oggetti in coda:** oggi uno solo, il resto lo tiene il telefono.
 4. ~~**Ricezione senza telefono collegato**~~ **Deciso il 26/11/2026: un nodo o ripetitore con microSD tiene l'oggetto** per il mobile assente e lo consegna alla riconnessione (servizio "posta"). La scheda mobile resta senza memoria. Da definire: il protocollo di deposito e ritiro fra mobile e nodo, e per quanto tempo si conserva.

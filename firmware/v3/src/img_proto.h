@@ -109,6 +109,19 @@ class Receiver {
   int k() const { return k_; }
   bool hasDone() const { return hasDone_; }
   bool doneOk() const { return doneOk_; }
+  // Cancello per le offerte: con `false` (o un oggetto piu' grande di `maxBytes`) l'OFFER resta senza risposta e il mittente chiude con "offer".
+  void setAccepting(bool on, uint32_t maxBytes = 0xFFFFFFFFu) { accepting_ = on; maxBytes_ = maxBytes; }
+  // quello che l'ultima offerta e l'ultimo DONE hanno detto
+  int doneCount() const { return doneCount_; }
+  const uint8_t* peerCall() const { return peerCall_; }
+  size_t peerCallLen() const { return peerCallLen_; }
+  uint8_t objType() const { return objType_; }
+  uint32_t objSize() const { return objSize_; }
+  uint32_t objCrc() const { return objCrc_; }
+  bool offerHasPos() const { return offerHasPos_; }
+  const uint8_t* offerPos() const { return offerPos_; }
+  uint8_t doneLayers() const { return doneLayers_; }
+  uint32_t doneBytes() const { return doneBytes_; }
 
   Reply onFrame(const Msg& f, double rssi, double snr, double t, int rung, bool lost) {
     Reply r;
@@ -136,6 +149,10 @@ class Receiver {
         r.len = encModeAck(buf_, sizeof(buf_), sess_, f.rung); r.frame = buf_; r.rungAfter = f.rung;
         return r;
       case OFFER:
+        if (!accepting_ || f.size > maxBytes_) return r;
+        objType_ = f.objType; objSize_ = f.size; objCrc_ = f.crc; offerHasPos_ = f.hasPos;
+        if (f.hasPos) memcpy(offerPos_, f.pos, 7);
+        peerCallLen_ = f.callLen > kMaxCall ? kMaxCall : f.callLen; memcpy(peerCall_, f.call, peerCallLen_); peerCall_[peerCallLen_] = 0;
         nPieces_ = f.nPieces > kMaxPieces ? kMaxPieces : f.nPieces; haveOffer_ = true; nl_ = f.nl;
         for (int i = 0; i < f.nl; i++) layerEnds_[i] = f.layerEnds[i];
         memset(have_, 0, sizeof(have_));
@@ -171,7 +188,7 @@ class Receiver {
           crc = crc32Update(crc, pb, n);
           have += n;
         }
-        hasDone_ = true; doneOk_ = have == f.nbytes && crc == f.crc;
+        hasDone_ = true; doneOk_ = have == f.nbytes && crc == f.crc; doneLayers_ = f.layers; doneBytes_ = f.nbytes; doneCount_++;
         r.len = encStatus(buf_, sizeof(buf_), sess_, static_cast<uint16_t>(nOk), 0, 0, 0, 0, f.layers, 1); r.frame = buf_;
         return r;
       }
@@ -230,7 +247,11 @@ class Receiver {
   uint8_t have_[kMaxPieces / 8];
   long double sumR_ = 0, sumS_ = 0;
   int nSamples_ = 0, windowHeard_ = 0, probeHeard_ = 0, probeCount_ = 0, probeRung_ = 0;
-  bool hasDone_ = false, doneOk_ = false;
+  bool hasDone_ = false, doneOk_ = false, accepting_ = true, offerHasPos_ = false;
+  uint32_t maxBytes_ = 0xFFFFFFFFu, objSize_ = 0, objCrc_ = 0, doneBytes_ = 0;
+  uint8_t peerCall_[kMaxCall + 1] = {0}, objType_ = 0, offerPos_[7] = {0}, doneLayers_ = 0;
+  size_t peerCallLen_ = 0;
+  int doneCount_ = 0;
   int k_ = 1, winMax_ = -1, winLast_ = -1;
   uint8_t buf_[64];
 };
@@ -252,6 +273,27 @@ struct Answer {
   double rnd = 0;
   bool b = false;
 };
+// Dove stanno i byte dell'oggetto da mandare. In memoria (MemSource) oppure altrove (il telefono, con una piccola cache nella scheda):
+// read() dice false se i byte non ci sono ancora (il mezzo aspetta e riprova).
+struct ObjectSource {
+  virtual ~ObjectSource() {}
+  virtual bool read(size_t off, size_t n, uint8_t* out) = 0;
+  virtual uint32_t crcAll() = 0;                          // CRC32 di tutto l'oggetto (nota dall'inizio)
+  virtual bool crcPrefix(size_t n, uint32_t* crc) = 0;    // CRC32 dei primi n byte (false se non ancora noto)
+};
+class MemSource : public ObjectSource {
+ public:
+  MemSource(const uint8_t* d, size_t n) : d_(d), n_(n) {}
+  bool read(size_t off, size_t n, uint8_t* out) override { if (off + n > n_) return false; memcpy(out, d_ + off, n); return true; }
+  uint32_t crcAll() override { return crc32(d_, n_); }
+  bool crcPrefix(size_t n, uint32_t* crc) override { if (n > n_) n = n_; *crc = crc32(d_, n); return true; }
+ private:
+  const uint8_t* d_;
+  size_t n_;
+};
+constexpr size_t kMaxFramePayload = 256;
+enum FrameRes { FR_OK, FR_PENDING, FR_ERR };
+
 enum FailKind { FAIL_NONE, FAIL_HELLO, FAIL_NEGOZIAZIONE, FAIL_OFFER, FAIL_BUDGET, FAIL_PROGRESSO, FAIL_RICERCA, FAIL_DONE };
 
 #define VL_CO_BEGIN switch (pc) { case 0:
@@ -263,8 +305,8 @@ enum FailKind { FAIL_NONE, FAIL_HELLO, FAIL_NEGOZIAZIONE, FAIL_OFFER, FAIL_BUDGE
 
 class Sender {
  public:
-  Sender(uint16_t sess, const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, const uint8_t* obj, size_t objLen, const uint16_t* layerEnds, int nl, double budget, int window, int probesR10, uint16_t unsupported = 0)
-      : sess_(sess), sx1262_(sx1262), tcxo_(tcxo), obj_(obj), objLen_(objLen), nl_(nl), budget_(budget), window_(window), probesR10_(probesR10), unsupported_(unsupported) {
+  Sender(uint16_t sess, const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, ObjectSource* obj, size_t objLen, const uint16_t* layerEnds, int nl, double budget, int window, int probesR10, uint16_t unsupported = 0, uint8_t objType = 0)
+      : sess_(sess), sx1262_(sx1262), tcxo_(tcxo), obj_(obj), objLen_(objLen), objType_(objType), nl_(nl), budget_(budget), window_(window), probesR10_(probesR10), unsupported_(unsupported) {
     callLen_ = callLen > kMaxCall ? kMaxCall : callLen; memcpy(call_, call, callLen_);
     for (int i = 0; i < nl && i < kMaxLayers; i++) layerEnds_[i] = layerEnds[i];
     nPieces_ = static_cast<int>((objLen + kPiece - 1) / kPiece);
@@ -287,16 +329,24 @@ class Sender {
   double tHello() const { return tHello_; }
   double tTransfer0() const { return tTransfer0_; }
   // i frame di un'azione Probe o Burst
-  bool frameAt(const Action& a, int i, uint8_t* out, size_t cap, size_t* len) const {
-    if (a.kind == Action::Probe) { *len = encProbe(out, cap, sess_, static_cast<uint8_t>(probeRung_), static_cast<uint8_t>(i), static_cast<uint8_t>(a.count), kProbeBytes - 7); return *len != 0; }
-    if (a.kind != Action::Burst || i >= a.count) return false;
+  FrameRes frameAt(const Action& a, int i, uint8_t* out, size_t cap, size_t* len) {
+    if (a.kind == Action::Probe) { *len = encProbe(out, cap, sess_, static_cast<uint8_t>(probeRung_), static_cast<uint8_t>(i), static_cast<uint8_t>(a.count), kProbeBytes - 7); return *len != 0 ? FR_OK : FR_ERR; }
+    if (a.kind != Action::Burst || i >= a.count) return FR_ERR;
     const BurstItem& b = burst_[i];
-    if (b.abort) { *len = encAbort(out, cap, sess_, 1); return true; }
+    if (b.abort) { *len = encAbort(out, cap, sess_, 1); return FR_OK; }
     const size_t from = static_cast<size_t>(b.start) * kPiece, to = (static_cast<size_t>(b.start) + b.pieces) * kPiece;
     const size_t end = to < objLen_ ? to : objLen_;
-    *len = encData(out, cap, sess_, static_cast<uint16_t>(b.start), obj_ + from, end > from ? end - from : 0, b.flags, b.widx);
-    return *len != 0;
+    const size_t n = end > from ? end - from : 0;
+    uint8_t buf[kMaxFramePayload];
+    if (n > sizeof(buf)) return FR_ERR;
+    if (n && !obj_->read(from, n, buf)) return FR_PENDING;
+    *len = encData(out, cap, sess_, static_cast<uint16_t>(b.start), buf, n, b.flags, b.widx);
+    return *len != 0 ? FR_OK : FR_ERR;
   }
+  // posizione (7 byte: tipo + locatore/GPS) da mettere nell'OFFER; senza, l'OFFER non la porta (prove di conformita')
+  void setPosition(const uint8_t* pos7) { memcpy(pos_, pos7, 7); hasPos_ = true; }
+  int nPieces() const { return nPieces_; }
+  int piecesAcked() const { int n = 0; for (int i = 0; i < nPieces_; i++) if (acked(i)) n++; return n; }
 
  private:
   struct BurstItem { bool abort; int start; int pieces; uint8_t flags; uint8_t widx; };
@@ -322,13 +372,15 @@ class Sender {
   Action mkBurst(int n) { Action a; a.kind = Action::Burst; a.count = n; return a; }
   Action mkStatus() { Action a; a.kind = Action::Status; return a; }
   Action mkOffer(uint32_t crc) {
-    txLen_ = encOffer(tx_, sizeof(tx_), sess_, call_, callLen_, 0, static_cast<uint32_t>(objLen_), kPiece, static_cast<uint16_t>(nPieces_), 0, 0, layerEnds_, static_cast<size_t>(nl_), crc, nullptr, nullptr, 0);
+    txLen_ = encOffer(tx_, sizeof(tx_), sess_, call_, callLen_, objType_, static_cast<uint32_t>(objLen_), kPiece, static_cast<uint16_t>(nPieces_), 0, 0, layerEnds_, static_cast<size_t>(nl_), crc, hasPos_ ? pos_ : nullptr, nullptr, 0);
     return exchange(tx_, txLen_, ACCEPT, 2);
   }
   Action mkDone(int li, uint32_t* nbytes) {
     const size_t endp = static_cast<size_t>(layerEnds_[li - 1]) * kPiece;
     *nbytes = static_cast<uint32_t>(endp < objLen_ ? endp : objLen_);
-    txLen_ = encDone(tx_, sizeof(tx_), sess_, call_, callLen_, static_cast<uint8_t>(li), *nbytes, crc32(obj_, *nbytes));
+    uint32_t c = 0;
+    if (!obj_->crcPrefix(*nbytes, &c)) c = 0;      // non succede: i livelli finiscono dopo che i loro byte sono gia' passati
+    txLen_ = encDone(tx_, sizeof(tx_), sess_, call_, callLen_, static_cast<uint8_t>(li), *nbytes, c);
     return exchange(tx_, txLen_, STATUS, 4);
   }
   Action wait(double s) { Action a; a.kind = Action::Wait; a.seconds = s; return a; }
@@ -516,7 +568,7 @@ class Sender {
     }
     Action step(Sender& s) {
       VL_CO_BEGIN
-      crcObj = crc32(s.obj_, s.objLen_);
+      crcObj = s.obj_->crcAll();
       for (attempt = 0; attempt < 4; attempt++) {
         VL_CO_YIELD(s.mkOffer(crcObj));
         haveAcc = s.ans_.kind == Answer::FrameIn;
@@ -640,8 +692,11 @@ class Sender {
   bool sx1262_, tcxo_;
   uint8_t call_[kMaxCall + 1];
   size_t callLen_ = 0;
-  const uint8_t* obj_;
+  ObjectSource* obj_;
+  bool hasPos_ = false;
+  uint8_t pos_[7] = {0};
   size_t objLen_;
+  uint8_t objType_;
   uint16_t layerEnds_[kMaxLayers];
   int nl_, nPieces_;
   double budget_;
