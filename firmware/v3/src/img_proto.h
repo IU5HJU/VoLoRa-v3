@@ -97,9 +97,9 @@ struct Reply { const uint8_t* frame = nullptr; size_t len = 0; bool hasHold = fa
 class Receiver {
  public:
   // `unsupported`: gradini che la radio della scheda non sa fare (maschera di bit): non si annunciano e non si usano
-  Receiver(const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, int window, bool incontroHello, Store* store, uint16_t unsupported = 0)
-      : sx1262_(sx1262), tcxo_(tcxo), window_(window), hello_(incontroHello), store_(store), unsupported_(unsupported) { callLen_ = callLen > kMaxCall ? kMaxCall : callLen; memcpy(call_, call, callLen_); }
-  uint16_t mask() const { return static_cast<uint16_t>(rungMask(sx1262_, tcxo_) & ~unsupported_); }
+  Receiver(const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, int window, bool incontroHello, Store* store, uint16_t unsupported = 0, double khz = kDefaultKhz)
+      : sx1262_(sx1262), tcxo_(tcxo), window_(window), hello_(incontroHello), store_(store), unsupported_(unsupported), khz_(khz) { callLen_ = callLen > kMaxCall ? kMaxCall : callLen; memcpy(call_, call, callLen_); }
+  uint16_t mask() const { return static_cast<uint16_t>(rungMask(sx1262_, tcxo_, khz_) & ~unsupported_); }
   int scanOrder(uint8_t* out) const {
     if (!haveCaps_) { out[0] = kRendezvous; return 1; }
     return scanOrderFor(sx1262_, mask(), peerSx1262_, peerMask_, out);
@@ -236,6 +236,7 @@ class Receiver {
   bool hello_;
   Store* store_;
   uint16_t unsupported_;
+  double khz_;
   uint8_t call_[kMaxCall + 1];
   size_t callLen_ = 0;
   uint16_t sess_ = 0;
@@ -305,8 +306,8 @@ enum FailKind { FAIL_NONE, FAIL_HELLO, FAIL_NEGOZIAZIONE, FAIL_OFFER, FAIL_BUDGE
 
 class Sender {
  public:
-  Sender(uint16_t sess, const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, ObjectSource* obj, size_t objLen, const uint16_t* layerEnds, int nl, double budget, int window, int probesR10, uint16_t unsupported = 0, uint8_t objType = 0)
-      : sess_(sess), sx1262_(sx1262), tcxo_(tcxo), obj_(obj), objLen_(objLen), objType_(objType), nl_(nl), budget_(budget), window_(window), probesR10_(probesR10), unsupported_(unsupported) {
+  Sender(uint16_t sess, const uint8_t* call, size_t callLen, bool sx1262, bool tcxo, ObjectSource* obj, size_t objLen, const uint16_t* layerEnds, int nl, double budget, int window, int probesR10, uint16_t unsupported = 0, uint8_t objType = 0, double khz = kDefaultKhz)
+      : sess_(sess), sx1262_(sx1262), tcxo_(tcxo), obj_(obj), objLen_(objLen), objType_(objType), nl_(nl), budget_(budget), window_(window), probesR10_(probesR10), unsupported_(unsupported), khz_(khz) {
     callLen_ = callLen > kMaxCall ? kMaxCall : callLen; memcpy(call_, call, callLen_);
     for (int i = 0; i < nl && i < kMaxLayers; i++) layerEnds_[i] = layerEnds[i];
     nPieces_ = static_cast<int>((objLen + kPiece - 1) / kPiece);
@@ -352,7 +353,7 @@ class Sender {
   struct BurstItem { bool abort; int start; int pieces; uint8_t flags; uint8_t widx; };
 
   // ----- comodi -----
-  uint16_t mask() const { return static_cast<uint16_t>(rungMask(sx1262_, tcxo_) & ~unsupported_); }
+  uint16_t mask() const { return static_cast<uint16_t>(rungMask(sx1262_, tcxo_, khz_) & ~unsupported_); }
   int kFor(int rung) const { const int a = piecesPerFrame(rung, sx1262_), b = piecesPerFrame(rung, peerSx1262_); return a < b ? a : b; }
   int allowed(int* out) const {
     const uint16_t m = commonMask(sx1262_, mask(), peerSx1262_, caps_.rungMask);
@@ -702,6 +703,7 @@ class Sender {
   double budget_;
   int window_, probesR10_;
   uint16_t unsupported_;
+  double khz_;
   // dal mezzo a ogni ripresa
   double t_ = 0;
   int rung_ = kRendezvous;

@@ -8,6 +8,7 @@
 #include <SPI.h>
 #include <esp_timer.h>
 
+#include "freq.h"
 #include "live_bridge.h"
 #include "pmu.h"
 #include "radio_board.h"
@@ -113,8 +114,8 @@ static void rebuild() {
   delete bridge;
   delete station;
   station = new Station(reinterpret_cast<const uint8_t*>(call), strlen(call), kBoardSx1262, kTcxo, &radio, &store, kWindowFrames, true,
-                        kBoardSx1262 ? 0 : static_cast<uint16_t>(1u << 3));     // R3 (LoRa 500/SF6) sull'SX1278 vuole l'intestazione implicita: il driver non lo fa
-  bridge = new ble::LiveBridge(&phone, station, call, kBoardSx1262, rungMask(kBoardSx1262, kTcxo) & ~(kBoardSx1262 ? 0u : (1u << 3)), &store, kRxMax);
+                        kBoardSx1262 ? 0 : static_cast<uint16_t>(1u << 3), radio.frequencyKhz());     // R3 (LoRa 500/SF6) sull'SX1278 vuole l'intestazione implicita: il driver non lo fa
+  bridge = new ble::LiveBridge(&phone, station, call, kBoardSx1262, rungMask(kBoardSx1262, kTcxo, radio.frequencyKhz()) & ~(kBoardSx1262 ? 0u : (1u << 3)), &store, kRxMax);
   if (bleConnected) bridge->onConnect(); else bridge->onDisconnect();
 }
 
@@ -136,15 +137,21 @@ static void handleSerial() {
         strncpy(call, c2, sizeof(call) - 1);
         rebuild();
         Serial.printf("OK nominativo %s\n", call);
+      } else if (const FreqParse fp = parseFreq(line, kBoardSx1262); fp.cmd != FreqCmd::NotFreq) {
+        if (fp.cmd == FreqCmd::Show) Serial.printf("frequenza %.3f MHz (campo del chip %s)\n", radio.frequencyKhz() / 1000.0, kBoardSx1262 ? "150-960 MHz" : "137-175 e 410-525 MHz");
+        else if (fp.cmd == FreqCmd::Invalid) Serial.printf("ERR FREQ %s\n", fp.why);
+        else if (station && station->sending()) Serial.println("ERR invio in corso");
+        else if (!radio.setFrequencyKhz(fp.khz)) Serial.println("ERR la radio non accetta questa frequenza");
+        else { prefs.putUInt("khz", static_cast<uint32_t>(fp.khz + 0.5)); rebuild(); Serial.printf("OK frequenza %.3f MHz (salvata): impostala uguale sull'altra scheda\n", fp.khz / 1000.0); }
       } else if (radio.boostCommand(line)) {
         // gestito dal driver radio (BOOST ON RISCHIO | OFF | STATUS)
       } else if (!strncasecmp(line, "STATO", 5)) {
         if (!station) { Serial.println("nessun nominativo (CALL xxx)"); continue; }
         const ble::LiveBridge::Stats& s = bridge->stats();
-        Serial.printf("%s BLE %s, gradino R%d%s, invio %s, in RAM %u byte, richieste %u (ripetute %u), scartati %u, oggetti ricevuti %u, errori radio %u, coda persa %u\n", call, bleConnected ? "collegato" : "scollegato",
-                      station->link().rung, station->link().lost ? " (in ricerca)" : "", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(bridge->held()), s.pulls, s.repulls, s.dropped, s.rxObjects,
+        Serial.printf("%s BLE %s, %.3f MHz, gradino R%d%s, invio %s, in RAM %u byte, richieste %u (ripetute %u), scartati %u, oggetti ricevuti %u, errori radio %u, coda persa %u\n", call, bleConnected ? "collegato" : "scollegato",
+                      radio.frequencyKhz() / 1000.0, station->link().rung, station->link().lost ? " (in ricerca)" : "", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(bridge->held()), s.pulls, s.repulls, s.dropped, s.rxObjects,
                       static_cast<unsigned>(radio.rxErrors()), static_cast<unsigned>(qDropped));
-      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
+      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
     } else if (n < static_cast<int>(sizeof(line)) - 1) line[n++] = c;
   }
 }
@@ -152,11 +159,12 @@ static void handleSerial() {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.printf("\nVoLoRa V3 mobile con radio vera (STUDIO) %s, %.3f MHz, %d dBm\n", VL3_CHIP, kFreqMhz, kPowerDbm);
+  Serial.printf("\nVoLoRa V3 mobile con radio vera (STUDIO) %s, %.3f MHz, %d dBm\n", VL3_CHIP, radio.frequencyKhz() / 1000.0, kPowerDbm);
   pmuBegin();
   SPI.begin(pins::kRadioSclk, pins::kRadioMiso, pins::kRadioMosi, pins::kRadioCs);
   Serial.println(radio.begin() ? "radio pronta a R10" : "ERRORE: la radio non parte");
   prefs.begin("vl3", false);
+  { const uint32_t k = prefs.getUInt("khz", 0); if (k && !radio.setFrequencyKhz(k)) Serial.printf("frequenza salvata %u kHz non valida: resta %.3f MHz\n", static_cast<unsigned>(k), radio.frequencyKhz() / 1000.0); }
   const String saved = prefs.getString("call", "");
   strncpy(call, saved.c_str(), sizeof(call) - 1);
   rebuild();

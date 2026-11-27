@@ -7,6 +7,7 @@
 
 #include "board.h"
 #include "boost.h"
+#include "freq.h"
 #include "medium.h"
 
 #if defined(RADIO_SX1262)
@@ -22,7 +23,7 @@ static SX1278 vl3Radio = new Module(pins::kRadioCs, pins::kRadioDio0, pins::kRad
 namespace v3 {
 namespace img {
 
-constexpr float kFreqMhz = 433.700f;     // canale di incontro (docs/band-plan.md): liberamente configurabile nel campo del chip
+constexpr float kFreqMhz = 433.700f;     // valore di partenza del canale di incontro (docs/band-plan.md): si cambia con setFrequencyKhz (freq.h), liberamente nel campo del chip
 constexpr int kPowerDbm = boost::kNormalDbm;   // +17 dBm: massimo in continuo dell'SX1278 (docs/confronto-datasheet.md); con BOOST +20 dBm (boost.h)
 constexpr uint8_t kSyncWord = 0x5D;      // diverso da quello della v2
 
@@ -32,6 +33,16 @@ static void IRAM_ATTR vl3OnIrq() { vl3Irq = true; }
 class BoardRadio : public Radio {
  public:
   bool begin() { return setRungImpl(kRendezvous); }
+  // Frequenza del canale (kHz): solo il campo di sintonia del chip e' controllato. Riconfigura il gradino attuale. false (e niente cambia) se fuori campo o se la radio non risponde.
+  bool setFrequencyKhz(double khz) {
+    if (!inTuning(kBoardSx1262, khz)) return false;
+    const double old = freqKhz_;
+    freqKhz_ = khz;
+    ok_ = setRungImpl(rung_);
+    if (!ok_) { freqKhz_ = old; ok_ = setRungImpl(rung_); return false; }
+    return true;
+  }
+  double frequencyKhz() const { return freqKhz_; }
   void setRung(int r) override { rung_ = r; ok_ = setRungImpl(r); }
   bool transmit(const uint8_t* f, size_t n) override {
     if (!ok_) return false;
@@ -106,10 +117,10 @@ class BoardRadio : public Radio {
     limitCurrent();
   }
   // il filtro di ricezione FSK: il primo valore permesso dal chip che contiene la banda del segnale piu' l'errore di due quarzi da 10 ppm
-  static float fskRxBw(bool sx1262, double br, double dev) {
+  float fskRxBw(bool sx1262, double br, double dev) const {
     static const float ssb[] = {2.6f, 3.1f, 3.9f, 5.2f, 6.3f, 7.8f, 10.4f, 12.5f, 15.6f, 20.8f, 25.0f, 31.3f, 41.7f, 50.0f, 62.5f, 83.3f, 100.0f, 125.0f, 166.7f, 200.0f, 250.0f};      // SX1278: banda laterale singola
     static const float dsb[] = {4.8f, 5.8f, 7.3f, 9.7f, 11.7f, 14.6f, 19.5f, 23.4f, 29.3f, 39.0f, 46.9f, 58.6f, 78.2f, 93.8f, 117.3f, 156.2f, 187.2f, 234.3f, 312.0f, 373.6f, 467.0f};    // SX1262: doppia banda
-    const double need = br + 2 * dev + 2 * (2 * 10e-6 * kFreqMhz * 1000.0);
+    const double need = br + 2 * dev + 2 * (2 * 10e-6 * freqKhz_);
     const float* t = sx1262 ? dsb : ssb;
     const double want = sx1262 ? need : need / 2;
     for (int i = 0; i < 21; i++) if (t[i] >= want) return t[i];
@@ -120,20 +131,20 @@ class BoardRadio : public Radio {
     int st;
     if (r.lora) {
 #if defined(RADIO_SX1262)
-      st = vl3Radio.begin(kFreqMhz, static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8, 1.6f);
+      st = vl3Radio.begin(freqMhz(), static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8, 1.6f);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(true);
 #else
       if (r.b == 6) { Serial.println("[radio] R3 (SF6) non supportato sull'SX1278: serve l'intestazione implicita"); return false; }
-      st = vl3Radio.begin(kFreqMhz, static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8);
+      st = vl3Radio.begin(freqMhz(), static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(true);
 #endif
     } else {
 #if defined(RADIO_SX1262)
-      st = vl3Radio.beginFSK(kFreqMhz, static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(true, r.a, r.b), boost_.power(), 16, 1.6f);
+      st = vl3Radio.beginFSK(freqMhz(), static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(true, r.a, r.b), boost_.power(), 16, 1.6f);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.variablePacketLengthMode(255);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(2);
 #else
-      st = vl3Radio.beginFSK(kFreqMhz, static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(false, r.a, r.b), boost_.power(), 16, false);
+      st = vl3Radio.beginFSK(freqMhz(), static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(false, r.a, r.b), boost_.power(), 16, false);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.variablePacketLengthMode(64);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(true);
 #endif
@@ -146,6 +157,8 @@ class BoardRadio : public Radio {
     vl3Irq = false;
     return vl3Radio.startReceive() == RADIOLIB_ERR_NONE;
   }
+  float freqMhz() const { return static_cast<float>(freqKhz_ / 1000.0); }
+  double freqKhz_ = kFreqMhz * 1000.0;
   int rung_ = kRendezvous;
   bool ok_ = false, txBusy_ = false;
   uint32_t rxErrors_ = 0;

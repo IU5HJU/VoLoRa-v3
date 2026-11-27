@@ -80,6 +80,7 @@
     <p>Apri la porta seriale a <strong>115200 baud</strong> (per esempio con <code>pio device monitor -b 115200</code>) e scrivi:</p>
 <pre>CALL IL_TUO_NOMINATIVO
 STATO</pre>
+    <p><code>FREQ</code> mostra la frequenza (di partenza 433,700 MHz); <code>FREQ 434.100</code> la cambia, liberamente dentro il campo del chip (SX1278: 137-175 e 410-525 MHz; SX1262: 150-960 MHz). <strong>Impostala uguale su tutte e due le schede</strong>; sulla mobile resta salvata.</p>
     <ul>
       <li><strong>Mobile completa:</strong> apri <a href="telefono.html">la pagina del telefono</a> con Chrome su Android, accoppia con il codice che esce sulla seriale, invia un testo e poi un file. <code>STATO</code> mostra Bluetooth, gradino, richieste di blocchi e errori radio.</li>
       <li><strong>Prova a banco:</strong> su due schede <code>CALL</code> diversi; su una <code>SEND 5000</code>. Sull&rsquo;altra compare <code>OGGETTO RICEVUTO ... CRC GIUSTO</code>.</li>

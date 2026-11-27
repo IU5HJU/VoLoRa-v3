@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#include "freq.h"
 #include "pmu.h"
 #include "radio_board.h"
 
@@ -33,7 +34,7 @@ static void makeStation() {
   delete station;
   const size_t n = strlen(call);
   station = new Station(reinterpret_cast<const uint8_t*>(call), n, kBoardSx1262, false, &radio, &store, kWindowFrames, true,
-                       kBoardSx1262 ? 0 : static_cast<uint16_t>(1u << 3));     // R3 (LoRa 500/SF6) sull'SX1278 vuole l'intestazione implicita: il driver non lo fa
+                       kBoardSx1262 ? 0 : static_cast<uint16_t>(1u << 3), radio.frequencyKhz());     // R3 (LoRa 500/SF6) sull'SX1278 vuole l'intestazione implicita: il driver non lo fa
 }
 
 static void handleLine(const char* line) {
@@ -55,18 +56,24 @@ static void handleLine(const char* line) {
     if (!station->startSend(txObj, static_cast<size_t>(n), ends, 3, 600.0, static_cast<uint16_t>(1 + esp_random() % 65000))) { Serial.println("ERR invio non partito"); return; }
     announcedSend = false; sendStartMs = millis();
     Serial.printf("OK invio di %ld byte (CRC32 %08X): HELLO a R10...\n", n, static_cast<unsigned>(crc32(txObj, static_cast<size_t>(n))));
+  } else if (const FreqParse fp = parseFreq(line, kBoardSx1262); fp.cmd != FreqCmd::NotFreq) {
+    if (fp.cmd == FreqCmd::Show) Serial.printf("frequenza %.3f MHz (campo del chip %s)\n", radio.frequencyKhz() / 1000.0, kBoardSx1262 ? "150-960 MHz" : "137-175 e 410-525 MHz");
+    else if (fp.cmd == FreqCmd::Invalid) Serial.printf("ERR FREQ %s\n", fp.why);
+    else if (station && station->sending()) Serial.println("ERR invio in corso");
+    else if (!radio.setFrequencyKhz(fp.khz)) Serial.println("ERR la radio non accetta questa frequenza");
+    else { makeStation(); Serial.printf("OK frequenza %.3f MHz: impostala uguale sull'altra scheda\n", fp.khz / 1000.0); }
   } else if (radio.boostCommand(line)) {
     // gestito dal driver radio (BOOST ON RISCHIO | OFF | STATUS)
   } else if (!strncasecmp(line, "STATO", 5)) {
     if (!station) { Serial.println("nessun nominativo"); return; }
-    Serial.printf("gradino R%d, in ricerca %s, invio %s, radio: errori di ricezione %u\n", station->link().rung, station->link().lost ? "si" : "no", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(radio.rxErrors()));
-  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | SEND <byte> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
+    Serial.printf("%.3f MHz, gradino R%d, in ricerca %s, invio %s, radio: errori di ricezione %u\n", radio.frequencyKhz() / 1000.0, station->link().rung, station->link().lost ? "si" : "no", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(radio.rxErrors()));
+  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | SEND <byte> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.printf("\nVoLoRa V3 prova a banco (STUDIO) %s, %.3f MHz, %d dBm\n", VL3_CHIP, kFreqMhz, kPowerDbm);
+  Serial.printf("\nVoLoRa V3 prova a banco (STUDIO) %s, %.3f MHz, %d dBm\n", VL3_CHIP, radio.frequencyKhz() / 1000.0, kPowerDbm);
   pmuBegin();
   SPI.begin(pins::kRadioSclk, pins::kRadioMiso, pins::kRadioMosi, pins::kRadioCs);
   Serial.println(radio.begin() ? "radio pronta a R10" : "ERRORE: la radio non parte");
