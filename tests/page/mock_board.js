@@ -80,6 +80,25 @@ module.exports = `
   };
   board.requestCount = 0;
   Object.defineProperty(navigator, 'bluetooth', { value: { requestDevice: async o => { board.requestCount++; board.filters = o; return dev; } }, configurable: true });
+  // BleClient finto (plugin @capacitor-community/bluetooth-le dell'app Android) sopra le stesse caratteristiche: serve a provare app/src/ble-shim.js
+  board.makeBleClient = () => {
+    const map = { [U('4')]: cmd, [U('5')]: dataIn, [U('6')]: evt, [U('7')]: dataOut };
+    const calls = board.bleCalls = [];
+    const bad = view => { if (!(view instanceof DataView)) throw new Error('il plugin vuole un DataView'); return new Uint8Array(view.buffer, view.byteOffset, view.byteLength); };
+    board.dropBle = () => { board.connected = false; if (board.sess) { board.sess.asked.clear(); board.sess.partial.clear(); } if (board.bleOnDisconnect) board.bleOnDisconnect('AA:BB:CC'); };
+    board.drop = board.dropBle;
+    return {
+      initialize: async o => { calls.push(['initialize', o]); },
+      requestDevice: async o => { calls.push(['requestDevice', o]); board.requestCount++; return { deviceId: 'AA:BB:CC', name: 'VoLoRa-V3 IU5HJU' }; },
+      connect: async (id, onDisconnect) => { board.connected = true; board.bleOnDisconnect = onDisconnect; calls.push(['connect', id]); },
+      disconnect: async () => { board.connected = false; },
+      isBonded: async () => false,
+      createBond: async id => { calls.push(['createBond', id]); },
+      startNotifications: async (id, svc, ch, cb) => { if (svc !== SERVICE) throw new Error('servizio'); map[ch]._l.push(e => cb(e.target.value)); },
+      write: async (id, svc, ch, view) => map[ch].writeValue(bad(view)),
+      writeWithoutResponse: async (id, svc, ch, view) => map[ch].writeValueWithoutResponse(bad(view))
+    };
+  };
   // Trasporto WebSocket (pagina servita dalla scheda): stesso ponte finto, con i messaggi prefissati dal canale (0 cmd, 1 data_in, 2 evt, 3 data_out)
   board.installWs = () => {
     board.wsOpen = 0;

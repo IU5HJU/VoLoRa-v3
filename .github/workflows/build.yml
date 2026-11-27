@@ -205,10 +205,57 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  app-android:
+    name: App Android (APK, Bluetooth LE)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Dipendenze e pagina (www)
+        working-directory: app
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/build-www.js
+      - name: Progetto Android (Capacitor)
+        working-directory: app
+        run: |
+          npx cap add android
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+          CODE=$(git rev-list --count HEAD)
+          sed -i "s/versionCode 1/versionCode $CODE/; s/versionName \"1.0\"/versionName \"$VERSION\"/" android/app/build.gradle
+          npx cap sync android
+      - name: Compila l'APK
+        working-directory: app/android
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+      - name: Prepara il file
+        run: |
+          mkdir -p dist-apk
+          cp app/android/app/build/outputs/apk/debug/app-debug.apk dist-apk/VoLoRa-V3.apk
+          (cd dist-apk && sha256sum VoLoRa-V3.apk > SHA256SUMS && ls -l)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: volora3-apk
+          path: dist-apk/*
+          if-no-files-found: error
+
   pages:
     name: Pubblica su GitHub Pages
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [firmware, firmware-v3]
+    needs: [firmware, firmware-v3, app-android]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -244,6 +291,7 @@ jobs:
           node tests/page/run_nodo.js _site
           node tests/page/run_telefono.js _site
           node tests/page/run_telefono_ws.js _site
+          node tests/page/run_app_shim.js _site
           node tests/page/run_v3.js _site
       - uses: actions/configure-pages@v5
         with:

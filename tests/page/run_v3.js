@@ -48,6 +48,7 @@ const check = (c, m) => { if (!c) { console.log('FALLITO: ' + m); fails++; } els
     check(await page.isHidden('#missing'), `[${scheme}] con il firmware pubblicato l'avviso di mancanza non compare`);
     const text = await page.textContent('body');
     check(/mai eseguito su una scheda/.test(text) && /115200/.test(text) && /BOOST ON RISCHIO/.test(text) && /IOF ON RISCHIO/.test(text) && /IZ5IOF/.test(text), `[${scheme}] la pagina dice che e' uno studio mai provato su schede, la seriale e i due livelli di potenza`);
+    check(/VoLoRa-V3\.apk/.test(await page.content()) && /mai provata su un telefono/.test(text), `[${scheme}] la pagina ha il collegamento all'app Android e dice che e' uno studio`);
     check(/le impostazioni salvate nella scheda restano/.test(text), `[${scheme}] la pagina dice che le impostazioni restano`);
     check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `[${scheme}] nessuno scorrimento orizzontale a 390 px`);
     check(errors.length === 0, `[${scheme}] nessun errore in console${errors.length ? ': ' + errors.join(' | ') : ''}`);

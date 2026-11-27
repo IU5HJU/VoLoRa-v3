@@ -275,6 +275,7 @@ function onEvt(b) {
 }
 // Durante un invio lungo lo schermo del telefono non deve spegnersi: un collegamento che cade per 60 s fa fallire l'invio
 async function wakeLock(on) {
+  if (window.__keepAwake) { await window.__keepAwake(on); return; }       // nell'app Android: il plugin dello schermo acceso
   try {
     if (on && navigator.wakeLock && !S.wl) { S.wl = await navigator.wakeLock.request('screen'); S.wl.addEventListener('release', () => { S.wl = null; }); }
     else if (!on && S.wl) { await S.wl.release(); S.wl = null; }

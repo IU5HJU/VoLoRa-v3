@@ -1,0 +1,11 @@
+{
+  "appId": "it.iu5hju.volora3",
+  "appName": "VoLoRa V3",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

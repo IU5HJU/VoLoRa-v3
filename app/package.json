@@ -1,0 +1,20 @@
+{
+  "name": "volora3-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "App Android di VoLoRa V3: racchiude la pagina del telefono (site/telefono.html) e parla con la scheda via Bluetooth LE. STUDIO.",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "www": "node scripts/build-www.js"
+  },
+  "dependencies": {
+    "@capacitor-community/bluetooth-le": "8.4.0",
+    "@capacitor-community/keep-awake": "8.0.1",
+    "@capacitor/android": "8.6.3",
+    "@capacitor/core": "8.6.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.3",
+    "esbuild": "0.28.2"
+  }
+}

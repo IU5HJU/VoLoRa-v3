@@ -2,6 +2,7 @@
 # Assembla il sito statico (pagina di installazione del firmware di misura) in una cartella.
 #   tools/make_site.sh <cartella-artefatti> <cartella-uscita> <versione> <commit>
 # <cartella-artefatti> contiene firmware-t3/ e firmware-tbeam1262/ (come li scarica actions/download-artifact), ognuna con web_factory.bin.
+# App Android (facoltativa): <cartella-artefatti>/volora3-apk/VoLoRa-V3.apk -> app/VoLoRa-V3.apk
 # Firmware V3: <cartella-artefatti>/firmware-v3-<env>/ con bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin (env: mobile_t3 mobile_tbeam1262 mobile_ble_t3 mobile_ble_tbeam1262 bench_t3 bench_tbeam1262 ble_sim_t3 ble_sim_tbeam1262).
 # Struttura prodotta: index.html, firmware-v3.html, version.json, firmware/<scheda>/{web_factory.bin,manifest.json}, firmware-v3/<env>/{4 binari,manifest.json}
 # Il firmware di misura non salva impostazioni, quindi si scrive l'immagine intera all'indirizzo 0 (un solo pezzo).
@@ -59,6 +60,13 @@ for env in mobile_t3 mobile_tbeam1262 mobile_ble_t3 mobile_ble_tbeam1262 bench_t
 }
 JSON
 done
+
+# App Android (APK debug firmato con la chiave di debug): si installa a mano; poi funziona senza Internet
+if [ -f "$in/volora3-apk/VoLoRa-V3.apk" ]; then
+  mkdir -p "$out/app"
+  cp "$in/volora3-apk/VoLoRa-V3.apk" "$out/app/VoLoRa-V3.apk"
+  echo "app Android inclusa: $(wc -c < "$out/app/VoLoRa-V3.apk") byte"
+fi
 
 cat > "$out/version.json" <<JSON
 { "version": "$version", "commit": "$commit" }

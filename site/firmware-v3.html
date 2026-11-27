@@ -94,6 +94,13 @@ STATO</pre>
     <p class="muted">Cosa guardare e come riferirlo: <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/firmware-v3.md">documentazione del firmware V3</a>.</p>
   </section>
 
+  <section id="app">
+    <h2>App Android (Bluetooth)</h2>
+    <p>Un&rsquo;app che racchiude la pagina del telefono e parla con la scheda via <strong>Bluetooth LE</strong>: si installa una volta e poi <strong>funziona senza Internet</strong>, senza lasciare la rete mobile. Va con i firmware &ldquo;mobile Bluetooth&rdquo;.</p>
+    <p><a href="app/VoLoRa-V3.apk"><strong>Scarica VoLoRa-V3.apk</strong></a> <span class="muted">(Android 7 o pi&ugrave;)</span></p>
+    <p class="hint"><strong>Studio, mai provata su un telefono.</strong> L&rsquo;APK &egrave; firmato con la chiave di prova di Android (non &egrave; sul Play Store): dopo averlo scaricato, apri il file e consenti l&rsquo;installazione da questa fonte; Play Protect pu&ograve; avvisare. Al primo avvio consenti il Bluetooth e la posizione (serve per il GPS del telefono). Accoppia con il codice a 6 cifre che esce sulla seriale e sul display della scheda.</p>
+  </section>
+
   <section id="potenza">
     <h2>3. Potenza estrema (rischio tecnico)</h2>
     <p>Di base si trasmette a <strong>+17 dBm</strong>. Sulla seriale (mobile e banco) esistono due livelli estremi, sempre spenti all&rsquo;avvio e mai salvati: <code>BOOST ON RISCHIO</code> (+20 dBm, ogni scheda) e, solo sul T-Beam con SX1262, <code>IOF ON RISCHIO</code> (+22 dBm, il massimo del chip, dedicato a IZ5IOF Andrea). <code>BOOST OFF</code> / <code>IOF OFF</code> tornano a +17 dBm, <code>BOOST STATUS</code> / <code>IOF STATUS</code> mostrano potenza e ciclo di lavoro. Il firmware non li spegne da solo: restano i limiti tecnici (calore, corrente, antenna adattata, ricevitori vicini saturati). Dettagli: <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/boost.md">boost.md</a>.</p>
