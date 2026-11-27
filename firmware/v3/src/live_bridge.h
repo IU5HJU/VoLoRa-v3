@@ -16,10 +16,12 @@ namespace ble {
 constexpr int kLiveBlocks = 8;            // 8 kB di RAM: una finestra di 16 frame da 15 pezzi sono 3,8 kB (fino a 5 blocchi)
 constexpr int kLiveAhead = 3;             // blocchi chiesti in anticipo oltre quello che serve
 constexpr double kLiveBudgetS = 600.0;
+constexpr uint8_t kDiagStall = 100, kDiagCancelled = 101;     // E_DIAG: oltre ai motivi del protocollo (FailKind 0-7): telefono sparito, annullato
 constexpr size_t kRxChunk = 48;           // byte per notifica su data_out (MTU minimo 64 meno 3 meno 5 di intestazione)
 
 struct LiveSink {
   virtual ~LiveSink() {}
+  virtual void log(const char* line) { (void)line; }                                          // riga per il registro delle prove (opzionale)
   virtual void evt(const uint8_t* d, size_t n) = 0;                                          // notifica su `evt`
   virtual void rxChunk(uint16_t obj, uint32_t off, const uint8_t* d, size_t n) = 0;          // notifica su `data_out` (il guscio mette obj(2) off(3) davanti)
 };
@@ -112,11 +114,11 @@ class LiveBridge : public img::ObjectSource {
     pumpRx();
     watchRx();
     if (!have_) return;
-    if (st_->sendFinished()) { finishSend(st_->sendOk() ? DONE_DELIVERED : DONE_FAILED); return; }
+    if (st_->sendFinished()) { diag(static_cast<uint8_t>(st_->sendFailure())); finishSend(st_->sendOk() ? DONE_DELIVERED : DONE_FAILED); return; }
     if (stallSince_ > 0) {
       const double d = now - stallSince_;
       if (d * 1000 > stats_.maxStallMs) stats_.maxStallMs = static_cast<uint32_t>(d * 1000);
-      if (d > kStallTimeoutS) { st_->cancelSend(); finishSend(DONE_FAILED); return; }
+      if (d > kStallTimeoutS) { diag(kDiagStall); st_->cancelSend(); finishSend(DONE_FAILED); return; }
     }
     progress();
   }
@@ -178,6 +180,22 @@ class LiveBridge : public img::ObjectSource {
       last_[lastN_].obj = obj; last_[lastN_].status = status; lastN_++;
     }
     uint8_t o[4]; o[0] = E_DONE; detail::wr(o + 1, obj, 2); o[3] = status; notify(o, 4);
+  }
+  // Riepilogo di fine invio (E_DIAG 0x8A): obj(2) motivo(1) livelli(1) byte(3) gradino(1) % confermata(1) secondi(2). Il motivo e' il FailKind del protocollo
+  // (0 = consegnato; 1 hello, 2 negoziazione, 3 offerta, 4 budget, 5 progresso, 6 ricerca, 7 DONE) oppure 100 telefono sparito, 101 annullato. Serve a capire perche' un invio e' fallito.
+  void diag(uint8_t why) {
+    uint8_t o[12];
+    o[0] = E_DIAG; detail::wr(o + 1, obj_, 2); o[3] = why; o[4] = static_cast<uint8_t>(st_->layersDelivered()); detail::wr(o + 5, st_->bytesDelivered(), 3);
+    o[8] = static_cast<uint8_t>(st_->link().rung);
+    const int t = st_->piecesTotal();
+    o[9] = static_cast<uint8_t>(t > 0 ? 100 * st_->piecesAcked() / t : 0);
+    const double el = now_ - beganAt_;
+    const uint32_t secs = static_cast<uint32_t>(el < 0 ? 0 : el > 65535 ? 65535 : el);
+    detail::wr(o + 10, secs, 2);
+    notify(o, 12);
+    char line[112];
+    snprintf(line, sizeof(line), "fine invio obj %u: motivo %u, livelli %u, byte %u, R%u, %u%% confermato, %u s", static_cast<unsigned>(obj_), why, o[4], static_cast<unsigned>(st_->bytesDelivered()), o[8], o[9], static_cast<unsigned>(secs));
+    sink_->log(line);
   }
   void finishSend(uint8_t status) {
     const uint16_t obj = obj_;
@@ -284,6 +302,8 @@ class LiveBridge : public img::ObjectSource {
     for (int i = 0; i < kLiveBlocks; i++) { slot_[i].blk = -1; slot_[i].fill = 0; slot_[i].complete = false; slot_[i].used = 0; }
     asked_ = 0; served_ = 0; crcNext_ = 0; crcRun_ = 0; stallSince_ = 0; pct_ = 0; lastProgress_ = now_;
     have_ = true;
+    beganAt_ = now_;
+    { char line[96]; snprintf(line, sizeof(line), "inizio invio obj %u: tipo %u, %u byte, %u livelli", static_cast<unsigned>(obj), kind, static_cast<unsigned>(size), nl_); sink_->log(line); }
     if (!st_->startSend(this, size, endPieces, nl_, kLiveBudgetS, obj, img::kProbeCount, kind, pos_)) { have_ = false; err(obj, ERR_BUSY); return true; }
     updateGate();
     const double eta = estimateSeconds(size, st_->link().rung, sx1262_);
@@ -294,6 +314,7 @@ class LiveBridge : public img::ObjectSource {
   }
   void cancel(uint16_t obj) {
     if (!have_ || obj_ != obj) { err(obj, ERR_UNKNOWN_OBJ); return; }
+    diag(kDiagCancelled);
     st_->cancelSend();
     finishSend(DONE_CANCELLED);
   }
@@ -384,7 +405,7 @@ class LiveBridge : public img::ObjectSource {
   uint8_t pos_[7] = {0};
   bool havePos_ = false, havePhone_ = false, haveGps_ = false, connected_ = true, have_ = false;
   uint8_t phonePos_[7] = {0}, gpsPos_[7] = {0};
-  double now_ = 0, stallSince_ = 0, lastProgress_ = 0;
+  double now_ = 0, stallSince_ = 0, lastProgress_ = 0, beganAt_ = 0;
   Stats stats_;
   // oggetto in uscita
   uint16_t obj_ = 0;

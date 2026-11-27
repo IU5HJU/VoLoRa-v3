@@ -49,11 +49,14 @@ int main() {
   CHECK(std::strcmp(s.l47, "Manca la posizione") == 0, "senza posizione lo dice");
   in.hasPos = true;
   // senza telefono: schermata di accoppiamento
-  in.bleConnected = false; in.pairCode = 917558; in.bleName = "VoLoRa-V3 IU5HJU";
+  in.bleConnected = false; in.pairSecret = "917558"; in.pairBottom = "VoLoRa-V3 IU5HJU";
   build(in, &s); dump("senza telefono: accoppiamento", s);
   CHECK(s.kind == Kind::Pairing && std::strcmp(s.code, "917558") == 0 && std::strcmp(s.name, "VoLoRa-V3 IU5HJU") == 0 && fits(s), "accoppiamento: codice a 6 cifre e nome Bluetooth");
-  in.pairCode = 42; build(in, &s);
-  CHECK(std::strcmp(s.code, "000042") == 0, "il codice ha sempre 6 cifre");
+  // Wi-Fi della scheda: la password a 8 cifre in carattere doppio, la rete in alto e l'indirizzo in basso
+  in.pairTop = "WiFi VoLoRa-IU5HJU"; in.pairSecret = "48291637"; in.pairBottom = "http://192.168.4.1"; build(in, &s); dump("senza telefono: Wi-Fi della scheda", s);
+  CHECK(s.kind == Kind::Pairing && std::strcmp(s.l38, "WiFi VoLoRa-IU5HJU") == 0 && std::strcmp(s.code, "48291637") == 0 && std::strcmp(s.name, "http://192.168.4.1") == 0 && fits(s), "Wi-Fi: rete, password a 8 cifre e indirizzo");
+  in.pairTop = "Collega il telefono"; in.pairSecret = "000042"; in.pairBottom = "VoLoRa-V3 IU5HJU"; build(in, &s);
+  CHECK(std::strcmp(s.code, "000042") == 0, "il codice si mostra com'e'");
   in.bleConnected = true;
   // senza nominativo
   in.call = ""; in.noCall = true; in.bleConnected = false; build(in, &s); dump("senza nominativo", s);

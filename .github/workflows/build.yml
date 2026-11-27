@@ -103,9 +103,13 @@ jobs:
       matrix:
         include:
           - env: mobile_t3
-            board: T3 V1.6.1 completa
+            board: T3 V1.6.1 completa Wi-Fi
           - env: mobile_tbeam1262
-            board: T-Beam V1.2 SX1262 completa
+            board: T-Beam V1.2 SX1262 completa Wi-Fi
+          - env: mobile_ble_t3
+            board: T3 V1.6.1 completa Bluetooth
+          - env: mobile_ble_tbeam1262
+            board: T-Beam V1.2 SX1262 completa Bluetooth
           - env: ble_sim_t3
             board: T3 solo BLE (radio simulata)
           - env: ble_sim_tbeam1262
@@ -239,6 +243,7 @@ jobs:
           node tests/page/run.js _site
           node tests/page/run_nodo.js _site
           node tests/page/run_telefono.js _site
+          node tests/page/run_telefono_ws.js _site
           node tests/page/run_v3.js _site
       - uses: actions/configure-pages@v5
         with:

@@ -33,9 +33,11 @@ struct Input {
   bool radioOk = true;
   bool noCall = false;                                    // nominativo non impostato: la scheda non trasmette
   // telefono
-  bool bleConnected = false;
-  uint32_t pairCode = 0;
-  const char* bleName = "VoLoRa-V3";
+  bool bleConnected = false;                              // telefono collegato (Bluetooth o Wi-Fi della scheda)
+  // schermata di collegamento (telefono non collegato): riga in alto, segreto in carattere doppio (codice Bluetooth a 6 cifre o password Wi-Fi a 8), riga in basso
+  const char* pairTop = "Collega il telefono";
+  const char* pairSecret = "";
+  const char* pairBottom = "VoLoRa-V3";
   bool hasPos = false;
   char posText[8] = "";
   // GPS (T-Beam): acceso, fix, satelliti
@@ -72,7 +74,7 @@ struct Screen {
   bool bigFits = true;           // false: va a testo piccolo
   char l38[24] = "", l47[24] = "";
   int bar = -1;                  // barra di avanzamento sulla riga 47 (0-100), -1 nessuna
-  char code[8] = "";             // schermata di accoppiamento: codice a 6 cifre
+  char code[12] = "";            // schermata di collegamento: codice Bluetooth a 6 cifre o password Wi-Fi a 8
   char name[24] = "";            // nome Bluetooth
   char left[12] = "";            // ultima riga a sinistra
   char batt[20] = "";            // ultima riga a destra
@@ -117,7 +119,7 @@ inline void build(const Input& in, Screen* s) {
   if (in.noCall) {                                          // come la v2 con N0CALL: "SOLO RX" e "Imposta il nominativo"
     std::snprintf(s->big, sizeof(s->big), "SOLO RX");
     put(s->l38, sizeof(s->l38), "Imposta il nominativo");
-    std::snprintf(b, sizeof(b), "BT codice %06u", static_cast<unsigned>(in.pairCode % 1000000u));
+    std::snprintf(b, sizeof(b), "Codice %.8s", in.pairSecret);
     put(s->l47, sizeof(s->l47), b);
   } else if (in.sending) {
     std::snprintf(s->big, sizeof(s->big), "INVIO");
@@ -135,9 +137,9 @@ inline void build(const Input& in, Screen* s) {
     put(s->l47, sizeof(s->l47), b);
   } else if (!in.bleConnected) {                            // senza telefono la scheda non puo' mandare ne' accettare: serve il codice per collegarlo
     s->kind = Kind::Pairing;
-    std::snprintf(s->code, sizeof(s->code), "%06u", static_cast<unsigned>(in.pairCode % 1000000u));
-    put(s->name, sizeof(s->name), in.bleName);
-    put(s->l38, sizeof(s->l38), "Collega il telefono");
+    std::snprintf(s->code, sizeof(s->code), "%.8s", in.pairSecret);
+    put(s->name, sizeof(s->name), in.pairBottom);
+    put(s->l38, sizeof(s->l38), in.pairTop);
   } else {
     std::snprintf(s->big, sizeof(s->big), "ASCOLTO");
     if (in.haveLast && in.lastAgoMs < kLastShownMs) {

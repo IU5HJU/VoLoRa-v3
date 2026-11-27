@@ -31,13 +31,14 @@
 <body>
 <main>
   <h1>VoLoRa V3: telefono</h1>
-  <p class="muted">Invia <strong>testo</strong>, <strong>piccoli file</strong> e <strong>immagini</strong> attraverso la scheda via Bluetooth LE. <strong>Studio: il firmware della scheda con il servizio BLE c'è (<a href="firmware-v3.html">si installa da qui</a>) ma non è mai stato eseguito su una scheda</strong>; questa pagina segue la specifica <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/ble-telefono.md">ble-telefono.md</a> ed è provata solo con una scheda finta. Il <strong>buffer è il telefono</strong>: la scheda chiede i blocchi quando la radio ne ha bisogno, quindi tieni la pagina aperta e il telefono vicino finché l'invio non è finito.</p>
+  <p class="muted">Invia <strong>testo</strong>, <strong>piccoli file</strong> e <strong>immagini</strong> attraverso la scheda, con il suo Wi-Fi (la pagina sta nella scheda) o con il Bluetooth LE. <strong>Studio: il firmware della scheda con il servizio BLE c'è (<a href="firmware-v3.html">si installa da qui</a>) ma non è mai stato eseguito su una scheda</strong>; questa pagina segue la specifica <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/ble-telefono.md">ble-telefono.md</a> ed è provata solo con una scheda finta. Il <strong>buffer è il telefono</strong>: la scheda chiede i blocchi quando la radio ne ha bisogno, quindi tieni la pagina aperta e il telefono vicino finché l'invio non è finito.</p>
 
   <section>
     <h2>1. Collegamento</h2>
     <div id="nobt" class="warn" hidden>Questo browser non supporta il Bluetooth LE dalle pagine web (Web Bluetooth). Usa <strong>Chrome su Android</strong> o su computer. <strong>Su iPhone non funziona</strong>: serve un'applicazione, ancora da scrivere.</div>
     <button type="button" id="connetti">Collega la scheda</button>
     <button type="button" class="sec" id="scollega" disabled>Scollega</button>
+    <p id="modo" class="hint"></p>
     <p id="stato" class="muted" role="status">Non collegato.</p>
     <p id="info" class="muted" hidden></p>
   </section>
@@ -95,6 +96,11 @@
   <section>
     <h2>Registro</h2>
     <pre id="log"></pre>
+    <div id="regscheda" hidden>
+      <button type="button" class="sec" id="regbtn">Registro della scheda</button>
+      <p class="hint">Gli ultimi eventi della scheda (gradino, riepilogo di ogni invio con il motivo di un fallimento): si salva come file per mandarlo a chi segue le prove.</p>
+      <pre id="regtxt" hidden></pre>
+    </div>
   </section>
 </main>
 <script src="jpeg_prog.js"></script>
@@ -104,7 +110,17 @@
 const SERVICE = 'c49a1433-9f1b-4af8-9826-951953e47edb';
 const CHARS = { cmd: 'c49a1434-9f1b-4af8-9826-951953e47edb', data_in: 'c49a1435-9f1b-4af8-9826-951953e47edb', evt: 'c49a1436-9f1b-4af8-9826-951953e47edb', data_out: 'c49a1437-9f1b-4af8-9826-951953e47edb' };
 const C = { HELLO: 0x01, POSITION: 0x02, BEGIN: 0x10, CANCEL: 0x12, RESUME: 0x13, RX_ACK: 0x14 };
-const E = { INFO: 0x80, BEGIN_OK: 0x81, ERR: 0x82, PROGRESS: 0x85, DONE: 0x86, RX: 0x87, PULL: 0x89 };
+const E = { INFO: 0x80, BEGIN_OK: 0x81, ERR: 0x82, PROGRESS: 0x85, DONE: 0x86, RX: 0x87, PULL: 0x89, DIAG: 0x8A };
+// Come arriva alla scheda: 'ble' (Web Bluetooth, la pagina viene da https) oppure 'ws' (la pagina e' servita dalla scheda sul suo Wi-Fi e parla con lei via WebSocket: funziona offline e
+// senza Web Bluetooth, che esige una pagina https). Si sceglie da solo: pagina http servita da un indirizzo che non e' localhost = scheda. Forzabile con ?modo=ws oppure ?modo=ble.
+const MODE = (() => {
+  const q = new URLSearchParams(location.search).get('modo');
+  if (q === 'ws' || q === 'ble') return q;
+  if (window.__telMode) return window.__telMode;
+  return (location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) ? 'ws' : 'ble';
+})();
+const WSCH = { CMD: 0, DATA_IN: 1, EVT: 2, DATA_OUT: 3 };      // primo byte di ogni messaggio WebSocket
+const DIAG_MOTIVI = { 0: 'consegnato', 1: 'nessuna risposta al primo contatto (HELLO)', 2: 'negoziazione del gradino fallita', 3: "offerta non accettata (l'altra scheda ha il telefono collegato?)", 4: 'tempo massimo scaduto (budget 600 s)', 5: 'nessun progresso', 6: 'collegamento perso e non ritrovato', 7: 'conferma finale non arrivata', 100: 'telefono sparito (60 s senza dati)', 101: 'annullato' };
 const KIND = { testo: 0, file: 1, img: 2 };
 const ERRORI = { 1: 'la scheda è occupata con un altro oggetto', 2: 'oggetto troppo grande (testo 1 kB, oggetto 64 kB)', 3: 'memoria', 4: 'manca la posizione: impostala qui sopra', 5: 'comando non valido', 6: 'CRC', 7: 'tipo di oggetto non valido', 8: 'oggetto sconosciuto (la sessione è scaduta)', 9: 'la scheda non ha il nominativo' };
 const MAX_TEXT = 1024, MAX_OBJECT = 65536;
@@ -131,7 +147,7 @@ function encBegin(obj, kind, data, dest, name, w, h, ends) {
 const cmdObj = (code, obj) => new Uint8Array([code, ...u16(obj)]);
 function decEvent(b) {
   const c = b[0];
-  const need = { [E.BEGIN_OK]: 9, [E.ERR]: 4, [E.PROGRESS]: 8, [E.DONE]: 4, [E.PULL]: 8 }[c];
+  const need = { [E.BEGIN_OK]: 9, [E.ERR]: 4, [E.PROGRESS]: 8, [E.DONE]: 4, [E.PULL]: 8, [E.DIAG]: 12 }[c];
   if (c === E.INFO) { if (b.length < 13 || b.length < 13 + b[12]) return null; return { c, version: b[1], chip: b[2] ? 'SX1262' : 'SX1278', mask: rd(b, 3, 2), block: rd(b, 5, 3), maxObj: rd(b, 8, 3), posKnown: !!b[11], call: dec.decode(b.slice(13, 13 + b[12])) }; }
   if (c === E.RX) { if (b.length < 12 || b.length < 12 + b[11]) return null; return { c, obj: rd(b, 1, 2), kind: b[3], size: rd(b, 4, 3), crc: rd(b, 7, 4), from: dec.decode(b.slice(12, 12 + b[11])) }; }
   if (!need || b.length !== need) return null;
@@ -140,6 +156,7 @@ function decEvent(b) {
   if (c === E.ERR) return { c, obj, code: b[3] };
   if (c === E.PROGRESS) return { c, obj, pct: b[3], rung: b[4], eta: rd(b, 5, 3) };
   if (c === E.DONE) return { c, obj, status: b[3] };
+  if (c === E.DIAG) return { c, obj, why: b[3], layers: b[4], bytes: rd(b, 5, 3), rung: b[8], pct: b[9], secs: rd(b, 10, 2) };
   return { c, obj, off: rd(b, 3, 3), len: rd(b, 6, 2) };
 }
 
@@ -153,12 +170,19 @@ function refreshButtons() {
   $('invia').disabled = !(S.connected && S.payload && !busy);
   $('annulla').disabled = !busy;
   $('scollega').disabled = !S.connected;
-  $('connetti').disabled = S.connected || !navigator.bluetooth;
+  $('connetti').disabled = S.connected || (MODE === 'ble' && !navigator.bluetooth);
 }
 
-// ---------------------------------------------------------------- BLE
-async function writeCmd(bytes) { await S.ch.cmd.writeValue(bytes); }
-async function writeData(bytes) { if (S.ch.data_in.writeValueWithoutResponse) await S.ch.data_in.writeValueWithoutResponse(bytes); else await S.ch.data_in.writeValue(bytes); }
+// ---------------------------------------------------------------- trasporto: BLE o WebSocket
+function wsSend(ch, bytes) { const m = new Uint8Array(bytes.length + 1); m[0] = ch; m.set(bytes, 1); S.ws.send(m); }
+async function writeCmd(bytes) { if (MODE === 'ws') { wsSend(WSCH.CMD, bytes); return; } await S.ch.cmd.writeValue(bytes); }
+async function writeData(bytes) {
+  if (MODE === 'ws') {
+    while (S.ws && S.ws.bufferedAmount > 8192) await new Promise(r => setTimeout(r, 10));           // la coda del WebSocket non deve gonfiarsi
+    wsSend(WSCH.DATA_IN, bytes); return;
+  }
+  if (S.ch.data_in.writeValueWithoutResponse) await S.ch.data_in.writeValueWithoutResponse(bytes); else await S.ch.data_in.writeValue(bytes);
+}
 async function attach(server) {
   const svc = await server.getPrimaryService(SERVICE);
   for (const k of Object.keys(CHARS)) S.ch[k] = await svc.getCharacteristic(CHARS[k]);
@@ -167,15 +191,33 @@ async function attach(server) {
   await S.ch.evt.startNotifications();
   await S.ch.data_out.startNotifications();
 }
+function wsOpen() {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(window.__wsUrl || ('ws://' + location.host + '/ws'));
+    ws.binaryType = 'arraybuffer';
+    let opened = false;
+    ws.onopen = () => { opened = true; S.ws = ws; resolve(ws); };
+    ws.onerror = () => { if (!opened) reject(new Error('la scheda non risponde: sei collegato al suo Wi-Fi?')); };
+    ws.onclose = () => { if (S.ws === ws) { S.ws = null; onDisconnect(); } else if (!opened) reject(new Error('la scheda non risponde')); };
+    ws.onmessage = ev => { const b = new Uint8Array(ev.data); if (b.length < 2) return; if (b[0] === WSCH.EVT) onEvt(b.subarray(1)); else if (b[0] === WSCH.DATA_OUT) onDataOut(b.subarray(1)); };
+  });
+}
 async function connetti() {
   try {
-    if (!S.dev) S.dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE] }] });
-    if (!S.listening) { S.dev.addEventListener('gattserverdisconnected', onDisconnect); S.listening = true; }
-    setStato('Mi collego a ' + (S.dev.name || 'scheda') + '…');
-    const server = await S.dev.gatt.connect();
-    await attach(server);
-    S.connected = true; S.wanted = true;
-    setStato('Collegato a ' + (S.dev.name || 'scheda') + '.', 'ok');
+    if (MODE === 'ws') {
+      setStato('Mi collego alla scheda…');
+      await wsOpen();
+      S.connected = true; S.wanted = true;
+      setStato('Collegato alla scheda (Wi-Fi).', 'ok');
+    } else {
+      if (!S.dev) S.dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE] }] });
+      if (!S.listening) { S.dev.addEventListener('gattserverdisconnected', onDisconnect); S.listening = true; }
+      setStato('Mi collego a ' + (S.dev.name || 'scheda') + '…');
+      const server = await S.dev.gatt.connect();
+      await attach(server);
+      S.connected = true; S.wanted = true;
+      setStato('Collegato a ' + (S.dev.name || 'scheda') + '.', 'ok');
+    }
     await writeCmd(new Uint8Array([C.HELLO, 1]));
     if (S.pos) await sendPos();
     if (S.tx && ['begin', 'sending'].includes(S.tx.state)) await writeCmd(cmdObj(C.RESUME, S.tx.obj));   // dopo un'interruzione la scheda richiede i blocchi che le servono
@@ -202,7 +244,7 @@ async function riprova(n) {
   if (!S.connected && S.wanted) setStato('Non riesco a ricollegarmi: premi "Collega la scheda".', 'err');
   refreshButtons();
 }
-async function scollega() { S.wanted = false; if (S.dev && S.dev.gatt && S.dev.gatt.connected) S.dev.gatt.disconnect(); S.connected = false; refreshButtons(); setStato('Scollegato.'); }
+async function scollega() { S.wanted = false; if (MODE === 'ws') { const w = S.ws; S.ws = null; if (w) w.close(); } else if (S.dev && S.dev.gatt && S.dev.gatt.connected) S.dev.gatt.disconnect(); S.connected = false; refreshButtons(); setStato('Scollegato.'); }
 
 // ---------------------------------------------------------------- eventi dalla scheda
 function onEvt(b) {
@@ -218,15 +260,25 @@ function onEvt(b) {
   if (ev.c === E.RX) { riceviOfferta(ev); return; }
   const t = S.tx;
   if (!t || ev.obj !== t.obj) { log('evento per un oggetto che non conosco: ' + ev.obj); return; }
-  if (ev.c === E.BEGIN_OK) { t.state = 'sending'; t.eta = ev.eta; t.rung = ev.rung; msg(`Invio in corso. Tempo di radio stimato: circa ${fmtS(ev.eta)} al gradino R${ev.rung}.`); }
+  if (ev.c === E.BEGIN_OK) { wakeLock(true); t.state = 'sending'; t.eta = ev.eta; t.rung = ev.rung; msg(`Invio in corso. Tempo di radio stimato: circa ${fmtS(ev.eta)} al gradino R${ev.rung}.` + (ev.eta > 540 ? ' Attenzione: oltre il tempo massimo di 600 s la scheda si ferma al livello gia\' consegnato (una dimensione piu\' piccola o un gradino piu\' veloce).' : '')); }
   else if (ev.c === E.PULL) { if (ev.off + ev.len > t.data.length || ev.len === 0) { log('richiesta fuori dall\'oggetto scartata'); return; } S.pulls.push([ev.off, ev.len]); servi(); }
   else if (ev.c === E.PROGRESS) { $('barra').hidden = false; $('barra').value = ev.pct; msg(`In radio: ${ev.pct}%, mancano circa ${fmtS(ev.eta)} (R${ev.rung}).`); }
-  else if (ev.c === E.ERR) { t.state = 'error'; msg(`Rifiutato dalla scheda: ${ERRORI[ev.code] || 'errore ' + ev.code}.`, 'err'); S.pulls.length = 0; }
+  else if (ev.c === E.DIAG) { t.diag = ev; log(`riepilogo: ${DIAG_MOTIVI[ev.why] || 'motivo ' + ev.why}; livelli ${ev.layers}, ${ev.bytes} byte, R${ev.rung}, ${ev.pct}% confermato, ${ev.secs} s`); }
+  else if (ev.c === E.ERR) { t.state = 'error'; wakeLock(false); msg(`Rifiutato dalla scheda: ${ERRORI[ev.code] || 'errore ' + ev.code}.`, 'err'); S.pulls.length = 0; }
   else if (ev.c === E.DONE) {
     t.state = 'done'; $('barra').hidden = false; $('barra').value = ev.status === 0 ? 100 : $('barra').value;
-    msg(ev.status === 0 ? 'Consegnato in radio.' : ev.status === 2 ? 'Annullato.' : 'Trasmissione radio fallita.', ev.status === 0 ? 'ok' : 'err');
+    const why = t.diag && t.diag.why ? ' Motivo: ' + (DIAG_MOTIVI[t.diag.why] || t.diag.why) + (t.diag.layers ? ` (consegnati ${t.diag.layers} livelli, ${t.diag.bytes} byte)` : '') + '.' : '';
+    msg((ev.status === 0 ? 'Consegnato in radio.' : ev.status === 2 ? 'Annullato.' : 'Trasmissione radio fallita.') + (ev.status === 0 ? '' : why), ev.status === 0 ? 'ok' : 'err');
+    wakeLock(false);
   }
   refreshButtons();
+}
+// Durante un invio lungo lo schermo del telefono non deve spegnersi: un collegamento che cade per 60 s fa fallire l'invio
+async function wakeLock(on) {
+  try {
+    if (on && navigator.wakeLock && !S.wl) { S.wl = await navigator.wakeLock.request('screen'); S.wl.addEventListener('release', () => { S.wl = null; }); }
+    else if (!on && S.wl) { await S.wl.release(); S.wl = null; }
+  } catch (e) { /* non e' un errore: il browser puo' rifiutare */ }
 }
 function fmtS(s) { return s < 90 ? s + ' s' : s < 5400 ? Math.round(s / 60) + ' min' : (s / 3600).toFixed(1) + ' h'; }
 function msg(t, cls) { const e = $('inviomsg'); e.textContent = t; e.className = cls || ''; }
@@ -366,7 +418,16 @@ $('invia').addEventListener('click', async () => {
 $('annulla').addEventListener('click', async () => { if (S.tx) { try { await writeCmd(cmdObj(C.CANCEL, S.tx.obj)); } catch (e) { log(String(e)); } S.pulls.length = 0; } });
 $('connetti').addEventListener('click', () => { S.wanted = true; connetti(); });
 $('scollega').addEventListener('click', scollega);
-if (!navigator.bluetooth) { $('nobt').hidden = false; $('connetti').disabled = true; }
+if (MODE === 'ble' && !navigator.bluetooth) { $('nobt').hidden = false; $('connetti').disabled = true; }
+$('modo').textContent = MODE === 'ws' ? 'Collegamento: Wi-Fi della scheda (questa pagina e\' nella scheda: non serve Internet).' : 'Collegamento: Bluetooth LE (Web Bluetooth).';
+$('regbtn').addEventListener('click', async () => {
+  try {
+    const t = await (await fetch('/log', { cache: 'no-store' })).text();
+    const p = $('regtxt'); p.textContent = t || '(registro vuoto)'; p.hidden = false;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/plain' })); a.download = 'registro-scheda.txt'; a.click();
+  } catch (e) { log('registro della scheda non letto: ' + e); }
+});
+if (MODE === 'ws') { $('regscheda').hidden = false; connetti(); }       // la pagina viene dalla scheda: ci si collega da soli
 setTab('testo');
 refreshButtons();
 </script>

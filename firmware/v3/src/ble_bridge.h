@@ -17,7 +17,7 @@ constexpr uint8_t kKindText = 0, kKindFile = 1, kKindImage = 2;
 // comandi (telefono -> scheda)
 constexpr uint8_t C_HELLO = 0x01, C_POSITION = 0x02, C_BEGIN = 0x10, C_CANCEL = 0x12, C_RESUME = 0x13, C_RX_ACK = 0x14;
 // eventi (scheda -> telefono)
-constexpr uint8_t E_INFO = 0x80, E_BEGIN_OK = 0x81, E_ERR = 0x82, E_PROGRESS = 0x85, E_DONE = 0x86, E_RX = 0x87, E_PULL = 0x89;
+constexpr uint8_t E_INFO = 0x80, E_BEGIN_OK = 0x81, E_ERR = 0x82, E_PROGRESS = 0x85, E_DONE = 0x86, E_RX = 0x87, E_PULL = 0x89, E_DIAG = 0x8A;   // E_DIAG: solo ponte collegato alla radio (live_bridge.h), riepilogo di fine invio
 constexpr uint8_t ERR_BUSY = 1, ERR_TOO_BIG = 2, ERR_NO_POSITION = 4, ERR_BAD_FRAME = 5, ERR_BAD_KIND = 7, ERR_UNKNOWN_OBJ = 8, ERR_NO_CALL = 9;
 constexpr uint8_t DONE_DELIVERED = 0, DONE_FAILED = 1, DONE_CANCELLED = 2;
 constexpr uint32_t kBlock = 1024;

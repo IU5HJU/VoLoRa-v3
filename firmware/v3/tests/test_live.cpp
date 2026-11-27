@@ -29,6 +29,9 @@ struct Phone : LiveSink {
   double latency = 0.10, chunkGap = 0.015;
   size_t chunk = 100;
   int pulls = 0, done = -1, beginOk = 0, progress = 0, rxEvents = 0;
+  int diagWhy = -1, diagLayers = -1, diagRung = -1, diagPct = -1, diagSecs = -1; uint32_t diagBytes = 0;
+  std::vector<std::string> logs;
+  void log(const char* l) override { logs.push_back(l); }
   std::vector<int> errs;
   std::vector<uint8_t> rx;
   uint16_t rxObj = 0; uint8_t rxKind = 0; uint32_t rxSize = 0, rxCrc = 0; std::string rxFrom;
@@ -56,6 +59,7 @@ struct Phone : LiveSink {
     else if (d[0] == E_DONE) done = d[3];
     else if (d[0] == E_ERR) errs.push_back(d[3]);
     else if (d[0] == E_PROGRESS) progress++;
+    else if (d[0] == E_DIAG && n == 12) { diagWhy = d[3]; diagLayers = d[4]; diagBytes = bd::rd(d + 5, 3); diagRung = d[8]; diagPct = d[9]; diagSecs = static_cast<int>(bd::rd(d + 10, 2)); }
     else if (d[0] == E_RX) {
       rxEvents++;
       rxObj = static_cast<uint16_t>(bd::rd(d + 1, 2)); rxKind = d[3]; rxSize = bd::rd(d + 4, 3); rxCrc = bd::rd(d + 7, 4);
@@ -151,6 +155,8 @@ int main() {
     std::printf("testo 200 B       -100 dBm: E_DONE %d dopo %.1f s, E_RX %d, pull %d\n", r.pA.done, r.w.t, r.pB.rxEvents, r.pA.pulls);
     r.settleB();
     checkDelivered("testo", r, obj, kKindText);
+    CHECK(r.pA.diagWhy == 0 && r.pA.diagLayers == 1 && r.pA.diagBytes == 200 && r.pA.diagPct == 100, "E_DIAG consegnato: motivo 0, 1 livello, 200 byte, 100%% (%d %d %u %d)", r.pA.diagWhy, r.pA.diagLayers, r.pA.diagBytes, r.pA.diagPct);
+    CHECK(r.pA.logs.size() == 2 && r.pA.logs[0].find("inizio invio") == 0 && r.pA.logs[1].find("fine invio") == 0, "il registro ha l'inizio e la fine dell'invio");
   }
   // 2. immagine a tre livelli (fine dei livelli allineata a 16 byte), canale mediocre
   {
@@ -214,6 +220,7 @@ int main() {
     const std::vector<uint8_t> c = cmd3(C_CANCEL, 10);
     r.brA.onCommand(c.data(), c.size());
     CHECK(r.pA.done == DONE_CANCELLED, "annullo: E_DONE annullato (%d)", r.pA.done);
+    CHECK(r.pA.diagWhy == kDiagCancelled, "annullo: E_DIAG 101 (%d)", r.pA.diagWhy);
     CHECK(!r.a.sending(), "annullo: la stazione non trasmette piu'");
     const std::vector<uint8_t> o2 = randomBytes(300, 56);
     r.pA.done = -1;
@@ -239,6 +246,7 @@ int main() {
     const std::vector<uint8_t> rs = cmd3(C_RESUME, 12);
     r.brA.onCommand(rs.data(), rs.size());
     CHECK(r.pA.done == DONE_FAILED, "dopo il ritorno RESUME dice 'fallito' (%d)", r.pA.done);
+    CHECK(r.brA.stats().maxStallMs > 59000, "stallo registrato");
     CHECK(!r.a.sending(), "dopo lo stallo la stazione non trasmette piu'");
   }
   // 7. il destinatario non ha il telefono: non accetta, il mittente chiude fallito
@@ -251,6 +259,7 @@ int main() {
     r.runUntilDone(2 * 3600.0);
     std::printf("destinatario senza telefono: E_DONE %d dopo %.0f s, E_RX %d\n", r.pA.done, r.w.t, r.pB.rxEvents);
     CHECK(r.pA.done == DONE_FAILED, "senza telefono dall'altra parte l'invio fallisce (%d)", r.pA.done);
+    CHECK(r.pA.diagWhy == 3, "senza telefono dall'altra parte il motivo e' 'offerta' (%d)", r.pA.diagWhy);
     CHECK(r.pB.rxEvents == 0, "senza telefono non c'e' nessun E_RX");
   }
   // 8. l'oggetto supera quello che il destinatario puo' tenere

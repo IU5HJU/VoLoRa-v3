@@ -1,5 +1,7 @@
 # Telefono ↔ scheda via Bluetooth LE: testo, file e immagini (specifica v0.1, 26/11/2026)
 
+> **Aggiornamento 27/11/2026 — la pagina deve stare nella scheda.** Chrome permette il Web Bluetooth solo da pagine https; una pagina servita dalla scheda (http) non può usarlo. Per le prove in laboratorio ("Internet non è affidabile") le schede `mobile_*` hanno quindi un **secondo trasporto**: la scheda crea il suo **Wi-Fi** e serve la pagina del telefono da `http://192.168.4.1`, e la pagina parla con la scheda via **WebSocket** (`ws://192.168.4.1/ws`) con **gli stessi comandi ed eventi**, ogni messaggio preceduto da un byte di canale (0 `cmd`, 1 `data_in`, 2 `evt`, 3 `data_out`). Il Bluetooth resta (ambienti `mobile_ble_*`). Evento nuovo, solo ponte collegato alla radio: **`E_DIAG 0x8A`** (obj 2, motivo 1, livelli 1, byte 3, gradino 1, % confermata 1, secondi 2): riepilogo di fine invio con il motivo di un fallimento ([prove-laboratorio-v3.md](prove-laboratorio-v3.md)). Vedi [firmware-v3.md](firmware-v3.md).
+
 > **Stato: specifica e simulatore sul PC. Nessun firmware, nessuna prova su schede o telefoni.** Il simulatore è [`tools/ble_bridge.py`](../tools/ble_bridge.py), le prove sono [`tests/sim/test_ble_bridge.py`](../tests/sim/test_ble_bridge.py). Il tempo di radio è un modello (`protocollo_immagini.estimate_seconds`), non una misura.
 
 **Decisione dell'autore (26/11/2026): BLE** (non Bluetooth classico): funziona con Android e con iPhone e costa meno RAM sull'ESP32.

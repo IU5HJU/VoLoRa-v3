@@ -42,7 +42,7 @@
     <ul>
       <li><strong>Antenna a 433 MHz (o carico da 50 &Omega;, meglio un attenuatore se le schede sono vicine) collegata prima del cavo USB.</strong> Mai alimentare la scheda senza antenna o carico.</li>
       <li>Si trasmette <strong>solo con il proprio nominativo</strong>: il firmware non trasmette finch&eacute; non gli dai il nominativo (comando <code>CALL</code> sulla seriale).</li>
-      <li><strong>Seriale a 115200 baud.</strong> Il codice di accoppiamento Bluetooth esce l&agrave; ad ogni avvio.</li>
+      <li><strong>Seriale a 115200 baud.</strong> L&rsquo;avvio stampa la rete Wi-Fi e la password (o il codice Bluetooth).</li>
       <li>Serve <strong>Chrome, Edge od Opera</strong> sul computer (non Firefox, non Safari, non il telefono).</li>
     </ul>
   </div>
@@ -51,9 +51,13 @@
     <h2>1. Scegli e installa</h2>
     <label for="board">Firmware</label>
     <select id="board">
-      <optgroup label="Scheda mobile completa (telefono &rarr; radio vera)">
-        <option value="mobile_t3">T3 V1.6.1 (SX1278): mobile completa</option>
-        <option value="mobile_tbeam1262">T-Beam V1.2 (SX1262): mobile completa</option>
+      <optgroup label="Scheda mobile completa, Wi-Fi della scheda (consigliata: la pagina del telefono &egrave; nella scheda)">
+        <option value="mobile_t3">T3 V1.6.1 (SX1278): mobile Wi-Fi</option>
+        <option value="mobile_tbeam1262">T-Beam V1.2 (SX1262): mobile Wi-Fi</option>
+      </optgroup>
+      <optgroup label="Scheda mobile completa, Bluetooth LE (la pagina viene da Internet)">
+        <option value="mobile_ble_t3">T3 V1.6.1 (SX1278): mobile Bluetooth</option>
+        <option value="mobile_ble_tbeam1262">T-Beam V1.2 (SX1262): mobile Bluetooth</option>
       </optgroup>
       <optgroup label="Prova a banco fra due schede (senza Bluetooth)">
         <option value="bench_t3">T3 V1.6.1 (SX1278): prova a banco</option>
@@ -82,7 +86,8 @@
 STATO</pre>
     <p><code>FREQ</code> mostra la frequenza (di partenza 433,700 MHz); <code>FREQ 434.100</code> la cambia, liberamente dentro il campo del chip (SX1278: 137-175 e 410-525 MHz; SX1262: 150-960 MHz). <strong>Impostala uguale su tutte e due le schede</strong>; sulla mobile resta salvata.</p>
     <ul>
-      <li><strong>Mobile completa:</strong> apri <a href="telefono.html">la pagina del telefono</a> con Chrome su Android, accoppia con il codice che esce sulla seriale, invia un testo e poi un file. <code>STATO</code> mostra Bluetooth, gradino, richieste di blocchi e errori radio.</li>
+      <li><strong>Mobile Wi-Fi (consigliata):</strong> sul telefono apri le impostazioni Wi-Fi, scegli la rete <code>VoLoRa-NOMINATIVO</code> e inserisci la password a 8 cifre (sul display della scheda e sulla seriale; <code>WIFI</code> la ripete). Se il telefono dice &ldquo;senza Internet&rdquo; scegli di <strong>restare collegato</strong>. Poi apri <strong>http://192.168.4.1</strong> nel browser: la pagina &egrave; nella scheda, non serve Internet. Invia un testo, un file, un&rsquo;immagine. <code>LOG</code> sulla seriale (o &ldquo;Registro della scheda&rdquo; sulla pagina) d&agrave; il registro delle prove.</li>
+      <li><strong>Mobile Bluetooth:</strong> apri <a href="telefono.html">la pagina del telefono</a> con Chrome (da Internet), accoppia con il codice che esce sulla seriale. <code>STATO</code> mostra collegamento, gradino, richieste di blocchi e errori.</li>
       <li><strong>Prova a banco:</strong> su due schede <code>CALL</code> diversi; su una <code>SEND 5000</code>. Sull&rsquo;altra compare <code>OGGETTO RICEVUTO ... CRC GIUSTO</code>.</li>
       <li><strong>Ponte simulato:</strong> come la mobile, ma i blocchi &ldquo;partono&rdquo; solo sulla seriale (<code>[radio simulata]</code>).</li>
     </ul>
@@ -102,8 +107,10 @@ STATO</pre>
   (function () {
     var $ = function (id) { return document.getElementById(id); };
     var DESC = {
-      mobile_t3: 'Telefono (Bluetooth) \u2192 ponte \u2192 mezzo \u2192 radio vera SX1278 a 433,700 MHz, e radio \u2192 telefono. Nessuna microSD: il buffer \u00e8 il telefono.',
+      mobile_t3: 'La scheda crea il suo Wi-Fi \u201cVoLoRa-NOMINATIVO\u201d e serve la pagina del telefono da http://192.168.4.1: telefono \u2192 scheda \u2192 radio vera SX1278 a 433,700 MHz, e radio \u2192 telefono. Funziona senza Internet. Nessuna microSD: il buffer \u00e8 il telefono.',
       mobile_tbeam1262: 'Come la T3, con la radio SX1262 e il livello IOF MODE disponibile.',
+      mobile_ble_t3: 'Come la mobile Wi-Fi ma il telefono si collega con il Bluetooth LE: la pagina viene da Internet (serve Chrome e https).',
+      mobile_ble_tbeam1262: 'Come la precedente, sulla T-Beam.',
       bench_t3: 'Una scheda manda un oggetto di prova (SEND), l\u2019altra lo riceve. Serve per misurare tempi e gradini con le radio vere. Servono due schede uguali.',
       bench_tbeam1262: 'Come la T3, con la radio SX1262 (e IOF MODE).',
       ble_sim_t3: 'Solo il ponte Bluetooth: i blocchi \u201cpartono\u201d secondo il modello a tempo, senza radio. Per provare la pagina del telefono da sola.',

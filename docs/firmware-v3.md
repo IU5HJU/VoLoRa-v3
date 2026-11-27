@@ -109,6 +109,16 @@ Il **mezzo** è ciò che porta le azioni del mittente sulla radio e sui timer. S
 
 **Cosa NON è stato provato:** il driver radio e il mezzo **non sono mai girati su una scheda**; il canale del banco di prova è un modello. Il comportamento reale (tempi di commutazione della radio, ascolto prima di parlare, collisioni, interferenze) può cambiare i tempi limite.
 
+### Pagina del telefono dentro la scheda (Wi-Fi), registro delle prove
+**Decisione del 27/11/2026:** la pagina del telefono **risiede nella scheda**: per le prove non si usa più una pagina su Internet (regola "Internet non è affidabile"). I firmware `mobile_t3` e `mobile_tbeam1262` fanno così:
+- La scheda crea il **suo Wi-Fi** `VoLoRa-<NOMINATIVO>` (password a 8 cifre, salvata; sul display e sulla seriale: `WIFI`, `WIFI NUOVA`), un **server web** serve la pagina incorporata nel firmware (`site/telefono.html` e `jpeg_prog.js` compressi, circa 16 kB; script `tools/embed_site.py`, verificato dai test) su `http://192.168.4.1`, e la pagina parla con la scheda via **WebSocket** `/ws` con lo stesso protocollo del Bluetooth (messaggi con un byte di canale davanti, vedi [ble-telefono.md](ble-telefono.md)). La pagina si collega da sola. Nessun Web Bluetooth, nessun https, funziona anche su iPhone.
+- Un **DNS** che risponde con l'indirizzo della scheda e le **sonde di Internet** di Android, iOS e Windows (`/generate_204`, `/hotspot-detect.html`, `/connecttest.txt`...) fanno credere al telefono che la rete sia buona, così non la abbandona per quella cellulare. **Mai provato su un telefono vero.**
+- Un solo telefono per volta (un nuovo collegamento sostituisce il vecchio). Il Wi-Fi e la radio LoRa lavorano insieme: l'effetto sui tempi del protocollo va misurato.
+- I vecchi firmware Bluetooth restano come `mobile_ble_t3` e `mobile_ble_tbeam1262`.
+- **Registro delle prove** (`testlog.h`, provato sul PC): la scheda tiene le ultime ~60 righe (collegamento del telefono, cambi di gradino, perdita e ritrovamento del collegamento, inizio e **riepilogo di fine di ogni invio con il motivo**, oggetti ricevuti con RSSI e SNR). Si legge dalla seriale (`LOG`, `LOG CLEAR`) e dalla pagina ("Registro della scheda", scarica `registro-scheda.txt`, anche da `http://192.168.4.1/log`).
+- **Evento `E_DIAG`:** a fine invio la scheda dice alla pagina il motivo di un fallimento (nessuna risposta, negoziazione, offerta non accettata, tempo massimo, collegamento perso, telefono sparito...). La pagina tiene lo schermo acceso durante l'invio (Screen Wake Lock) e avvisa se la stima supera il tempo massimo di 600 s.
+- La procedura di laboratorio è in [prove-laboratorio-v3.md](prove-laboratorio-v3.md). **Provato sul PC:** pagina servita in modalità WebSocket con la scheda finta (`tests/page/run_telefono_ws.js`), registro (`test_testlog`), riepilogo (`test_live`), pagina incorporata identica all'originale. **Compilato dalla CI, mai eseguito su una scheda.**
+
 ### Confronto con la radio mobile v2 (cosa manca al V3)
 La mobile **V2** è una radio vocale a turni (Codec2 su LoRa) con PTT, menu a bordo e tante funzioni; la mobile **V3** per ora è il **ponte telefono → protocollo immagini/dati**. Stato, funzione per funzione (v2 letta in `third_party/VoLoRa-v2`):
 
