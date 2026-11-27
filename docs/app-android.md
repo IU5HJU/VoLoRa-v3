@@ -9,7 +9,7 @@ Chrome permette il Web Bluetooth solo da pagine https, e per le prove la pagina 
 - **Guscio che racchiude la pagina** (decisione del 27/11/2026): un'app [Capacitor](https://capacitorjs.com) (WebView di Android) che carica `site/telefono.html` così com'è. La cartella è `app/`.
 - Il WebView di Android **non ha** `navigator.bluetooth`: `app/src/ble-shim.js` lo fornisce alla pagina (solo la parte che la pagina usa: `requestDevice` con il filtro sul servizio, `gatt.connect`, caratteristiche, notifiche, scritture con e senza risposta, `gattserverdisconnected`) appoggiandosi al plugin `@capacitor-community/bluetooth-le`. La pagina non sa di essere in un'app. Alla connessione chiede subito l'accoppiamento (la caratteristica è cifrata), così la finestra del codice compare lì e non a metà di una scrittura.
 - Lo schermo resta acceso durante un invio (plugin `keep-awake`): un collegamento che cade per 60 s fa fallire l'invio.
-- Funziona con i firmware **`mobile_ble_t3`** e **`mobile_ble_tbeam1262`** (Bluetooth), non con quelli Wi-Fi (che hanno già la loro pagina).
+- Funziona con il firmware **`mobile_t3`** / **`mobile_tbeam1262`**: il Bluetooth è sempre acceso. **Chi ha l'iPhone non usa l'app**: accende il Wi-Fi della scheda (tasto BOOT 2 s) e usa la pagina dentro la scheda ([firmware-v3.md](firmware-v3.md)). Con il Wi-Fi acceso il Bluetooth è spento: per tornare all'app, di nuovo BOOT 2 s.
 - La pagina nell'app non ha Internet da usare: la compressione dell'immagine, la posizione (GPS del telefono o locatore) e tutto il resto sono nella pagina e nel telefono.
 
 ## Compilazione

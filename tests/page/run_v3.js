@@ -8,7 +8,7 @@ const path = require('path');
 const site = path.resolve(process.argv[2] || '_site');
 const shots = process.argv[3] ? path.resolve(process.argv[3]) : null;
 const types = { '.html': 'text/html', '.json': 'application/json', '.bin': 'application/octet-stream' };
-const ENVS = ['mobile_t3', 'mobile_tbeam1262', 'mobile_ble_t3', 'mobile_ble_tbeam1262', 'bench_t3', 'bench_tbeam1262', 'ble_sim_t3', 'ble_sim_tbeam1262'];
+const ENVS = ['mobile_t3', 'mobile_tbeam1262', 'bench_t3', 'bench_tbeam1262', 'ble_sim_t3', 'ble_sim_tbeam1262'];
 let fails = 0;
 const check = (c, m) => { if (!c) { console.log('FALLITO: ' + m); fails++; } else console.log('ok: ' + m); };
 

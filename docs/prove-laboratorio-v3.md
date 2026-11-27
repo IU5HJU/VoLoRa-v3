@@ -8,14 +8,14 @@
 - Tutto il resto (GPS, BOOST/IOF, display, frequenza, Wi-Fi della scheda) è provato **solo sul PC**.
 
 ## Cosa serve
-- Due schede uguali con il firmware **`mobile_t3`** (T3) o **`mobile_tbeam1262`** (T-Beam), caricate dalla [pagina di installazione](../site/firmware-v3.html) (gruppo "Mobile Wi-Fi"). Due telefoni, oppure uno solo che si ricollega all'altra scheda.
+- Due schede uguali con il firmware **`mobile_t3`** (T3) o **`mobile_tbeam1262`** (T-Beam), caricate dalla [pagina di installazione](../site/firmware-v3.html). In laboratorio senza app si usa il **Wi-Fi della scheda** (si accende con il tasto BOOT premuto 2 s o con `WIFI ON`; all'avvio è spento); con l'app Android si usa il Bluetooth. Due telefoni, oppure uno solo che si ricollega all'altra scheda.
 - Antenna a 433 MHz **o** un attenuatore da 30-40 dB fra i connettori (con le schede vicine il ricevitore si satura: vedi [piano-misure.md](piano-misure.md)). Mai senza carico.
 - Un computer con un monitor seriale a 115200 baud, solo per leggere il registro.
 
 ## Preparazione (una volta)
-1. Su ogni scheda, sulla seriale: `CALL IU5HJU` (e `CALL IZ5FSN` sull'altra). La scheda si riavvia e il Wi-Fi prende il nome `VoLoRa-<NOMINATIVO>`.
+1. Su ogni scheda, sulla seriale: `CALL IU5HJU` (e `CALL IZ5FSN` sull'altra). La scheda si riavvia: il Bluetooth si chiama `VoLoRa-V3 <NOMINATIVO>` e il Wi-Fi (quando lo accendi) `VoLoRa-<NOMINATIVO>`.
 2. `FREQ` su tutte e due: devono dire la stessa frequenza (di partenza 433,700 MHz).
-3. `WIFI` mostra rete, **password a 8 cifre** (anche sul display) e indirizzo `http://192.168.4.1`.
+3. `WIFI ON` accende il Wi-Fi (spegne il Bluetooth) e mostra rete, **password a 8 cifre** (anche sul display) e indirizzo `http://192.168.4.1`; `WIFI` ne mostra lo stato.
 4. `LOG CLEAR` per partire da un registro pulito.
 
 ## Collegare il telefono alla scheda (senza Internet)

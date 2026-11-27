@@ -51,13 +51,9 @@
     <h2>1. Scegli e installa</h2>
     <label for="board">Firmware</label>
     <select id="board">
-      <optgroup label="Scheda mobile completa, Wi-Fi della scheda (consigliata: la pagina del telefono &egrave; nella scheda)">
-        <option value="mobile_t3">T3 V1.6.1 (SX1278): mobile Wi-Fi</option>
-        <option value="mobile_tbeam1262">T-Beam V1.2 (SX1262): mobile Wi-Fi</option>
-      </optgroup>
-      <optgroup label="Scheda mobile completa, Bluetooth LE (la pagina viene da Internet)">
-        <option value="mobile_ble_t3">T3 V1.6.1 (SX1278): mobile Bluetooth</option>
-        <option value="mobile_ble_tbeam1262">T-Beam V1.2 (SX1262): mobile Bluetooth</option>
+      <optgroup label="Scheda mobile completa (Android con l'app, iPhone con il Wi-Fi della scheda)">
+        <option value="mobile_t3">T3 V1.6.1 (SX1278): mobile</option>
+        <option value="mobile_tbeam1262">T-Beam V1.2 (SX1262): mobile</option>
       </optgroup>
       <optgroup label="Prova a banco fra due schede (senza Bluetooth)">
         <option value="bench_t3">T3 V1.6.1 (SX1278): prova a banco</option>
@@ -86,17 +82,16 @@
 STATO</pre>
     <p><code>FREQ</code> mostra la frequenza (di partenza 433,700 MHz); <code>FREQ 434.100</code> la cambia, liberamente dentro il campo del chip (SX1278: 137-175 e 410-525 MHz; SX1262: 150-960 MHz). <strong>Impostala uguale su tutte e due le schede</strong>; sulla mobile resta salvata.</p>
     <ul>
-      <li><strong>Mobile Wi-Fi (consigliata):</strong> sul telefono apri le impostazioni Wi-Fi, scegli la rete <code>VoLoRa-NOMINATIVO</code> e inserisci la password a 8 cifre (sul display della scheda e sulla seriale; <code>WIFI</code> la ripete). Se il telefono dice &ldquo;senza Internet&rdquo; scegli di <strong>restare collegato</strong>. Poi apri <strong>http://192.168.4.1</strong> nel browser: la pagina &egrave; nella scheda, non serve Internet. Invia un testo, un file, un&rsquo;immagine. <code>LOG</code> sulla seriale (o &ldquo;Registro della scheda&rdquo; sulla pagina) d&agrave; il registro delle prove.</li>
-      <li><strong>Mobile Bluetooth:</strong> apri <a href="telefono.html">la pagina del telefono</a> con Chrome (da Internet), accoppia con il codice che esce sulla seriale. <code>STATO</code> mostra collegamento, gradino, richieste di blocchi e errori.</li>
-      <li><strong>Prova a banco:</strong> su due schede <code>CALL</code> diversi; su una <code>SEND 5000</code>. Sull&rsquo;altra compare <code>OGGETTO RICEVUTO ... CRC GIUSTO</code>.</li>
-      <li><strong>Ponte simulato:</strong> come la mobile, ma i blocchi &ldquo;partono&rdquo; solo sulla seriale (<code>[radio simulata]</code>).</li>
+      <li><strong>Mobile, Android (Bluetooth):</strong> installa l&rsquo;<a href="#app">app VoLoRa-V3.apk</a>, aprila, scegli la scheda <code>VoLoRa-V3 NOMINATIVO</code> e accoppia con il codice a 6 cifre (display e seriale). Il Bluetooth &egrave; sempre acceso.</li>
+      <li><strong>Mobile, iPhone (Wi-Fi della scheda):</strong> tieni premuto il tasto <strong>BOOT</strong> della scheda per 2 secondi (oppure <code>WIFI ON</code> sulla seriale): il Bluetooth si spegne e nasce il Wi-Fi <code>VoLoRa-NOMINATIVO</code> con la password a 8 cifre sul display. Sull&rsquo;iPhone: Impostazioni &rarr; Wi-Fi &rarr; quella rete; poi apri <strong>http://192.168.4.1</strong> in Safari: la pagina &egrave; nella scheda, non serve Internet. Per tornare al Bluetooth: di nuovo BOOT 2 s (<code>WIFI OFF</code>).</li>
+      <li><code>STATO</code> mostra collegamento, gradino, richieste di blocchi e errori; <code>LOG</code> (o &ldquo;Registro della scheda&rdquo; nella pagina) d&agrave; il registro delle prove.</li>
     </ul>
     <p class="muted">Cosa guardare e come riferirlo: <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/firmware-v3.md">documentazione del firmware V3</a>.</p>
   </section>
 
   <section id="app">
     <h2>App Android (Bluetooth)</h2>
-    <p>Un&rsquo;app che racchiude la pagina del telefono e parla con la scheda via <strong>Bluetooth LE</strong>: si installa una volta e poi <strong>funziona senza Internet</strong>, senza lasciare la rete mobile. Va con i firmware &ldquo;mobile Bluetooth&rdquo;.</p>
+    <p>Un&rsquo;app che racchiude la pagina del telefono e parla con la scheda via <strong>Bluetooth LE</strong>: si installa una volta e poi <strong>funziona senza Internet</strong>, senza lasciare la rete mobile. Va con i firmware &ldquo;mobile&rdquo; (il Bluetooth &egrave; sempre acceso). <strong>Chi ha l&rsquo;iPhone</strong> non usa l&rsquo;app: usa il Wi-Fi della scheda, che si accende solo su richiesta (vedi sopra).</p>
     <p><a href="app/VoLoRa-V3.apk"><strong>Scarica VoLoRa-V3.apk</strong></a> <span class="muted">(Android 7 o pi&ugrave;)</span></p>
     <p class="hint"><strong>Studio, mai provata su un telefono.</strong> L&rsquo;APK &egrave; firmato con la chiave di prova di Android (non &egrave; sul Play Store): dopo averlo scaricato, apri il file e consenti l&rsquo;installazione da questa fonte; Play Protect pu&ograve; avvisare. Al primo avvio consenti il Bluetooth e la posizione (serve per il GPS del telefono). Accoppia con il codice a 6 cifre che esce sulla seriale e sul display della scheda.</p>
   </section>
@@ -114,10 +109,8 @@ STATO</pre>
   (function () {
     var $ = function (id) { return document.getElementById(id); };
     var DESC = {
-      mobile_t3: 'La scheda crea il suo Wi-Fi \u201cVoLoRa-NOMINATIVO\u201d e serve la pagina del telefono da http://192.168.4.1: telefono \u2192 scheda \u2192 radio vera SX1278 a 433,700 MHz, e radio \u2192 telefono. Funziona senza Internet. Nessuna microSD: il buffer \u00e8 il telefono.',
-      mobile_tbeam1262: 'Come la T3, con la radio SX1262 e il livello IOF MODE disponibile.',
-      mobile_ble_t3: 'Come la mobile Wi-Fi ma il telefono si collega con il Bluetooth LE: la pagina viene da Internet (serve Chrome e https).',
-      mobile_ble_tbeam1262: 'Come la precedente, sulla T-Beam.',
+      mobile_t3: 'Telefono \u2192 scheda \u2192 radio vera SX1278 a 433,700 MHz, e radio \u2192 telefono. Android: app VoLoRa-V3.apk via Bluetooth LE (sempre acceso). iPhone: Wi-Fi della scheda con la pagina dentro, acceso solo su richiesta (tasto BOOT 2 s). Nessuna microSD: il buffer \u00e8 il telefono.',
+      mobile_tbeam1262: 'Come la T3, con la radio SX1262, il GPS (GPS ON) e il livello IOF MODE.',
       bench_t3: 'Una scheda manda un oggetto di prova (SEND), l\u2019altra lo riceve. Serve per misurare tempi e gradini con le radio vere. Servono due schede uguali.',
       bench_tbeam1262: 'Come la T3, con la radio SX1262 (e IOF MODE).',
       ble_sim_t3: 'Solo il ponte Bluetooth: i blocchi \u201cpartono\u201d secondo il modello a tempo, senza radio. Per provare la pagina del telefono da sola.',

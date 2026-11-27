@@ -1,23 +1,18 @@
 // Firmware V3, scheda MOBILE COMPLETA: telefono -> ponte -> mezzo -> radio vera, e radio -> ponte -> telefono. STUDIO: mai eseguito su una scheda.
-// Il telefono si collega in due modi (stesso protocollo di comandi ed eventi, docs/ble-telefono.md):
-//  - VL3_WIFI=1 (ambienti mobile_*): la scheda crea il suo Wi-Fi "VoLoRa-<NOMINATIVO>", SERVE LA PAGINA DEL TELEFONO (incorporata nel firmware, niente Internet) su http://192.168.4.1
-//    e parla con la pagina via WebSocket (/ws). Non serve Web Bluetooth, che vuole una pagina https.
-//  - VL3_WIFI=0 (ambienti mobile_ble_*): Bluetooth LE, con la pagina da Internet. Nucleo: src/live_bridge.h (ponte collegato al mezzo), src/medium.h (stazione), src/radio_board.h (driver RadioLib).
+// Il telefono si collega in due modi, con lo stesso protocollo di comandi ed eventi (docs/ble-telefono.md), UNO ALLA VOLTA:
+//  - Bluetooth LE (sempre acceso all'avvio): per Android, con l'app VoLoRa-V3.apk (app/, docs/app-android.md).
+//  - Wi-Fi della scheda, SPENTO ALL'AVVIO e acceso solo da chi ne ha bisogno (iPhone): tasto BOOT premuto 2 s oppure WIFI ON sulla seriale. La scheda crea il Wi-Fi "VoLoRa-<NOMINATIVO>",
+//    SERVE LA PAGINA DEL TELEFONO (incorporata nel firmware, niente Internet) su http://192.168.4.1 e parla con la pagina via WebSocket (/ws). Con il Wi-Fi acceso il Bluetooth tace.
+// Nucleo: src/live_bridge.h (ponte collegato al mezzo), src/medium.h (stazione), src/radio_board.h (driver RadioLib).
 // Il buffer e' il telefono: la scheda tiene 8 blocchi da 1 kB e li chiede a richiesta (E_PULL); nessuna microSD. Gli oggetti dalla radio si accettano solo col telefono collegato.
-// Seriale a 115200 baud: CALL <nominativo> | STATO. Il codice di accoppiamento BLE si stampa all'avvio.
+// Seriale a 115200 baud: CALL, FREQ, WIFI, GPS, BOOST, IOF, DISPLAY, LOG, STATO.
 #include <Arduino.h>
-#ifndef VL3_WIFI
-#define VL3_WIFI 0
-#endif
-#if VL3_WIFI
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
+#include <NimBLEDevice.h>
 #include <WiFi.h>
 
 #include "web_assets.h"
-#else
-#include <NimBLEDevice.h>
-#endif
 #include <Preferences.h>
 #include <SPI.h>
 #include <esp_timer.h>
@@ -41,16 +36,14 @@ using namespace v3::img;
 constexpr bool kTcxo = false;                 // il TCXO non si legge ancora dalla scheda: senza, R12-R14 non si annunciano (docs/confronto-datasheet.md)
 constexpr size_t kRxMax = 32768;              // oggetti dalla radio: fino a 32 kB (RAM della scheda)
 
-#if !VL3_WIFI
 static const char* kService = "c49a1433-9f1b-4af8-9826-951953e47edb";
 static const char* kCmd = "c49a1434-9f1b-4af8-9826-951953e47edb";
 static const char* kDataIn = "c49a1435-9f1b-4af8-9826-951953e47edb";
 static const char* kEvt = "c49a1436-9f1b-4af8-9826-951953e47edb";
 static const char* kDataOut = "c49a1437-9f1b-4af8-9826-951953e47edb";
-#endif
 
 // ---------------------------------------------------------------- coda fra i callback del BLE (altro task) e il ciclo principale
-struct Frame { uint8_t kind; uint8_t len; uint8_t d[250]; };      // kind: 0 comando, 1 dati, 2 collegato, 3 scollegato
+struct Frame { uint8_t kind; uint8_t len; uint8_t d[250]; };      // kind: 0 comando, 1 dati, 2 Bluetooth collegato, 3 Bluetooth scollegato, 4 WebSocket collegato, 5 WebSocket scollegato
 constexpr int kQueue = 48;                    // i messaggi del WebSocket arrivano a raffica
 static Frame queue[kQueue];
 static volatile int qHead = 0, qTail = 0;
@@ -76,16 +69,17 @@ static bool pop(Frame* out) {
   return ok;
 }
 
-// ---------------------------------------------------------------- collegamento col telefono: Bluetooth LE
-#if !VL3_WIFI
+// ---------------------------------------------------------------- collegamento col telefono: Bluetooth LE (Android, app VoLoRa-V3.apk)
 static NimBLECharacteristic* chEvt = nullptr;
 static NimBLECharacteristic* chDataOut = nullptr;
-static bool bleConnected = false;
 static uint32_t passkey = 0;
+static bool wifiOn = false;                              // il Wi-Fi della scheda e' acceso (solo su richiesta: iPhone)
+static bool bleLink = false, wsLink = false;             // quale collegamento ha un telefono
+static bool bleConnected = false;                        // (nome storico) un telefono e' collegato, in uno dei due modi
 
 class ServerCb : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer*, ble_gap_conn_desc*) override { push(2, nullptr, 0); }
-  void onDisconnect(NimBLEServer*) override { push(3, nullptr, 0); NimBLEDevice::startAdvertising(); }
+  void onDisconnect(NimBLEServer*) override { push(3, nullptr, 0); if (!wifiOn) NimBLEDevice::startAdvertising(); }
   uint32_t onPassKeyRequest() override { return passkey; }
   void onAuthenticationComplete(ble_gap_conn_desc* desc) override { Serial.printf("[ble] accoppiamento %s\n", desc->sec_state.encrypted ? "completato (cifrato)" : "NON cifrato"); }
 };
@@ -95,29 +89,26 @@ class CmdCb : public NimBLECharacteristicCallbacks {
 class DataCb : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* c) override { const std::string v = c->getValue(); push(1, reinterpret_cast<const uint8_t*>(v.data()), v.size()); }
 };
-static void linkEvt(const uint8_t* d, size_t n) { if (!chEvt) return; chEvt->setValue(d, n); chEvt->notify(); }
-static void linkData(const uint8_t* d, size_t n) { if (!chDataOut) return; chDataOut->setValue(d, n); chDataOut->notify(); }
-static const char* kLinkWord = "Bluetooth";
-#else
-// ---------------------------------------------------------------- collegamento col telefono: Wi-Fi della scheda (punto di accesso), pagina servita dalla scheda, WebSocket
+static void bleEvt(const uint8_t* d, size_t n) { if (!chEvt) return; chEvt->setValue(d, n); chEvt->notify(); }
+static void bleData(const uint8_t* d, size_t n) { if (!chDataOut) return; chDataOut->setValue(d, n); chDataOut->notify(); }
+
+// ---------------------------------------------------------------- collegamento col telefono: Wi-Fi della scheda (punto di accesso), pagina servita dalla scheda, WebSocket (iPhone)
 static AsyncWebServer webServer(80);
 static AsyncWebSocket ws("/ws");
 static DNSServer dns;
-static bool bleConnected = false;                       // (nome storico) telefono collegato
 static char wifiSsid[24] = "", wifiPass[12] = "";
 static AsyncWebSocketClient* wsClient = nullptr;        // un solo telefono alla volta
-static const char* kLinkWord = "Wi-Fi";
 
 // messaggi WebSocket: il primo byte e' il canale (0 comando, 1 dati dal telefono; 2 evento, 3 dati verso il telefono)
-static void linkEvt(const uint8_t* d, size_t n) { uint8_t m[260]; if (n + 1 > sizeof(m)) return; m[0] = 2; memcpy(m + 1, d, n); ws.binaryAll(m, n + 1); }
-static void linkData(const uint8_t* d, size_t n) { uint8_t m[260]; if (n + 1 > sizeof(m)) return; m[0] = 3; memcpy(m + 1, d, n); ws.binaryAll(m, n + 1); }
+static void wsEvt(const uint8_t* d, size_t n) { uint8_t m[260]; if (n + 1 > sizeof(m)) return; m[0] = 2; memcpy(m + 1, d, n); ws.binaryAll(m, n + 1); }
+static void wsData(const uint8_t* d, size_t n) { uint8_t m[260]; if (n + 1 > sizeof(m)) return; m[0] = 3; memcpy(m + 1, d, n); ws.binaryAll(m, n + 1); }
 static void onWsEvent(AsyncWebSocket*, AsyncWebSocketClient* c, AwsEventType type, void* arg, uint8_t* data, size_t len) {
   if (type == WS_EVT_CONNECT) {
     if (wsClient && wsClient != c && wsClient->status() == WS_CONNECTED) wsClient->close();     // il telefono nuovo prende il posto del vecchio
     wsClient = c;
-    push(2, nullptr, 0);
+    push(4, nullptr, 0);
   } else if (type == WS_EVT_DISCONNECT) {
-    if (c == wsClient) { wsClient = nullptr; push(3, nullptr, 0); }
+    if (c == wsClient) { wsClient = nullptr; push(5, nullptr, 0); }
   } else if (type == WS_EVT_DATA) {
     const AwsFrameInfo* info = static_cast<const AwsFrameInfo*>(arg);
     if (c != wsClient || !(info->final && info->index == 0 && info->len == len && info->opcode == WS_BINARY) || len < 2) return;
@@ -131,7 +122,11 @@ static void sendGz(AsyncWebServerRequest* r, const char* type, const uint8_t* d,
   resp->addHeader("Cache-Control", "no-store");
   r->send(resp);
 }
-#endif
+
+// verso il telefono: dal collegamento che ha un telefono
+static void linkEvt(const uint8_t* d, size_t n) { if (wsLink) wsEvt(d, n); else if (bleLink) bleEvt(d, n); }
+static void linkData(const uint8_t* d, size_t n) { if (wsLink) wsData(d, n); else if (bleLink) bleData(d, n); }
+static const char* linkWord() { return wsLink ? "Wi-Fi" : "Bluetooth"; }
 
 static v3::TestLog tlog;
 static double nowSec() { return esp_timer_get_time() / 1e6; }
@@ -238,21 +233,23 @@ static void updateDisplay(double now) {
   in.freqMhz = radio.frequencyKhz() / 1000.0;
   in.batteryV = battery.volts();
   in.bleConnected = bleConnected;
-#if VL3_WIFI
   static String top, bottom;
-  top = String("WiFi ") + wifiName();
-  bottom = String("http://") + WiFi.softAPIP().toString();
-  in.pairTop = top.c_str();
-  in.pairSecret = wifiPass;
-  in.pairBottom = bottom.c_str();
-#else
   static char code[12];
-  snprintf(code, sizeof(code), "%06u", static_cast<unsigned>(passkey % 1000000u));
-  static String name;
-  name = bleName();
-  in.pairSecret = code;
-  in.pairBottom = name.c_str();
-#endif
+  if (wifiOn) {                                          // Wi-Fi della scheda (iPhone): rete, password a 8 cifre, indirizzo
+    top = String("WiFi ") + wifiName();
+    bottom = String("http://") + WiFi.softAPIP().toString();
+    in.pairTop = top.c_str();
+    in.pairSecret = wifiPass;
+    in.pairBottom = bottom.c_str();
+  } else {                                               // Bluetooth (Android): codice a 6 cifre; ogni 4 s un richiamo per chi ha l'iPhone
+    snprintf(code, sizeof(code), "%06u", static_cast<unsigned>(passkey % 1000000u));
+    const bool hint = (millis() / 4000) % 2 == 1;
+    top = hint ? String("iPhone: tasto BOOT") : String("Collega il telefono");
+    bottom = hint ? String("premuto 2 s = Wi-Fi") : bleName();
+    in.pairTop = top.c_str();
+    in.pairSecret = code;
+    in.pairBottom = bottom.c_str();
+  }
   in.powerDbm = radio.boostState().power();
   in.power = radio.boostState().iofOn() ? Power::Iof : radio.boostState().boostOn() ? Power::Boost : Power::Normal;
   in.notice = (noticeText[0] && ms < noticeUntilMs) ? noticeText : "";
@@ -284,6 +281,45 @@ static void updateDisplay(double now) {
   Screen sc;
   build(in, &sc);
   oled.show(sc, ms, in.sending || in.receiving);
+}
+
+// ---- Wi-Fi della scheda, solo su richiesta (iPhone). Con il Wi-Fi acceso il Bluetooth tace: un solo telefono alla volta ----
+static void setWifi(bool on) {
+  if (on == wifiOn) return;
+  if (on) {
+    if (bleLink) { Serial.println("[wifi] il telefono Bluetooth viene scollegato"); }
+    NimBLEDevice::getAdvertising()->stop();
+    for (auto& c : NimBLEDevice::getServer()->getPeerDevices()) NimBLEDevice::getServer()->disconnect(c);
+    WiFi.mode(WIFI_MODE_NULL);
+    WiFi.mode(WIFI_AP);
+    if (!WiFi.softAP(wifiSsid, wifiPass, 1, 0, 2)) { Serial.println("ERRORE: il punto di accesso Wi-Fi non parte"); NimBLEDevice::getAdvertising()->start(); WiFi.mode(WIFI_OFF); return; }
+    dns.start(53, "*", WiFi.softAPIP());            // ogni nome porta alla scheda: il telefono trova le sue pagine e tiene la rete come buona anche senza Internet
+    webServer.begin();
+    wifiOn = true;
+    Serial.printf("Wi-Fi ACCESO: rete \"%s\", password %s, pagina su http://%s/ (il Bluetooth e' spento)\n", wifiSsid, wifiPass, WiFi.softAPIP().toString().c_str());
+    tlog.add(nowSec(), "Wi-Fi acceso (iPhone): Bluetooth spento");
+  } else {
+    wifiOn = false;
+    ws.closeAll();
+    dns.stop();
+    webServer.end();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+    NimBLEDevice::getAdvertising()->start();
+    Serial.println("Wi-Fi spento: Bluetooth di nuovo acceso");
+    tlog.add(nowSec(), "Wi-Fi spento: Bluetooth acceso");
+  }
+}
+
+// tasto BOOT (GPIO0): tenuto premuto 2 s accende o spegne il Wi-Fi della scheda (per chi ha l'iPhone); sulla T3 e sul T-Beam e' il pulsante di bordo
+static void checkButton() {
+  static uint32_t downAt = 0;
+  static bool fired = false;
+  const bool down = digitalRead(0) == LOW;
+  const uint32_t ms = millis();
+  if (!down) { downAt = 0; fired = false; return; }
+  if (downAt == 0) downAt = ms;
+  if (!fired && ms - downAt >= 2000) { fired = true; setWifi(!wifiOn); setNotice(wifiOn ? "WI-FI ACCESO" : "WI-FI SPENTO"); }
 }
 
 // registro delle prove: cambi di gradino, ricerca del collegamento, oggetti ricevuti
@@ -320,7 +356,7 @@ static void handleSerial() {
         strncpy(call, c2, sizeof(call) - 1);
         rebuild();
         Serial.printf("OK nominativo %s\n", call);
-        if (changed) { Serial.printf("riavvio per annunciare il nome \"%s\"...\n", (VL3_WIFI ? wifiName() : bleName()).c_str()); Serial.flush(); delay(300); ESP.restart(); }
+        if (changed) { Serial.printf("riavvio per annunciare i nomi \"%s\" (Bluetooth) e \"%s\" (Wi-Fi)...\n", bleName().c_str(), wifiName().c_str()); Serial.flush(); delay(300); ESP.restart(); }
       } else if (const FreqParse fp = parseFreq(line, kBoardSx1262); fp.cmd != FreqCmd::NotFreq) {
         if (fp.cmd == FreqCmd::Show) Serial.printf("frequenza %.3f MHz (campo del chip %s)\n", radio.frequencyKhz() / 1000.0, kBoardSx1262 ? "150-960 MHz" : "137-175 e 410-525 MHz");
         else if (fp.cmd == FreqCmd::Invalid) Serial.printf("ERR FREQ %s\n", fp.why);
@@ -330,11 +366,11 @@ static void handleSerial() {
       } else if (!strncasecmp(line, "LOG", 3)) {                          // registro delle prove: LOG stampa, LOG CLEAR lo svuota
         if (!strncasecmp(line + 3, " CLEAR", 6)) { tlog.clear(); Serial.println("registro svuotato"); }
         else { static char buf[v3::TestLog::kBytes + 8]; tlog.dump(buf, sizeof(buf)); Serial.print("--- registro delle prove ---\n"); Serial.print(buf); Serial.print("--- fine ---\n"); }
-#if VL3_WIFI
-      } else if (!strncasecmp(line, "WIFI", 4)) {                         // WIFI mostra rete e password; WIFI NUOVA genera una password nuova
+      } else if (!strncasecmp(line, "WIFI", 4)) {                         // WIFI ON/OFF accende o spegne il Wi-Fi della scheda (per iPhone); WIFI NUOVA cambia la password; WIFI mostra lo stato
         if (!strncasecmp(line + 4, " NUOVA", 6)) { char b[12]; snprintf(b, sizeof(b), "%08u", static_cast<unsigned>(esp_random() % 100000000u)); prefs.putString("wpass", b); Serial.println("password nuova salvata: riavvio"); Serial.flush(); delay(300); ESP.restart(); }
-        else Serial.printf("Wi-Fi: rete \"%s\", password %s, pagina http://%s/ (WIFI NUOVA = nuova password)\n", wifiSsid, wifiPass, WiFi.softAPIP().toString().c_str());
-#endif
+        else if (!strncasecmp(line + 4, " ON", 3)) setWifi(true);
+        else if (!strncasecmp(line + 4, " OFF", 4)) setWifi(false);
+        else Serial.printf("Wi-Fi %s: rete \"%s\", password %s, pagina http://192.168.4.1/ (WIFI ON | WIFI OFF | WIFI NUOVA)\n", wifiOn ? "ACCESO" : "spento", wifiSsid, wifiPass);
       } else if (!strncasecmp(line, "GPS", 3)) {
         if (!gps.present()) Serial.println("questa scheda non ha il GPS (solo il T-Beam)");
         else if (line[4] == 'O' || line[4] == 'o') {                       // GPS ON / GPS OFF (salvato; spento di base come la v2)
@@ -378,20 +414,15 @@ void setup() {
   gps.begin(prefs.getBool("gps", false));
   Serial.printf("nominativo: %s\n", call[0] ? call : "(non impostato: scrivi CALL IU5HJU)");
 
-#if VL3_WIFI
-  {
+  {                                                     // Wi-Fi della scheda: password e pagine pronte, ma la rete resta SPENTA finche' non la accende chi ha l'iPhone
     String pw = prefs.getString("wpass", "");
     if (pw.length() != 8) { char b[12]; snprintf(b, sizeof(b), "%08u", static_cast<unsigned>(esp_random() % 100000000u)); pw = b; prefs.putString("wpass", pw); }   // 8 cifre, salvate (come la v2)
     snprintf(wifiPass, sizeof(wifiPass), "%s", pw.c_str());
     snprintf(wifiSsid, sizeof(wifiSsid), "%s", wifiName().c_str());
-    WiFi.mode(WIFI_MODE_NULL);
-    WiFi.mode(WIFI_AP);
     WiFi.onEvent([](WiFiEvent_t ev, WiFiEventInfo_t) {
       if (ev == ARDUINO_EVENT_WIFI_AP_STACONNECTED) { Serial.println("[wifi] un telefono si e' collegato alla rete"); tlog.add(nowSec(), "wifi: telefono collegato alla rete"); }
       if (ev == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) { Serial.println("[wifi] il telefono si e' scollegato dalla rete"); tlog.add(nowSec(), "wifi: telefono scollegato dalla rete"); }
     });
-    if (!WiFi.softAP(wifiSsid, wifiPass, 1, 0, 2)) Serial.println("ERRORE: il punto di accesso Wi-Fi non parte");
-    dns.start(53, "*", WiFi.softAPIP());            // ogni nome porta alla scheda: il telefono trova le sue pagine di prova e tiene la rete come buona anche senza Internet
     webServer.on("/", HTTP_GET, [](AsyncWebServerRequest* r) { sendGz(r, "text/html", kPageHtml, kPageHtmlLen); });
     webServer.on("/telefono.html", HTTP_GET, [](AsyncWebServerRequest* r) { sendGz(r, "text/html", kPageHtml, kPageHtmlLen); });
     webServer.on("/jpeg_prog.js", HTTP_GET, [](AsyncWebServerRequest* r) { sendGz(r, "text/javascript", kPageJs, kPageJsLen); });
@@ -409,12 +440,10 @@ void setup() {
     webServer.on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest* r) { r->send(200, "text/plain", "Microsoft NCSI"); });
     ws.onEvent(onWsEvent);
     webServer.addHandler(&ws);
-    webServer.begin();
-    Serial.printf("Wi-Fi acceso: rete \"%s\", password %s, pagina su http://%s/\n", wifiSsid, wifiPass, WiFi.softAPIP().toString().c_str());
-    Serial.printf("pagina del telefono nel firmware: %u byte compressi (%u + %u)\n", static_cast<unsigned>(kPageHtmlLen + kPageJsLen), static_cast<unsigned>(kPageHtmlLen), static_cast<unsigned>(kPageJsLen));
+    ws.onEvent(onWsEvent);
+    webServer.addHandler(&ws);
+    Serial.printf("pagina del telefono nel firmware: %u byte compressi; Wi-Fi spento (WIFI ON o tasto BOOT 2 s per l'iPhone)\n", static_cast<unsigned>(kPageHtmlLen + kPageJsLen));
   }
-  { v3::disp::Screen st; v3::disp::buildStartup(call, LCR_VERSION, &st); oled.showNow(st); delay(1800); }      // la versione del firmware all'accensione, come la v2
-#else
   passkey = 100000 + (esp_random() % 900000);           // codice a 6 cifre per l'accoppiamento (sulla seriale; lo schermo OLED dopo)
   NimBLEDevice::init(bleName().c_str());
   Serial.printf("nome Bluetooth: %s\n", bleName().c_str());
@@ -441,27 +470,31 @@ void setup() {
   adv->setScanResponse(true);
   adv->start();
   Serial.printf("BLE acceso. Codice di accoppiamento: %06u\n", static_cast<unsigned>(passkey));
-#endif
-  tlog.addf(nowSec(), "avvio: %s, firmware %s, %s, %.3f MHz, collegamento %s", VL3_CHIP, LCR_VERSION, call[0] ? call : "(senza nominativo)", radio.frequencyKhz() / 1000.0, kLinkWord);
+  pinMode(0, INPUT_PULLUP);                              // tasto BOOT
+  tlog.addf(nowSec(), "avvio: %s, firmware %s, %s, %.3f MHz, Bluetooth acceso, Wi-Fi spento", VL3_CHIP, LCR_VERSION, call[0] ? call : "(senza nominativo)", radio.frequencyKhz() / 1000.0);
 }
 
 void loop() {
   Frame f;
   while (pop(&f)) {
-    if (f.kind == 2) { bleConnected = true; if (bridge) bridge->onConnect(); Serial.printf("[%s] telefono collegato\n", kLinkWord); tlog.addf(nowSec(), "telefono collegato (%s)", kLinkWord); }
-    else if (f.kind == 3) { bleConnected = false; if (bridge) bridge->onDisconnect(); Serial.printf("[%s] telefono scollegato\n", kLinkWord); tlog.addf(nowSec(), "telefono scollegato (%s)", kLinkWord); }
-    else if (bridge) { if (f.kind == 0) bridge->onCommand(f.d, f.len); else bridge->onData(f.d, f.len); }
+    if (f.kind >= 2 && f.kind <= 5) {                    // un telefono si collega o si scollega (2/3 Bluetooth, 4/5 WebSocket)
+      const bool up = (f.kind == 2 || f.kind == 4);
+      if (f.kind <= 3) bleLink = up; else wsLink = up;
+      const bool any = bleLink || wsLink;
+      if (any != bleConnected) { bleConnected = any; if (bridge) { if (any) bridge->onConnect(); else bridge->onDisconnect(); } }
+      Serial.printf("[%s] telefono %s\n", f.kind <= 3 ? "Bluetooth" : "Wi-Fi", up ? "collegato" : "scollegato");
+      tlog.addf(nowSec(), "telefono %s (%s)", up ? "collegato" : "scollegato", f.kind <= 3 ? "Bluetooth" : "Wi-Fi");
+    }
+    else if (bridge) { if (f.kind == 0) bridge->onCommand(f.d, f.len); else if (f.kind == 1) bridge->onData(f.d, f.len); }
   }
   handleSerial();
+  checkButton();
   if (!station) { updateDisplay(nowS()); delay(5); return; }
   const double now = nowS();
   radio.service(*station, now);
   station->poll(now);
   bridge->poll(now);
-#if VL3_WIFI
-  dns.processNextRequest();
-  ws.cleanupClients();
-#endif
+  if (wifiOn) { dns.processNextRequest(); ws.cleanupClients(); }
   logChanges(now);
   updateDisplay(now);
   delay(1);
