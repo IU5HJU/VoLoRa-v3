@@ -140,6 +140,9 @@ La mobile **V2** è una radio vocale a turni (Codec2 su LoRa) con PTT, menu a bo
 | Identificativo periodico anche in Morse in FM | **manca** |
 | Beacon periodico | **manca** |
 
+### Potenza ridotta per le prove con attenuatori (`POWER`)
+`POWER <dBm>` imposta la **potenza normale**: da **2 a 17 dBm** sull'SX1278 (il minimo con l'uscita PA_BOOST), da **−9 a 17 dBm** sull'SX1262. `POWER` da solo la mostra. Serve a non saturare il ricevitore nelle prove a banco ([prove-laboratorio-v3.md](prove-laboratorio-v3.md), con i conti di quanta attenuazione serve). Sulla scheda mobile **si salva** (all'avvio, se non è +17 dBm, un avviso lo dice); il banco riparte da +17 dBm. BOOST (+20) e IOF MODE (+22) restano comandi a parte e non si salvano. Il display mostra la potenza in uso (`R10 5dBm`). Provato sul PC (`test_boost`, 50 controlli: comando, minimi dei due chip, BOOST e IOF sopra la base); **mai provato su una scheda** (in particolare non so che potenza vera esca a +2 dBm sulla T3).
+
 ### GPS e distanza
 - **GPS del T-Beam** (u-blox, 9600 baud, ALDO3 del PMU): porta di `src/gps.cpp` e dell'interprete NMEA della v2 (`nmea.h`, provato con gli stessi 45 controlli della v2). **Spento di base** come nella v2: seriale `GPS ON` / `GPS OFF` (salvato), `GPS` mostra stato e satelliti. Sulla T3 non c'è il GPS.
 - **Quale posizione va nell'OFFER:** con un fix recente (meno di 15 s) la **posizione GPS assoluta** (come vuole [regole-radioamatoriali.md](regole-radioamatoriali.md): "la GPS è meglio"); senza fix quella che il telefono manda (locatore o GPS del telefono). Con il solo GPS si può inviare anche senza che il telefono abbia mandato la posizione.

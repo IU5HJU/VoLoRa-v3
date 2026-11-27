@@ -384,7 +384,7 @@ static void handleSerial() {
       } else if (!strncasecmp(line, "DISPLAY", 7)) {
         if (!oled.present()) Serial.println("display OLED non trovato");
         else { oled.enable(line[8] != '0'); Serial.printf("display %s\n", oled.enabled() ? "acceso" : "spento"); }
-      } else if (radio.boostCommand(line)) {
+      } else if (radio.powerCommand(line) || radio.boostCommand(line)) {
         // gestito dal driver radio (BOOST ON RISCHIO | OFF | STATUS)
       } else if (!strncasecmp(line, "STATO", 5)) {
         if (!station) { Serial.println("nessun nominativo (CALL xxx)"); continue; }
@@ -392,7 +392,7 @@ static void handleSerial() {
         Serial.printf("%s BLE %s, %.3f MHz, gradino R%d%s, invio %s, in RAM %u byte, richieste %u (ripetute %u), scartati %u, oggetti ricevuti %u, errori radio %u, coda persa %u\n", call, bleConnected ? "collegato" : "scollegato",
                       radio.frequencyKhz() / 1000.0, station->link().rung, station->link().lost ? " (in ricerca)" : "", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(bridge->held()), s.pulls, s.repulls, s.dropped, s.rxObjects,
                       static_cast<unsigned>(radio.rxErrors()), static_cast<unsigned>(qDropped));
-      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | DISPLAY 0|1 | GPS ON|OFF | LOG | WIFI | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
+      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | DISPLAY 0|1 | GPS ON|OFF | LOG | WIFI | STATO | POWER <dBm> | BOOST|IOF ON RISCHIO|OFF|STATUS");
     } else if (n < static_cast<int>(sizeof(line)) - 1) line[n++] = c;
   }
 }
@@ -408,6 +408,7 @@ void setup() {
   battery.begin();
   oled.begin();
   prefs.begin("vl3", false);
+  { const int pw = prefs.getInt("pwr", boost::kNormalDbm); if (pw != boost::kNormalDbm && !radio.setBasePowerDbm(pw)) Serial.printf("potenza salvata %d dBm non valida: resta %d\n", pw, radio.basePowerDbm()); radio.onBasePower = [](int d) { prefs.putInt("pwr", d); }; if (radio.basePowerDbm() != boost::kNormalDbm) Serial.printf("ATTENZIONE potenza ridotta a %d dBm (salvata): POWER 17 per tornare alla normale\n", radio.basePowerDbm()); }
   { const uint32_t k = prefs.getUInt("khz", 0); if (k && !radio.setFrequencyKhz(k)) Serial.printf("frequenza salvata %u kHz non valida: resta %.3f MHz\n", static_cast<unsigned>(k), radio.frequencyKhz() / 1000.0); }
   const String saved = prefs.getString("call", "");
   strncpy(call, saved.c_str(), sizeof(call) - 1);

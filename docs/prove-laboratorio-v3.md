@@ -15,11 +15,21 @@ Prove dell'autore (IU5HJU) con due schede T3, segnalate a voce (senza registro a
 - Antenna a 433 MHz **o** un attenuatore da 30-40 dB fra i connettori (con le schede vicine il ricevitore si satura: vedi [piano-misure.md](piano-misure.md)). Mai senza carico.
 - Un computer con un monitor seriale a 115200 baud, solo per leggere il registro.
 
+## Quanta attenuazione serve (il ricevitore non deve saturare)
+Il livello che arriva al ricevitore è circa **potenza trasmessa − attenuazione totale** (attenuatori, cavi, connettori). Il datasheet dell'SX1278 dà **+10 dBm** come massimo assoluto all'ingresso e quello dell'SX1262 **0 dBm** come massimo di funzionamento, ma molto prima il ricevitore si satura (AGC al limite, RSSI sempre al massimo, pacchetti persi): per le prove si cerca un **RSSI fra −60 e −100 dBm**. Il minimo che il protocollo sa decodificare è circa −120 dBm (R10) e arriva a −136 dBm con i gradini lenti.
+- Con **+17 dBm e 20 dB** arrivano circa **−3 dBm**: troppo.
+- Con `POWER 2` (il minimo dell'SX1278; l'SX1262 scende a −9) e 20 dB arrivano circa −18 dBm: ancora troppo. **Il comando `POWER` da solo non basta**: il campo è di 15 dB.
+- Servono in tutto **60-100 dB** fra le due schede: per esempio **tre attenuatori da 20 dB** in serie (60 dB: con `POWER 2` arrivano circa −58 dBm, con 17 dBm circa −43 dBm) oppure due da 30 dB più i 20 dB che hai (80 dB: −63 dBm a +17 dBm, −78 dBm a +2 dBm). Per provare i gradini lenti e le perdite si sale a 90-100 dB o si abbassa `POWER`.
+- Senza attenuatori in più: **tolgi il cavo** e usa le antenne a distanza (stanze diverse, qualche metro) oppure una scheda con il carico da 50 Ω e l'altra con l'antenna. Mai accendere una scheda senza antenna o carico.
+- Controlla sempre il valore: sul display e nel registro (`ricevuto da … RSSI … SNR …`) compare l'RSSI. Se è sopra circa −40 dBm o i pacchetti si perdono "a caso" con il segnale fortissimo, il ricevitore è saturo: aggiungi attenuazione.
+- Gli attenuatori reggono la potenza: 17 dBm sono 50 mW. Non usare BOOST o IOF MODE con gli attenuatori in linea senza controllarne la potenza massima.
+
 ## Preparazione (una volta)
 1. Su ogni scheda, sulla seriale: `CALL IU5HJU` (e `CALL IZ5FSN` sull'altra). La scheda si riavvia: il Bluetooth si chiama `VoLoRa-V3 <NOMINATIVO>` e il Wi-Fi (quando lo accendi) `VoLoRa-<NOMINATIVO>`.
 2. `FREQ` su tutte e due: devono dire la stessa frequenza (di partenza 433,700 MHz).
 3. `WIFI ON` accende il Wi-Fi (spegne il Bluetooth) e mostra rete, **password a 8 cifre** (anche sul display) e indirizzo `http://192.168.4.1`; `WIFI` ne mostra lo stato.
-4. `LOG CLEAR` per partire da un registro pulito.
+4. `POWER` mostra la potenza normale (di partenza +17 dBm); `POWER 2` la porta al minimo dell'SX1278 (sul T-Beam `POWER -9`). **Sulla scheda mobile la potenza ridotta si salva** e all'avvio un avviso la ricorda; `POWER 17` torna alla normale. BOOST e IOF MODE restano separati (+20 e +22 dBm).
+5. `LOG CLEAR` per partire da un registro pulito.
 
 ## Collegare il telefono alla scheda (senza Internet)
 1. Impostazioni Wi-Fi del telefono → rete `VoLoRa-IU5HJU` → password a 8 cifre. Se compare "senza Internet, restare collegati?" rispondi **sì**. (La scheda risponde alle sonde di Android, iOS e Windows come se ci fosse Internet, proprio perché il telefono non lasci la rete; non è mai stato provato su un telefono vero.)

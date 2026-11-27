@@ -50,11 +50,30 @@ class BoardRadio : public Radio {
     if (st != RADIOLIB_ERR_NONE) { Serial.printf("[radio] startTransmit errore %d\n", st); return false; }
     txBusy_ = true;
     if (boost_.txStarted(millis(), static_cast<uint32_t>(frameAirtimeS(rung_, static_cast<int>(n)) * 1e6)))
-      Serial.printf("ATTENZIONE BOOST: ciclo di lavoro %.1f%% su %d s, oltre %.0f%% (rischio calore e danno alla radio). BOOST OFF per tornare a +%d dBm\n", boost_.duty(millis()), boost::DutyGuard::kBuckets, boost::kDutyMaxPct, boost::kNormalDbm);
+      Serial.printf("ATTENZIONE BOOST: ciclo di lavoro %.1f%% su %d s, oltre %.0f%% (rischio calore e danno alla radio). BOOST OFF per tornare a +%d dBm\n", boost_.duty(millis()), boost::DutyGuard::kBuckets, boost::kDutyMaxPct, boost_.base());
     return true;
   }
   // ----- BOOST (+20 dBm, estrema, docs/boost.md): sempre spento all'avvio, non si salva, non si spegne da solo -----
   const boost::State& boostState() const { return boost_; }
+  // POWER <dBm>: potenza normale (da 2 a 17 dBm sull'SX1278, da -9 a 17 sull'SX1262). Per le prove con attenuatori: abbassa la potenza finche' il ricevitore non satura.
+  // Il BOOST e l'IOF MODE restano a +20 e +22 dBm (a parte): con un livello estremo attivo POWER cambia la potenza di base ma non quella in uso. Ritorna false se la riga non e' POWER.
+  bool powerCommand(const char* line) {
+    int dbm = 0;
+    const boost::PowerCmd c = boost::parsePower(line, &dbm);
+    if (c == boost::PowerCmd::NotPower) return false;
+    if (c == boost::PowerCmd::Invalid) { Serial.println("ERR POWER <dBm intero>, per esempio POWER 5"); return true; }
+    if (c == boost::PowerCmd::Set) {
+      if (!boost_.setBase(dbm)) { Serial.printf("ERR POWER da %d a %d dBm per questa radio (oltre +%d serve BOOST)\n", boost_.minDbm(), boost::kNormalDbm, boost::kNormalDbm); return true; }
+      applyPower();
+      onBasePower(dbm);
+    }
+    Serial.printf("potenza normale %d dBm%s, in uso %d dBm (%s)\n", boost_.base(), boost_.base() == boost::kNormalDbm ? " (di partenza)" : "", boost_.power(), boost_.iofOn() ? "IOF MODE" : boost_.boostOn() ? "BOOST" : "normale");
+    return true;
+  }
+  int basePowerDbm() const { return boost_.base(); }
+  bool setBasePowerDbm(int dbm) { if (!boost_.setBase(dbm)) return false; applyPower(); return true; }
+  void (*onBasePower)(int) = [](int) {};            // chiamata quando POWER cambia la potenza (la scheda mobile la salva)
+
   // Un comando seriale "BOOST ..." o "IOF ...". Ritorna false se la riga non e' uno dei due.
   bool boostCommand(const char* line) {
     const boost::Cmd c = boost::parse(line), ci = boost::parseIof(line);
@@ -74,7 +93,7 @@ class BoardRadio : public Radio {
       if (!boost_.enableIof()) { Serial.println("ERR IOF MODE esiste solo sull'SX1262: questa scheda ha l'SX1278 (massimo +20 dBm con BOOST)"); return true; }
       applyPower(); Serial.println(boost::kIofWarning); Serial.printf("IOF MODE ATTIVO (RISCHIO): +%d dBm\n", boost_.power()); return true;
     }
-    if (c == boost::Cmd::Off || ci == boost::Cmd::Off) { boost_.disable(); applyPower(); Serial.printf("potenza normale: +%d dBm\n", boost_.power()); return true; }
+    if (c == boost::Cmd::Off || ci == boost::Cmd::Off) { boost_.disable(); applyPower(); Serial.printf("potenza normale: %d dBm\n", boost_.power()); return true; }
     Serial.printf("%s, potenza %d dBm, ciclo di lavoro %.2f%% su %d s\n", boost_.iofOn() ? "IOF MODE ATTIVO (RISCHIO)" : boost_.boostOn() ? "BOOST ATTIVO (RISCHIO)" : "potenza normale", boost_.power(), boost_.duty(millis()), boost::DutyGuard::kBuckets);
     return true;
   }

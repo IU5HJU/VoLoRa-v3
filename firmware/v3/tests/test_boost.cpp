@@ -72,6 +72,26 @@ int main() {
   i62.disable();
   CHECK(!i62.on() && i62.power() == 17, "disable torna a +17 dBm");
   CHECK(std::strstr(kIofWarning, "RISCHIO") && std::strstr(kIofWarning, "antenna") && std::strstr(kIofWarning, "22") && std::strstr(kIofWarning, "IZ5IOF Andrea"), "il testo dell'avviso IOF dice rischio, antenna, +22 e la dedica");
+  // POWER: potenza normale ridotta (prove con attenuatori)
+  int dbmv = 99;
+  CHECK(parsePower("POWER", &dbmv) == PowerCmd::Show && parsePower("  power  ", &dbmv) == PowerCmd::Show, "POWER da solo mostra");
+  CHECK(parsePower("POWER 5", &dbmv) == PowerCmd::Set && dbmv == 5, "POWER 5");
+  CHECK(parsePower("power -3", &dbmv) == PowerCmd::Set && dbmv == -3, "POWER -3");
+  CHECK(parsePower("POWER +10", &dbmv) == PowerCmd::Set && dbmv == 10, "POWER +10");
+  CHECK(parsePower("POWER abc", &dbmv) == PowerCmd::Invalid && parsePower("POWER 5 dBm", &dbmv) == PowerCmd::Invalid && parsePower("POWER -", &dbmv) == PowerCmd::Invalid && parsePower("POWER 99999", &dbmv) == PowerCmd::Invalid, "numeri sbagliati");
+  CHECK(parsePower("POWERS 5", &dbmv) == PowerCmd::NotPower && parsePower("CALL X", &dbmv) == PowerCmd::NotPower && parsePower("", &dbmv) == PowerCmd::NotPower, "altre righe");
+  State pw78(false), pw62(true);
+  CHECK(pw78.base() == 17 && pw78.power() == 17 && pw78.minDbm() == 2 && pw62.minDbm() == -9, "di partenza +17; minimi dei chip");
+  CHECK(pw78.setBase(2) && pw78.power() == 2 && pw78.base() == 2, "SX1278: +2 dBm");
+  CHECK(!pw78.setBase(1) && pw78.base() == 2, "SX1278: sotto +2 dBm rifiutato, niente cambia");
+  CHECK(!pw78.setBase(18) && !pw78.setBase(20) && pw78.base() == 2, "oltre +17 dBm non si va con POWER (serve BOOST)");
+  CHECK(pw62.setBase(-9) && pw62.power() == -9 && !pw62.setBase(-10), "SX1262: da -9 dBm");
+  pw78.enable();
+  CHECK(pw78.power() == 20 && pw78.base() == 2, "BOOST sopra la potenza ridotta: +20, la base resta");
+  pw78.disable();
+  CHECK(pw78.power() == 2, "spento il BOOST si torna alla potenza ridotta");
+  pw62.enableIof();
+  CHECK(pw62.power() == 22 && pw62.base() == -9, "IOF MODE: +22, la base resta");
   std::printf("firmware/v3 BOOST: %d controlli, %d falliti\n", g_checks, g_fails);
   return g_fails ? 1 : 0;
 }

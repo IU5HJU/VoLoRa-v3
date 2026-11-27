@@ -62,12 +62,12 @@ static void handleLine(const char* line) {
     else if (station && station->sending()) Serial.println("ERR invio in corso");
     else if (!radio.setFrequencyKhz(fp.khz)) Serial.println("ERR la radio non accetta questa frequenza");
     else { makeStation(); Serial.printf("OK frequenza %.3f MHz: impostala uguale sull'altra scheda\n", fp.khz / 1000.0); }
-  } else if (radio.boostCommand(line)) {
+  } else if (radio.powerCommand(line) || radio.boostCommand(line)) {
     // gestito dal driver radio (BOOST ON RISCHIO | OFF | STATUS)
   } else if (!strncasecmp(line, "STATO", 5)) {
     if (!station) { Serial.println("nessun nominativo"); return; }
     Serial.printf("%.3f MHz, gradino R%d, in ricerca %s, invio %s, radio: errori di ricezione %u\n", radio.frequencyKhz() / 1000.0, station->link().rung, station->link().lost ? "si" : "no", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(radio.rxErrors()));
-  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | SEND <byte> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
+  } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | SEND <byte> | STATO | POWER <dBm> | BOOST|IOF ON RISCHIO|OFF|STATUS");
 }
 
 void setup() {

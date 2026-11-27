@@ -6,11 +6,13 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <strings.h>
 
 namespace v3 {
 namespace boost {
 
-constexpr int kNormalDbm = 17;                    // massimo in continuo dell'SX1278 (PA_BOOST)
+constexpr int kNormalDbm = 17;                    // massimo in continuo dell'SX1278 (PA_BOOST); e' anche la potenza di partenza
+constexpr int kMinDbmSx1278 = 2, kMinDbmSx1262 = -9;   // minimo del chip con l'uscita PA_BOOST (SX1278) o HP (SX1262): sotto non si scende
 constexpr int kBoostDbm = 20;
 constexpr int kIofDbm = 22;                       // IOF MODE: solo SX1262, il suo massimo
 constexpr uint32_t kWindowMs = 100000UL;          // finestra su cui si misura il ciclo di lavoro
@@ -56,6 +58,27 @@ inline Cmd parseWord(const char* line, const char* word) {
 }
 
 inline Cmd parse(const char* line) { return parseWord(line, "BOOST"); }
+
+// "POWER" (mostra) | "POWER 5" | "POWER -3": potenza normale in dBm interi. Set con *dbm; Invalid se non e' un numero; NeedsAck = non e' un comando POWER (usato come "no").
+enum class PowerCmd { NotPower, Invalid, Set, Show };
+inline PowerCmd parsePower(const char* line, int* dbm) {
+  const char* p = line;
+  while (*p == ' ' || *p == '\t') p++;
+  if (strncasecmp(p, "POWER", 5) != 0) return PowerCmd::NotPower;
+  p += 5;
+  if (*p && *p != ' ' && *p != '\t') return PowerCmd::NotPower;
+  while (*p == ' ' || *p == '\t') p++;
+  if (!*p) return PowerCmd::Show;
+  bool neg = false;
+  if (*p == '-' || *p == '+') { neg = *p == '-'; p++; }
+  if (*p < '0' || *p > '9') return PowerCmd::Invalid;
+  int v = 0;
+  for (; *p >= '0' && *p <= '9'; p++) { v = v * 10 + (*p - '0'); if (v > 1000) return PowerCmd::Invalid; }
+  while (*p == ' ' || *p == '\t') p++;
+  if (*p) return PowerCmd::Invalid;
+  *dbm = neg ? -v : v;
+  return PowerCmd::Set;
+}
 inline Cmd parseIof(const char* line) { return parseWord(line, "IOF"); }
 
 // Ciclo di lavoro in trasmissione su una finestra scorrevole, a secchi da 1 s (nessuna memoria dinamica).
@@ -89,7 +112,11 @@ class State {
   bool on() const { return level_ != Level::Normal; }          // un livello estremo e' attivo
   bool boostOn() const { return level_ == Level::Boost; }
   bool iofOn() const { return level_ == Level::Iof; }
-  int power() const { return level_ == Level::Iof ? kIofDbm : level_ == Level::Boost ? kBoostDbm : kNormalDbm; }
+  int power() const { return level_ == Level::Iof ? kIofDbm : level_ == Level::Boost ? kBoostDbm : base_; }
+  // Potenza normale (senza BOOST ne' IOF): da `minDbm()` a +17 dBm. Serve per le prove con attenuatori: l'ingresso del ricevitore non deve saturare.
+  int base() const { return base_; }
+  int minDbm() const { return sx1262_ ? kMinDbmSx1262 : kMinDbmSx1278; }
+  bool setBase(int dbm) { if (dbm < minDbm() || dbm > kNormalDbm) return false; base_ = dbm; return true; }
   void enable() { setLevel(Level::Boost); }
   // IOF MODE: false (e niente cambia) se il chip non e' un SX1262
   bool enableIof() { if (!sx1262_) return false; setLevel(Level::Iof); return true; }
@@ -109,6 +136,7 @@ class State {
  private:
   void setLevel(Level l) { if (l != level_) { guard_ = DutyGuard(); lastWarn_ = 0; warned_ = false; } level_ = l; }
   bool sx1262_, warned_ = false;
+  int base_ = kNormalDbm;
   Level level_ = Level::Normal;
   uint32_t lastWarn_ = 0;
   DutyGuard guard_;
