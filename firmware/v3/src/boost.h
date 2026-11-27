@@ -104,6 +104,16 @@ struct DutyGuard {
   }
 };
 
+// Giro della potenza normale per la voce "Potenza" del menu: 17 -> 10 -> 5 -> 2 -> (T-Beam SX1262: -3 -> -9) -> 17. Si ferma al minimo del chip.
+inline int nextBasePower(int current, int minDbm) {
+  static const int steps[] = {17, 10, 5, 2, -3, -9};
+  const size_t n = sizeof(steps) / sizeof(steps[0]);
+  size_t i = 0;
+  while (i < n && steps[i] != current) i++;
+  for (size_t j = (i < n ? i + 1 : 1); j < n; j++) if (steps[j] >= minDbm) return steps[j];
+  return steps[0];
+}
+
 // Stato della potenza estrema di una scheda: normale (+17), BOOST (+20) oppure IOF MODE (+22, solo SX1262). Uno solo alla volta. La radio chiede power() a ogni configurazione e dice quando trasmette.
 class State {
  public:

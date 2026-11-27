@@ -92,6 +92,10 @@ int main() {
   CHECK(pw78.power() == 2, "spento il BOOST si torna alla potenza ridotta");
   pw62.enableIof();
   CHECK(pw62.power() == 22 && pw62.base() == -9, "IOF MODE: +22, la base resta");
+  // giro della potenza del menu
+  CHECK(nextBasePower(17, 2) == 10 && nextBasePower(10, 2) == 5 && nextBasePower(5, 2) == 2 && nextBasePower(2, 2) == 17, "giro SX1278: 17, 10, 5, 2, 17");
+  CHECK(nextBasePower(2, -9) == -3 && nextBasePower(-3, -9) == -9 && nextBasePower(-9, -9) == 17, "giro SX1262: fino a -9");
+  CHECK(nextBasePower(7, 2) == 10 || nextBasePower(7, 2) == 5, "un valore fuori giro rientra nel giro");
   std::printf("firmware/v3 BOOST: %d controlli, %d falliti\n", g_checks, g_fails);
   return g_fails ? 1 : 0;
 }

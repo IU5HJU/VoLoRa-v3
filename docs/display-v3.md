@@ -30,6 +30,10 @@ Invio dal telefono             Ricezione dalla radio           Ultimo ricevuto (
 ```
 Altre: `SOLO RX / Imposta il nominativo` (senza nominativo, con il codice Bluetooth sulla riga 47), `ERRORE / radio` (la radio non parte), `Cerco il collegamento` (collegamento perso durante l'invio), nominativo di 8 caratteri (`RX IU5HJU/P`: la riga grande scende al testo piccolo, come la v2).
 
+## Come affiancare gli elementi della v2 e quelli del V3: esempi (da scegliere con l'autore)
+Il V3 mobile non ha PTT né volume, quindi due elementi della v2 non hanno più il loro significato: la **lettera del profilo** (S/R/M/D/T) e **`Vol 7/10`**. Al loro posto ho messo **la lettera V/B/I** (potenza normale, BOOST, IOF MODE) e **gradino e potenza** (`R10 17dBm`). L'autore ha chiesto (27/11/2026) di **aggiungere gli elementi V3 a quelli della v2** e, se serve spazio, di vedere degli esempi: ![esempi](images/display-v3-esempi.png)
+Tre varianti sullo stesso schermo (a riposo, invio, ricezione): **A** come adesso; **B** la v2 intatta (lettera S e `Vol 7/10`) con il V3 sulla riga libera, che a riposo basta ma durante l'invio con la barra non c'è più posto (il gradino non si vede); **C** senza lettera e senza `Vol`. Nota: con `R10 17dBm` (9 caratteri) e la batteria (12) la riga è piena e le due scritte si toccano. È un **mockup** disegnato con le coordinate della v2 (`tools/render_display_v3.py`, che usa lo stesso modello di Adafruit_GFX della v2), non una foto.
+
 ## GPS e distanza (T-Beam)
 Come la v2: a riposo la riga 47 dice `GPS fix, 8 satelliti` oppure `GPS cerco satelliti` (con il GPS acceso, `GPS ON` sulla seriale); durante la ricezione `12.3km  RSSI -97`; dopo `Ultimo IZ5FSN 12.3km` (la distanza si aggiunge solo se la riga resta nei 21 caratteri). Vedi [firmware-v3.md](firmware-v3.md).
 

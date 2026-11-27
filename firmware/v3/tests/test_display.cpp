@@ -154,6 +154,13 @@ int main() {
     CHECK(std::strncmp(s.rows[4], "  Wi-Fi (presto)", 16) == 0, "menu: le voci non disponibili hanno (presto)");
     for (int i = 0; i < 5; i++) CHECK(std::strlen(s.rows[i]) <= 21, "menu: riga %d entro i 21 caratteri", i);
   }
+  {
+    Input mi; mi.call = "IU5HJU";
+    buildInfo(mi, "fw v0.1.0-rc.1", "BT VoLoRa-V3 IU5HJU", "WiFi VoLoRa-IU5HJU", "Pass 48291637", "http://192.168.4.1", &s);
+    CHECK(s.kind == Kind::Info && s.rowSel == -1 && std::strcmp(s.rows[3], "Pass 48291637") == 0 && std::strlen(s.rows[1]) <= 21, "informazioni: cinque righe fisse");
+    buildInfo(mi, "una riga molto molto lunga che supera lo schermo", nullptr, "", "", "", &s);
+    CHECK(std::strlen(s.rows[0]) == 21 && s.rows[1][0] == 0, "informazioni: righe lunghe tagliate a 21 caratteri");
+  }
   // batteria: formato e medie come la v2
   char b[20];
   formatBatteryText(b, sizeof(b), 4.123f); CHECK(std::strcmp(b, "(Batt=4.12V)") == 0, "formato batteria");

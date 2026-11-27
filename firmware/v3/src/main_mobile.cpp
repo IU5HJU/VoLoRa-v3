@@ -203,6 +203,7 @@ static v3::menu::Menu* menuM = nullptr;
 static v3::menu::MenuFlow* menuFlow = nullptr;
 static v3::menu::ButtonGesture volumeButton(30, 2000);   // volume: breve = (non c'e' ancora la voce), lunga (2 s) = menu
 static v3::menu::PttButton pttButton(30);
+static uint32_t infoUntilMs = 0;                          // voce "Informazioni": fino a quando mostrarla
 static bool volumeArmed = false, pttArmed = false;        // come la v2: un tasto gia' premuto all'accensione non vale
 static const char* menuLabels[8];
 static bool menuEnabled[8];
@@ -296,6 +297,14 @@ static void updateDisplay(double now) {
   if (menuM && menuM->isOpen()) {
     for (size_t i = 0; i < menuM->count(); i++) { menuLabels[i] = menuM->item(i).label; menuEnabled[i] = menuM->item(i).enabled; menuIds[i] = menuM->item(i).id; }
     v3::disp::buildMenu(in, menuLabels, menuEnabled, menuIds, menuM->count(), menuM->selectedIndex(), 255, &sc);
+  } else if (ms < infoUntilMs) {                           // voce "Informazioni"
+    char l1[24], l2[24], l3[24], l4[24];
+    const char* v = LCR_VERSION; const size_t vl = strlen(v);
+    snprintf(l1, sizeof(l1), "fw %s", vl > 18 ? v + (vl - 18) : v);
+    snprintf(l2, sizeof(l2), "BT %s", bleName().c_str());
+    snprintf(l3, sizeof(l3), "WiFi %s", wifiName().c_str());
+    snprintf(l4, sizeof(l4), "Pass %s", wifiPass);
+    v3::disp::buildInfo(in, l1, l2, l3, l4, "http://192.168.4.1", &sc);
   } else {
     build(in, &sc);
   }
@@ -330,19 +339,39 @@ static void setWifi(bool on) {
   }
 }
 
-// ---- tasti e menu a bordo, come la v2 (menu.h): PTT (T3 GPIO0, T-Beam GPIO38) e volume (GPIO15, esterno e facoltativo, verso massa).
+// ---- tasti e menu a bordo, come la v2 (menu.h): PTT (T3 GPIO0, T-Beam GPIO38) e volume (GPIO15, esterno e facoltativo, verso massa): schemi dei collegamenti della v2 (docs/images/collegamenti-*.png).
 //   volume lungo (2 s) a scheda ferma = apre il menu; nel menu: PTT breve = voce successiva, volume breve = conferma, volume lungo = esce, 10 s senza tasti = esce.
-// Nel V3 non c'e' il PTT: fuori dal menu i tasti non fanno altro. Le voci del menu della v2 che nel V3 non esistono ancora non si mostrano (restano nel codice: MenuItem::enabled).
+// Nel V3 non c'e' il PTT: fuori dal menu i tasti non fanno altro. Le voci della v2 che nel V3 non esistono ancora non si mostrano (restano nel codice: MenuItem::enabled).
+// Voci V3 decise con l'autore (27/11/2026): Wi-Fi (c'e' anche nella v2), Potenza, Informazioni, GPS (solo T-Beam).
+static char labelPower[24] = "Potenza", labelGps[24] = "GPS";
+static void menuLabels_update() {
+  snprintf(labelPower, sizeof(labelPower), "Potenza %d dBm", radio.basePowerDbm());
+  snprintf(labelGps, sizeof(labelGps), "GPS %s", gps.active() ? "acceso" : "spento");
+}
 static void menuSetup() {
+  using namespace v3::menu;
   size_t n = 0;
-  const v3::menu::MenuItem* all = v3::menu::defaultMenuItems(n);
-  for (size_t i = 0; i < n; i++) if (all[i].id == v3::menu::kMenuWifiId) menuItems[menuCount++] = all[i];       // per ora esiste solo la voce Wi-Fi
-  menuM = new v3::menu::Menu(menuItems, menuCount);
-  menuFlow = new v3::menu::MenuFlow(*menuM);
+  const MenuItem* all = defaultMenuItems(n);
+  for (size_t i = 0; i < n; i++) if (all[i].id == kMenuWifiId) menuItems[menuCount++] = all[i];                 // della v2 esiste per ora solo la voce Wi-Fi
+  menuItems[menuCount++] = {labelPower, kMenuPowerId, true};
+  if (gps.present()) menuItems[menuCount++] = {labelGps, kMenuGpsId, true};
+  menuItems[menuCount++] = {"Informazioni", kMenuInfoId, true};
+  menuM = new Menu(menuItems, menuCount);
+  menuFlow = new MenuFlow(*menuM);
 }
 
 static void menuAction(uint8_t id) {
-  if (id == v3::menu::kMenuWifiId) { setWifi(!wifiOn); setNotice(wifiOn ? "WI-FI ACCESO" : "WI-FI SPENTO"); }
+  using namespace v3::menu;
+  if (id == kMenuWifiId) { setWifi(!wifiOn); setNotice(wifiOn ? "WI-FI ACCESO" : "WI-FI SPENTO"); }
+  else if (id == kMenuPowerId) {
+    const int next = boost::nextBasePower(radio.basePowerDbm(), radio.boostState().minDbm());
+    if (radio.setBasePowerDbm(next)) { prefs.putInt("pwr", next); char b[24]; snprintf(b, sizeof(b), "POTENZA %d dBm", next); setNotice(b); tlog.addf(nowSec(), "potenza normale %d dBm (menu)", next); }
+  } else if (id == kMenuGpsId) {
+    const bool on = !gps.active();
+    prefs.putBool("gps", on); gps.begin(on);
+    if (!on && bridge) bridge->setGps(nullptr);
+    setNotice(on ? "GPS ACCESO" : "GPS SPENTO");
+  } else if (id == kMenuInfoId) infoUntilMs = millis() + 8000;
 }
 
 static void checkButtons(uint32_t ms) {
@@ -354,6 +383,7 @@ static void checkButtons(uint32_t ms) {
   const auto volEvent = volumeButton.update(volumeArmed && volRaw, ms);
   bool idle = true;
   if (station) idle = !station->sending() && !station->receiver().receiving();
+  menuLabels_update();                                    // le voci con un valore dicono lo stato attuale
   const auto act = menuFlow->update(pttEvent, volEvent, idle, 255, ms);
   if (act.outcome.kind == v3::menu::Menu::Outcome::Kind::Selected) menuAction(act.outcome.id);
 }

@@ -61,6 +61,10 @@ constexpr uint8_t kMenuTextId = 101;         // voce "Invia testo"
 constexpr uint8_t kMenuMeshId = 102;         // voce "MeshCom"
 constexpr uint8_t kMenuSysopId = 103;        // voce "Comandi Sysop" (modo Sysop)
 constexpr uint8_t kMenuMeshListenId = 104;   // voce "MeshCom ascolto"
+// Voci SPECIFICHE DEL V3 (decise con l'autore il 27/11/2026): non esistono nella v2
+constexpr uint8_t kMenuPowerId = 110;        // "Potenza": cambia la potenza normale (17, 10, 5, 2... dBm)
+constexpr uint8_t kMenuInfoId = 111;         // "Informazioni": versione, nomi di rete, password
+constexpr uint8_t kMenuGpsId = 112;          // "GPS": acceso o spento (solo T-Beam)
 
 struct MenuItem {
   const char* label;  // testo sul display

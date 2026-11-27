@@ -21,7 +21,7 @@ constexpr uint32_t kLastShownMs = 20000;                   // "Ultimo ..." resta
 constexpr uint32_t kNoticeMs = 4000;
 
 enum class Power { Normal, Boost, Iof };
-enum class Kind { Normal, Pairing, Message, Menu };
+enum class Kind { Normal, Pairing, Message, Menu, Info };
 
 struct Input {
   const char* call = "";
@@ -191,6 +191,16 @@ inline void buildMenu(const Input& in, const char* const* labels, const bool* en
     if (i == selected) s->rowSel = static_cast<int>(i - first);
   }
   put(s->footer, sizeof(s->footer), "PTT=avanti  VOL=ok");
+}
+
+// Schermata "Informazioni" (voce V3 del menu): cinque righe fisse da 21 caratteri
+inline void buildInfo(const Input& in, const char* l1, const char* l2, const char* l3, const char* l4, const char* l5, Screen* s) {
+  *s = Screen();
+  s->kind = Kind::Info;
+  std::snprintf(s->head, sizeof(s->head), "%.8s %.3fMHz", in.call[0] ? in.call : "-", in.freqMhz);
+  s->badge = badgeFor(in.power);
+  const char* l[5] = {l1, l2, l3, l4, l5};
+  for (int i = 0; i < 5; i++) put(s->rows[i], sizeof(s->rows[0]), l[i] ? l[i] : "");
 }
 
 }  // namespace disp
