@@ -140,6 +140,8 @@ La mobile **V2** è una radio vocale a turni (Codec2 su LoRa) con PTT, menu a bo
 | Identificativo periodico anche in Morse in FM | **manca** |
 | Beacon periodico | **manca** |
 
+**Schede supportate:** T3 V1.6.1 (SX1278), T-Beam V1.2 con modulo **SX1262** e T-Beam V1.2 con modulo **SX1278** (stessi pin, cambia il chip; guarda la sigla sul modulo radio). Per il T-Beam SX1278 ci sono `mobile_tbeam1278` e `bench_tbeam1278` (e `tbeam1278` nel firmware di misura): come la T3 per la radio (R3 escluso, niente IOF MODE), con GPS e PMU del T-Beam. Compilati dalla CI, mai eseguiti su una scheda.
+
 ### Potenza ridotta per le prove con attenuatori (`POWER`)
 `POWER <dBm>` imposta la **potenza normale**: da **2 a 17 dBm** sull'SX1278 (il minimo con l'uscita PA_BOOST), da **−9 a 17 dBm** sull'SX1262. `POWER` da solo la mostra. Serve a non saturare il ricevitore nelle prove a banco ([prove-laboratorio-v3.md](prove-laboratorio-v3.md), con i conti di quanta attenuazione serve). Sulla scheda mobile **si salva** (all'avvio, se non è +17 dBm, un avviso lo dice); il banco riparte da +17 dBm. BOOST (+20) e IOF MODE (+22) restano comandi a parte e non si salvano. Il display mostra la potenza in uso (`R10 5dBm`). Provato sul PC (`test_boost`, 50 controlli: comando, minimi dei due chip, BOOST e IOF sopra la base); **mai provato su una scheda** (in particolare non so che potenza vera esca a +2 dBm sulla T3).
 

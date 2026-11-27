@@ -3,6 +3,7 @@ name: Build
 # Firmware di misura (studio VoLoRa V3): prove sul PC, compilazione per le schede e pagina di installazione su GitHub Pages.
 #   t3         LILYGO LoRa32 T3 V1.6.1 (SX1278)       artefatto firmware-t3
 #   tbeam1262  LILYGO T-Beam V1.2 con radio SX1262    artefatto firmware-tbeam1262
+#   tbeam1278  LILYGO T-Beam V1.2 con radio SX1278    artefatto firmware-tbeam1278
 # Ogni artefatto contiene web_factory.bin: immagine completa da scrivere all'indirizzo 0 (flasher web, esp-web-tools).
 # Su main il job "pages" pubblica su GitHub Pages la pagina (cartella site/) con i binari appena compilati.
 # Richiede, una volta sola: Settings -> Pages -> Source: GitHub Actions.
@@ -110,6 +111,10 @@ jobs:
             board: T3 solo BLE (radio simulata)
           - env: ble_sim_tbeam1262
             board: T-Beam solo BLE (radio simulata)
+          - env: mobile_tbeam1278
+            board: T-Beam V1.2 SX1278 completa (Bluetooth + Wi-Fi)
+          - env: bench_tbeam1278
+            board: T-Beam SX1278 prova a banco
           - env: bench_t3
             board: T3 prova a banco
           - env: bench_tbeam1262
@@ -162,6 +167,9 @@ jobs:
           - env: tbeam1262
             board: T-Beam V1.2 SX1262
             artifact: firmware-tbeam1262
+          - env: tbeam1278
+            board: T-Beam V1.2 SX1278
+            artifact: firmware-tbeam1278
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
