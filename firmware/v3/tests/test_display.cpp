@@ -41,12 +41,13 @@ int main() {
   Screen s;
   // a riposo
   build(in, &s); dump("a riposo, telefono collegato", s);
-  CHECK(std::strcmp(s.head, "IU5HJU 433.700MHz") == 0 && s.badge == 'V' && std::strcmp(s.big, "ASCOLTO") == 0 && s.bigFits, "a riposo: intestazione, lettera V e ASCOLTO");
-  CHECK(std::strcmp(s.l38, "Telefono collegato") == 0 && std::strcmp(s.l47, "Pos JN53ab") == 0, "a riposo: telefono e posizione");
-  CHECK(std::strcmp(s.left, "R10 17dBm") == 0 && std::strcmp(s.batt, "(Batt=4.12V)") == 0 && !s.lowBatt, "ultima riga: gradino e potenza, batteria nel formato di Guzman");
+  CHECK(std::strcmp(s.head, "IU5HJU 433.700MHz") == 0 && s.badge == 'S' && std::strcmp(s.big, "ASCOLTO") == 0 && s.bigFits, "a riposo: intestazione, lettera S della v2 e ASCOLTO");
+  CHECK(std::strcmp(s.l38, "Telefono collegato") == 0 && std::strcmp(s.l47, "R10 17dBm  Pos JN53ab") == 0, "a riposo: telefono, gradino, potenza e posizione");
+  CHECK(std::strcmp(s.left, "Vol 7/10") == 0 && std::strcmp(s.batt, "(Batt=4.12V)") == 0 && !s.lowBatt, "ultima riga come la v2: Vol 7/10 e batteria nel formato di Guzman");
+  CHECK(std::strcmp(s.l47, "R10 17dBm  Pos JN53ab") == 0 && fits(s), "riga libera a riposo: gradino, potenza e posizione (scelta B)");
   CHECK(fits(s), "a riposo sta nello schermo");
   in.hasPos = false; build(in, &s);
-  CHECK(std::strcmp(s.l47, "Manca la posizione") == 0, "senza posizione lo dice");
+  CHECK(std::strcmp(s.l47, "R10 17dBm  Pos --") == 0, "senza posizione: Pos --");
   in.hasPos = true;
   // senza telefono: schermata di accoppiamento
   in.bleConnected = false; in.pairSecret = "917558"; in.pairBottom = "VoLoRa-V3 IU5HJU";
@@ -66,7 +67,7 @@ int main() {
   in.sending = true; in.sendPct = 0; in.sendKind = 0; build(in, &s);
   CHECK(std::strcmp(s.big, "INVIO") == 0 && std::strcmp(s.l38, "Trasmetto messaggio") == 0 && s.bar < 0, "invio appena partito");
   in.sendPct = 40; in.sendKind = 2; in.rung = 7; build(in, &s); dump("invio immagine 40%", s);
-  CHECK(std::strcmp(s.l38, "Invio immagine 40%") == 0 && s.bar == 40 && std::strcmp(s.left, "R7 17dBm") == 0 && fits(s), "invio con barra al 40%%");
+  CHECK(std::strcmp(s.l38, "Invio immagine 40%") == 0 && s.bar == 40 && std::strcmp(s.left, "Vol 7/10") == 0 && fits(s), "invio con barra al 40%%");
   in.sendPct = 100; in.sendKind = 1; build(in, &s);
   CHECK(std::strcmp(s.l38, "Invio file 100%") == 0 && s.bar == 100, "100%%");
   in.sendPct = 20; in.linkLost = true; build(in, &s);
@@ -90,9 +91,9 @@ int main() {
   in.haveLast = false;
   // GPS e distanza (come la v2)
   in.gpsEnabled = true; in.gpsFix = false; build(in, &s);
-  CHECK(std::strcmp(s.l47, "GPS cerco satelliti") == 0, "GPS acceso senza fix");
+  CHECK(std::strcmp(s.l47, "R7 17dBm  GPS --") == 0, "GPS acceso senza fix");
   in.gpsFix = true; in.gpsSats = 8; build(in, &s);
-  CHECK(std::strcmp(s.l47, "GPS fix, 8 satelliti") == 0 && fits(s), "GPS con fix e satelliti");
+  CHECK(std::strcmp(s.l47, "R7 17dBm  GPS 8sat") == 0 && fits(s), "GPS con fix e satelliti");
   in.gpsEnabled = false;
   in.receiving = true; in.rxCall = "IZ5FSN"; in.rxPct = 10; in.rssi = -97; std::snprintf(in.distText, sizeof(in.distText), "125.8km"); build(in, &s);
   CHECK(std::strcmp(s.l47, "125.8km  RSSI -97") == 0, "ricezione con distanza: distanza e RSSI");
@@ -103,11 +104,11 @@ int main() {
   in.haveLast = false; in.distText[0] = 0; in.lastDistText[0] = 0; in.lastOk = true;
   // livelli di potenza
   in.rung = 10; in.power = Power::Boost; in.powerDbm = 20; build(in, &s);
-  CHECK(s.badge == 'B' && std::strcmp(s.left, "R10 20dBm") == 0, "BOOST: lettera B e +20 dBm");
+  CHECK(s.badge == 'B' && std::strcmp(s.l47, "R10 20dBm  Pos JN53ab") == 0 && std::strcmp(s.left, "Vol 7/10") == 0, "BOOST: lettera B (al posto della S) e +20 dBm");
   in.power = Power::Iof; in.powerDbm = 22; in.rung = 14; build(in, &s); dump("IOF MODE, R14", s);
-  CHECK(s.badge == 'I' && std::strcmp(s.left, "R14 22dBm") == 0 && fits(s), "IOF MODE: lettera I e +22 dBm, anche a R14");
-  CHECK(std::strcmp(glyph('B')[0], "XXXXXXXX..") == 0 && std::strcmp(glyph('I')[0], "XXXXXXXXXX") == 0 && std::strcmp(glyph('V')[8], "....XX....") == 0, "i tre glifi sono diversi e di 10x9 punti");
-  for (char c : {'V', 'B', 'I'}) for (int y = 0; y < 9; y++) CHECK(std::strlen(glyph(c)[y]) == 10, "glifo %c riga %d larga 10", c, y);
+  CHECK(s.badge == 'I' && std::strcmp(s.l47, "R14 22dBm  Pos JN53ab") == 0 && fits(s), "IOF MODE: lettera I e +22 dBm, anche a R14");
+  CHECK(std::strcmp(glyph('B')[0], "XXXXXXXX..") == 0 && std::strcmp(glyph('I')[0], "XXXXXXXXXX") == 0 && std::strcmp(glyph('S')[0], ".XXXXXXXX.") == 0, "i tre glifi (S della v2, B, I) sono diversi e di 10x9 punti");
+  for (char c : {'S', 'B', 'I'}) for (int y = 0; y < 9; y++) CHECK(std::strlen(glyph(c)[y]) == 10, "glifo %c riga %d larga 10", c, y);
   in.power = Power::Normal; in.powerDbm = 17; in.rung = 10;
   // avvisi
   in.notice = "CONSEGNATO"; build(in, &s); dump("avviso", s);

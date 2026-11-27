@@ -89,19 +89,21 @@ inline void put(char* dst, size_t cap, const char* s) { std::snprintf(dst, cap, 
 
 inline const char* kindName(uint8_t k) { return k == 0 ? "testo" : k == 1 ? "file" : "immagine"; }
 
-// Lettera del livello di potenza: V normale, B BOOST, I IOF MODE
-inline char badgeFor(Power p) { return p == Power::Iof ? 'I' : p == Power::Boost ? 'B' : 'V'; }
+// Lettera in alto a destra, scelta B (27/11/2026): quella della v2 (S = Standard) in condizioni normali; con BOOST o IOF MODE la lettera cambia (B, I) per far vedere il livello a rischio,
+// come la v2 cambia la lettera in T durante l'escursione MeshCom. Nel V3 mobile non ci sono profili: la S e' fissa.
+inline char badgeFor(Power p) { return p == Power::Iof ? 'I' : p == Power::Boost ? 'B' : 'S'; }
+constexpr int kVolumePlaceholder = 7;        // "Vol 7/10" come la v2: nel V3 non c'e' audio, il valore e' fisso (segnaposto fino alla voce)
 
 // Glifi 10x9 della lettera in alto a destra (stile della v2: tratti da 2 punti)
 inline const char* const* glyph(char b) {
-  static const char* const kV[9] = {"XX......XX", "XX......XX", "XX......XX", "XXX....XXX", ".XX....XX.", ".XXX..XXX.", "..XX..XX..", "...XXXX...", "....XX...."};
+  static const char* const kS[9] = {".XXXXXXXX.", "XXXXXXXXXX", "XX........", "XXXXXXXX..", ".XXXXXXXX.", "..XXXXXXXX", "........XX", "XXXXXXXXXX", ".XXXXXXXX."};      // v2
   static const char* const kB[9] = {"XXXXXXXX..", "XXXXXXXXX.", "XX.....XXX", "XXXXXXXXX.", "XXXXXXXX..", "XX.....XXX", "XX.....XXX", "XXXXXXXXX.", "XXXXXXXX.."};
   static const char* const kI[9] = {"XXXXXXXXXX", "XXXXXXXXXX", "....XX....", "....XX....", "....XX....", "....XX....", "....XX....", "XXXXXXXXXX", "XXXXXXXXXX"};
-  return b == 'B' ? kB : b == 'I' ? kI : kV;
+  return b == 'B' ? kB : b == 'I' ? kI : kS;
 }
 
 inline void bottom(Screen* s, const Input& in) {
-  std::snprintf(s->left, sizeof(s->left), "R%d %ddBm", in.rung, in.powerDbm);        // al massimo 9 caratteri ("R14 22dBm"): la batteria occupa gli altri 12
+  std::snprintf(s->left, sizeof(s->left), "Vol %d/10", kVolumePlaceholder);          // come la v2 (8 caratteri: la batteria occupa gli altri 12)
   formatBatteryText(s->batt, sizeof(s->batt), in.batteryV);
   s->lowBatt = isLowBattery(in.batteryV);
 }
@@ -152,11 +154,13 @@ inline void build(const Input& in, Screen* s) {
       put(s->l47, sizeof(s->l47), b);
     } else {
       put(s->l38, sizeof(s->l38), "Telefono collegato");
-      if (in.gpsEnabled) {                                  // come la v2: stato del GPS sulla riga libera a riposo
-        if (in.gpsFix) { std::snprintf(b, sizeof(b), "GPS fix, %d satelliti", in.gpsSats); put(s->l47, sizeof(s->l47), b); }
-        else put(s->l47, sizeof(s->l47), "GPS cerco satelliti");
-      } else if (in.hasPos) { std::snprintf(b, sizeof(b), "Pos %s", in.posText); put(s->l47, sizeof(s->l47), b); }
-      else put(s->l47, sizeof(s->l47), "Manca la posizione");
+      // riga libera a riposo (scelta B): gradino e potenza del V3, poi la posizione o lo stato del GPS (la v2 mostrava lo stato del GPS)
+      char pos[16];
+      if (in.gpsEnabled) { if (in.gpsFix) std::snprintf(pos, sizeof(pos), "GPS %dsat", in.gpsSats); else std::snprintf(pos, sizeof(pos), "GPS --"); }
+      else if (in.hasPos) std::snprintf(pos, sizeof(pos), "Pos %s", in.posText);
+      else std::snprintf(pos, sizeof(pos), "Pos --");
+      std::snprintf(b, sizeof(b), "R%d %ddBm  %s", in.rung, in.powerDbm, pos);
+      put(s->l47, sizeof(s->l47), b);
     }
   }
   s->bigFits = std::strlen(s->big) <= static_cast<size_t>(kBigCols);
