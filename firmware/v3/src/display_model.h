@@ -21,6 +21,12 @@ constexpr uint32_t kLastShownMs = 20000;                   // "Ultimo ..." resta
 constexpr uint32_t kNoticeMs = 4000;
 
 enum class Power { Normal, Boost, Iof };
+
+// Disposizione dello schermo (27/11/2026): l'autore ha scelto la B; la A e la C sono CONSERVATE per poterle riprendere o modificare (docs/display-v3.md, docs/images/display-v3-esempi.png).
+//  A: lettera V (normale) / B / I in alto a destra; in basso a sinistra "R10 17dBm" al posto di "Vol"; riga libera a riposo: posizione o stato del GPS.
+//  B: la v2 intatta: lettera S (B / I con BOOST / IOF MODE), "Vol 7/10" fisso; gradino, potenza e posizione sulla riga libera a riposo.   <- scelta, predefinita
+//  C: nessuna lettera in condizioni normali (B / I con BOOST / IOF MODE), "R10 17dBm" in basso al posto di "Vol"; riga libera come la A.
+enum class Layout { A, B, C };
 enum class Kind { Normal, Pairing, Message, Menu, Info };
 
 struct Input {
@@ -29,6 +35,7 @@ struct Input {
   int rung = 10;
   bool linkLost = false;
   Power power = Power::Normal;
+  Layout layout = Layout::B;                              // disposizione dello schermo (vedi sopra)
   int powerDbm = 17;
   bool radioOk = true;
   bool noCall = false;                                    // nominativo non impostato: la scheda non trasmette
@@ -91,19 +98,21 @@ inline const char* kindName(uint8_t k) { return k == 0 ? "testo" : k == 1 ? "fil
 
 // Lettera in alto a destra, scelta B (27/11/2026): quella della v2 (S = Standard) in condizioni normali; con BOOST o IOF MODE la lettera cambia (B, I) per far vedere il livello a rischio,
 // come la v2 cambia la lettera in T durante l'escursione MeshCom. Nel V3 mobile non ci sono profili: la S e' fissa.
-inline char badgeFor(Power p) { return p == Power::Iof ? 'I' : p == Power::Boost ? 'B' : 'S'; }
+inline char badgeFor(Power p, Layout l = Layout::B) { return p == Power::Iof ? 'I' : p == Power::Boost ? 'B' : l == Layout::A ? 'V' : l == Layout::C ? '\0' : 'S'; }
 constexpr int kVolumePlaceholder = 7;        // "Vol 7/10" come la v2: nel V3 non c'e' audio, il valore e' fisso (segnaposto fino alla voce)
 
 // Glifi 10x9 della lettera in alto a destra (stile della v2: tratti da 2 punti)
 inline const char* const* glyph(char b) {
+  static const char* const kV[9] = {"XX......XX", "XX......XX", "XX......XX", "XXX....XXX", ".XX....XX.", ".XXX..XXX.", "..XX..XX..", "...XXXX...", "....XX...."};      // variante A
   static const char* const kS[9] = {".XXXXXXXX.", "XXXXXXXXXX", "XX........", "XXXXXXXX..", ".XXXXXXXX.", "..XXXXXXXX", "........XX", "XXXXXXXXXX", ".XXXXXXXX."};      // v2
   static const char* const kB[9] = {"XXXXXXXX..", "XXXXXXXXX.", "XX.....XXX", "XXXXXXXXX.", "XXXXXXXX..", "XX.....XXX", "XX.....XXX", "XXXXXXXXX.", "XXXXXXXX.."};
   static const char* const kI[9] = {"XXXXXXXXXX", "XXXXXXXXXX", "....XX....", "....XX....", "....XX....", "....XX....", "....XX....", "XXXXXXXXXX", "XXXXXXXXXX"};
-  return b == 'B' ? kB : b == 'I' ? kI : kS;
+  return b == 'B' ? kB : b == 'I' ? kI : b == 'V' ? kV : kS;
 }
 
 inline void bottom(Screen* s, const Input& in) {
-  std::snprintf(s->left, sizeof(s->left), "Vol %d/10", kVolumePlaceholder);          // come la v2 (8 caratteri: la batteria occupa gli altri 12)
+  if (in.layout == Layout::B) std::snprintf(s->left, sizeof(s->left), "Vol %d/10", kVolumePlaceholder);          // come la v2 (8 caratteri: la batteria occupa gli altri 12)
+  else std::snprintf(s->left, sizeof(s->left), "R%d %ddBm", in.rung, in.powerDbm);                                  // A e C: gradino e potenza al posto di Vol (9 caratteri: la riga e' piena)
   formatBatteryText(s->batt, sizeof(s->batt), in.batteryV);
   s->lowBatt = isLowBattery(in.batteryV);
 }
@@ -112,7 +121,7 @@ inline void bottom(Screen* s, const Input& in) {
 inline void build(const Input& in, Screen* s) {
   *s = Screen();
   std::snprintf(s->head, sizeof(s->head), "%.8s %.3fMHz", in.call[0] ? in.call : "-", in.freqMhz);
-  s->badge = badgeFor(in.power);
+  s->badge = badgeFor(in.power, in.layout);
   bottom(s, in);
   char b[40];
   if (!in.radioOk) {                                        // errore all'avvio: come la v2, "ERRORE" e il nome del blocco
@@ -154,13 +163,21 @@ inline void build(const Input& in, Screen* s) {
       put(s->l47, sizeof(s->l47), b);
     } else {
       put(s->l38, sizeof(s->l38), "Telefono collegato");
-      // riga libera a riposo (scelta B): gradino e potenza del V3, poi la posizione o lo stato del GPS (la v2 mostrava lo stato del GPS)
-      char pos[16];
-      if (in.gpsEnabled) { if (in.gpsFix) std::snprintf(pos, sizeof(pos), "GPS %dsat", in.gpsSats); else std::snprintf(pos, sizeof(pos), "GPS --"); }
-      else if (in.hasPos) std::snprintf(pos, sizeof(pos), "Pos %s", in.posText);
-      else std::snprintf(pos, sizeof(pos), "Pos --");
-      std::snprintf(b, sizeof(b), "R%d %ddBm  %s", in.rung, in.powerDbm, pos);
-      put(s->l47, sizeof(s->l47), b);
+      if (in.layout == Layout::B) {
+        // riga libera a riposo (scelta B): gradino e potenza del V3, poi la posizione o lo stato del GPS (la v2 mostrava lo stato del GPS)
+        char pos[16];
+        if (in.gpsEnabled) { if (in.gpsFix) std::snprintf(pos, sizeof(pos), "GPS %dsat", in.gpsSats); else std::snprintf(pos, sizeof(pos), "GPS --"); }
+        else if (in.hasPos) std::snprintf(pos, sizeof(pos), "Pos %s", in.posText);
+        else std::snprintf(pos, sizeof(pos), "Pos --");
+        std::snprintf(b, sizeof(b), "R%d %ddBm  %s", in.rung, in.powerDbm, pos);
+        put(s->l47, sizeof(s->l47), b);
+      } else {                                              // A e C: come la v2, stato del GPS o posizione sulla riga libera (il gradino sta in basso)
+        if (in.gpsEnabled) {
+          if (in.gpsFix) { std::snprintf(b, sizeof(b), "GPS fix, %d satelliti", in.gpsSats); put(s->l47, sizeof(s->l47), b); }
+          else put(s->l47, sizeof(s->l47), "GPS cerco satelliti");
+        } else if (in.hasPos) { std::snprintf(b, sizeof(b), "Pos %s", in.posText); put(s->l47, sizeof(s->l47), b); }
+        else put(s->l47, sizeof(s->l47), "Manca la posizione");
+      }
     }
   }
   s->bigFits = std::strlen(s->big) <= static_cast<size_t>(kBigCols);
@@ -185,7 +202,7 @@ inline void buildMenu(const Input& in, const char* const* labels, const bool* en
   *s = Screen();
   s->kind = Kind::Menu;
   std::snprintf(s->head, sizeof(s->head), "%.8s %.3fMHz", in.call[0] ? in.call : "-", in.freqMhz);
-  s->badge = badgeFor(in.power);
+  s->badge = badgeFor(in.power, in.layout);
   constexpr size_t kRows = 5;
   const size_t first = selected >= kRows ? selected - (kRows - 1) : 0;
   for (size_t i = first; i < count && i < first + kRows; i++) {
@@ -202,7 +219,7 @@ inline void buildInfo(const Input& in, const char* l1, const char* l2, const cha
   *s = Screen();
   s->kind = Kind::Info;
   std::snprintf(s->head, sizeof(s->head), "%.8s %.3fMHz", in.call[0] ? in.call : "-", in.freqMhz);
-  s->badge = badgeFor(in.power);
+  s->badge = badgeFor(in.power, in.layout);
   const char* l[5] = {l1, l2, l3, l4, l5};
   for (int i = 0; i < 5; i++) put(s->rows[i], sizeof(s->rows[0]), l[i] ? l[i] : "");
 }

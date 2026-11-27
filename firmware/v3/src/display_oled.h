@@ -77,7 +77,7 @@ class OledDisplay {
     }
     d_.setCursor(0, 0);
     d_.print(s.head);
-    badge(s.badge);
+    if (s.badge) badge(s.badge);                            // variante C: nessuna lettera in condizioni normali
     d_.drawFastHLine(0, 10, 128, SSD1306_WHITE);
     if (s.kind == v3::disp::Kind::Menu || s.kind == v3::disp::Kind::Info) {          // menu (come la v2: voce scelta in negativo) e informazioni
       d_.setTextSize(1);

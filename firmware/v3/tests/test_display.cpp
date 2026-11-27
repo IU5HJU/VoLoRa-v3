@@ -162,6 +162,28 @@ int main() {
     buildInfo(mi, "una riga molto molto lunga che supera lo schermo", nullptr, "", "", "", &s);
     CHECK(std::strlen(s.rows[0]) == 21 && s.rows[1][0] == 0, "informazioni: righe lunghe tagliate a 21 caratteri");
   }
+  // varianti A e C conservate (la scelta dell'autore e' la B, predefinita): si possono riprendere cambiando Input::layout
+  for (Layout lay : {Layout::A, Layout::C}) {
+    const bool isA = lay == Layout::A;
+    Input v; v.call = "IU5HJU"; v.bleConnected = true; v.hasPos = true; v.batteryV = 4.12f; v.layout = lay;
+    std::snprintf(v.posText, sizeof(v.posText), "JN53ab");
+    build(v, &s);
+    CHECK(s.badge == (isA ? 'V' : '\0') && std::strcmp(s.left, "R10 17dBm") == 0 && std::strcmp(s.l47, "Pos JN53ab") == 0 && fits(s), "%s: a riposo, lettera, gradino e potenza in basso, posizione sulla riga libera", isA ? "A" : "C");
+    v.hasPos = false; build(v, &s);
+    CHECK(std::strcmp(s.l47, "Manca la posizione") == 0, "%s: senza posizione lo dice per esteso", isA ? "A" : "C");
+    v.hasPos = true; v.gpsEnabled = true; v.gpsFix = true; v.gpsSats = 8; build(v, &s);
+    CHECK(std::strcmp(s.l47, "GPS fix, 8 satelliti") == 0, "%s: GPS con fix come la v2", isA ? "A" : "C");
+    v.gpsFix = false; build(v, &s);
+    CHECK(std::strcmp(s.l47, "GPS cerco satelliti") == 0, "%s: GPS senza fix come la v2", isA ? "A" : "C");
+    v.gpsEnabled = false;
+    v.power = Power::Boost; v.powerDbm = 20; build(v, &s);
+    CHECK(s.badge == 'B' && std::strcmp(s.left, "R10 20dBm") == 0, "%s: BOOST, lettera B e 20 dBm", isA ? "A" : "C");
+    v.power = Power::Iof; v.powerDbm = 22; v.rung = 14; build(v, &s);
+    CHECK(s.badge == 'I' && std::strcmp(s.left, "R14 22dBm") == 0 && fits(s), "%s: IOF MODE, lettera I e 22 dBm", isA ? "A" : "C");
+    v.power = Power::Normal; v.powerDbm = 17; v.rung = 7; v.sending = true; v.sendPct = 40; v.sendKind = 2; build(v, &s);
+    CHECK(s.bar == 40 && std::strcmp(s.left, "R7 17dBm") == 0, "%s: durante l'invio la barra e il gradino in basso", isA ? "A" : "C");
+  }
+  CHECK(glyph('V')[0][0] == 'X' && std::strcmp(glyph('V')[8], "....XX....") == 0, "glifo V della variante A conservato");
   // batteria: formato e medie come la v2
   char b[20];
   formatBatteryText(b, sizeof(b), 4.123f); CHECK(std::strcmp(b, "(Batt=4.12V)") == 0, "formato batteria");

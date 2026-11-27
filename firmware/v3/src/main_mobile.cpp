@@ -35,6 +35,10 @@ using namespace v3::img;
 #ifndef LCR_VERSION
 #define LCR_VERSION "dev"
 #endif
+// Disposizione dello schermo: B (scelta dell'autore). La A e la C sono conservate in display_model.h: per riprenderle compilare con -DVL3_DISPLAY_LAYOUT=A (o C) (docs/display-v3.md)
+#ifndef VL3_DISPLAY_LAYOUT
+#define VL3_DISPLAY_LAYOUT B
+#endif
 constexpr bool kTcxo = false;                 // il TCXO non si legge ancora dalla scheda: senza, R12-R14 non si annunciano (docs/confronto-datasheet.md)
 constexpr size_t kRxMax = 32768;              // oggetti dalla radio: fino a 32 kB (RAM della scheda)
 
@@ -244,6 +248,7 @@ static void updateDisplay(double now) {
   Input in;
   in.call = call;
   in.radioOk = radioOk;
+  in.layout = v3::disp::Layout::VL3_DISPLAY_LAYOUT;
   in.noCall = !call[0];
   in.freqMhz = radio.frequencyKhz() / 1000.0;
   in.batteryV = battery.volts();
