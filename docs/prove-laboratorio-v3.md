@@ -3,9 +3,12 @@
 **Regola di partenza (27/11/2026):** per le prove la **pagina del telefono sta nella scheda** e non serve Internet ("Internet non è affidabile"). Le due schede e un telefono bastano.
 
 ## Stato delle prove (cosa è provato su schede vere)
-- **27/11/2026, due schede T3, pagina da Internet via Bluetooth:** un **testo** inviato dal telefono parte via radio e **arriva sul secondo telefono** correttamente (prima prova V3 su schede vere; segnalata dall'autore, senza registro).
-- **Immagine dalla galleria: l'invio fallisce** (stesso giorno). Motivo **sconosciuto**: mancava il registro. Dopo questa data la scheda dice il motivo (riepilogo `E_DIAG`, vedi sotto): al prossimo tentativo mandami il registro.
-- Tutto il resto (GPS, BOOST/IOF, display, frequenza, Wi-Fi della scheda) è provato **solo sul PC**.
+Prove dell'autore (IU5HJU) con due schede T3, segnalate a voce (senza registro allegato):
+- **27/11/2026, pagina da Internet via Bluetooth:** un **testo** inviato dal telefono parte via radio e **arriva sul secondo telefono** (prima prova V3 su schede vere). Un'**immagine dalla galleria falliva** (motivo "telefono sparito").
+- **27/11/2026, app Android (APK) via Bluetooth:** installata e funzionante dopo due correzioni emerse dalle prove:
+  1. **la ricerca delle schede non trovava niente** finché non si attivava la posizione del telefono: Android 12+ vuole il permesso di posizione per cercare, a meno che il manifest dichiari `neverForLocation` (corretto in `app/scripts/patch-android.py`; la correzione senza posizione attiva **non è stata verificata** separatamente);
+  2. **l'immagine falliva** con `Write timeout` e collegamento caduto: la pagina scriveva pacchetti da 240 byte con un MTU di 185; ora i pacchetti seguono l'MTU negoziato (commit 1bca5a4). Dopo questa correzione l'autore riferisce "adesso funziona" (cosa esattamente, in quali condizioni e con quale immagine: non registrato).
+- Non provati su schede o telefoni: il **Wi-Fi della scheda** con la pagina dentro (iPhone), **GPS**, **BOOST/IOF**, **display**, **frequenza configurabile**, l'app **senza** posizione attiva, il **motivo dell'ultimo riavvio** nel registro.
 
 ## Cosa serve
 - Due schede uguali con il firmware **`mobile_t3`** (T3) o **`mobile_tbeam1262`** (T-Beam), caricate dalla [pagina di installazione](../site/firmware-v3.html). In laboratorio senza app si usa il **Wi-Fi della scheda** (si accende con il tasto BOOT premuto 2 s o con `WIFI ON`; all'avvio è spento); con l'app Android si usa il Bluetooth. Due telefoni, oppure uno solo che si ricollega all'altra scheda.
