@@ -227,6 +227,7 @@ jobs:
         working-directory: app
         run: |
           npx cap add android
+          python3 scripts/patch-android.py android/app/src/main/AndroidManifest.xml
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
           CODE=$(git rev-list --count HEAD)
           sed -i "s/versionCode 1/versionCode $CODE/; s/versionName \"1.0\"/versionName \"$VERSION\"/" android/app/build.gradle
@@ -237,6 +238,12 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
+      - name: Controlla i permessi dell'APK (ricerca Bluetooth senza posizione)
+        run: |
+          AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$AAPT" dump permissions app/android/app/build/outputs/apk/debug/app-debug.apk | tee permessi.txt
+          grep -E "BLUETOOTH_SCAN.*(neverForLocation|0x10000)" permessi.txt
+          grep -q "BLUETOOTH_CONNECT" permessi.txt
       - name: Prepara il file
         run: |
           mkdir -p dist-apk

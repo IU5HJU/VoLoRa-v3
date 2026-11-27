@@ -23,6 +23,9 @@ L'APK è **di debug**, firmato con la chiave di prova di Android: non è sul Pla
 - Sul PC (`tests/page/run_app_shim.js`, 13 controlli): la **pagina vera** con lo strato e un BleClient finto sopra la scheda finta: collegamento, accoppiamento, INFO, testo e file di 4 blocchi identici con CRC, schermo acceso durante l'invio, oggetto ricevuto dalla radio, ricollegamento dopo una caduta.
 - **Non provato:** il plugin Bluetooth su un telefono vero, il selettore di Android, la finestra del codice, la dimensione dei pacchetti (MTU), i permessi, la durata del collegamento a schermo spento, l'installazione dell'APK.
 
+## Difetto corretto (27/11/2026): la ricerca non trovava le schede
+Prima prova sul telefono: l'app si installava ma la ricerca Bluetooth **non vedeva nessuna scheda**, mentre l'app Bluetooth del telefono le vedeva. Causa: la pagina inizializzava il plugin con `androidNeverForLocation: true` (non chiedere la posizione) ma il manifest non portava `neverForLocation` su `BLUETOOTH_SCAN`; su Android 12+ senza quel flag la ricerca non dà risultati se manca il permesso di posizione, che l'app non chiedeva. Ora `app/scripts/patch-android.py` mette il flag nel manifest e la CI controlla i permessi dell'APK (`aapt2 dump permissions`). La posizione resta dichiarata per il GPS del telefono. Il selettore ha testi in italiano. **Da riprovare sul telefono.**
+
 ## Limiti noti
 - **Solo Android.** Su iPhone servirebbe l'ambiente Apple (account, Mac): per ora non c'è.
 - Con lo schermo spento o l'app in secondo piano Android può sospendere il WebView e far cadere il collegamento: serve un servizio in primo piano (da fare).

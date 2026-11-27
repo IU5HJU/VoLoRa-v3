@@ -7,5 +7,16 @@
   },
   "server": {
     "androidScheme": "https"
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Cerco le schede VoLoRa...",
+        "cancel": "Annulla",
+        "availableDevices": "Schede trovate",
+        "noDeviceFound": "Nessuna scheda trovata: e' accesa? e' a portata?"
+      },
+      "displayMode": "list"
+    }
   }
 }
