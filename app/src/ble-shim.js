@@ -48,6 +48,9 @@
         });
         // la caratteristica e' cifrata (codice a 6 cifre): si chiede l'accoppiamento subito, cosi' la finestra di Android compare qui e non a meta' di una scrittura
         try { if (BleClient.isBonded && BleClient.createBond && !(await BleClient.isBonded(d.deviceId))) await BleClient.createBond(d.deviceId); } catch (e) { /* si prova lo stesso */ }
+        // la dimensione dei pacchetti dipende dall'MTU negoziato (il plugin ne chiede 512, la scheda ne da' 185): la pagina non deve scrivere oltre MTU-3 byte per volta
+        try { dev.mtu = await BleClient.getMtu(d.deviceId); } catch (e) { dev.mtu = 0; }
+        try { if (BleClient.requestConnectionPriority) await BleClient.requestConnectionPriority(d.deviceId, 1); } catch (e) { /* solo Android: non e' grave */ }       // 1 = alta priorita': intervalli brevi, piu' pacchetti al secondo
         dev.gatt.connected = true; server.connected = true;
         return Object.assign(server, { getPrimaryService: server.getPrimaryService });
       };

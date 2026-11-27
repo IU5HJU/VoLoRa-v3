@@ -92,6 +92,8 @@ module.exports = `
       requestDevice: async o => { calls.push(['requestDevice', o]); board.requestCount++; return { deviceId: 'AA:BB:CC', name: 'VoLoRa-V3 IU5HJU' }; },
       connect: async (id, onDisconnect) => { board.connected = true; board.bleOnDisconnect = onDisconnect; calls.push(['connect', id]); },
       disconnect: async () => { board.connected = false; },
+      getMtu: async () => { calls.push(['getMtu']); return board.mtu || 185; },
+      requestConnectionPriority: async (id, p) => { calls.push(['priority', p]); },
       isBonded: async () => false,
       createBond: async id => { calls.push(['createBond', id]); },
       startNotifications: async (id, svc, ch, cb) => { if (svc !== SERVICE) throw new Error('servizio'); map[ch]._l.push(e => cb(e.target.value)); },

@@ -15,6 +15,7 @@
 #include "web_assets.h"
 #include <Preferences.h>
 #include <SPI.h>
+#include <esp_system.h>
 #include <esp_timer.h>
 
 #include "battery_board.h"
@@ -471,6 +472,13 @@ void setup() {
   adv->start();
   Serial.printf("BLE acceso. Codice di accoppiamento: %06u\n", static_cast<unsigned>(passkey));
   pinMode(0, INPUT_PULLUP);                              // tasto BOOT
+  {                                                      // perche' la scheda si e' riavviata: un blocco o un calo di tensione in trasmissione fa cadere il Bluetooth e sembra "telefono sparito"
+    const esp_reset_reason_t rr = esp_reset_reason();
+    const char* why = rr == ESP_RST_POWERON ? "accensione" : rr == ESP_RST_SW ? "riavvio da programma" : rr == ESP_RST_PANIC ? "ERRORE DEL PROGRAMMA (panic)" : rr == ESP_RST_INT_WDT ? "BLOCCO (watchdog di interrupt)" :
+                      rr == ESP_RST_TASK_WDT ? "BLOCCO (watchdog di task)" : rr == ESP_RST_WDT ? "BLOCCO (watchdog)" : rr == ESP_RST_BROWNOUT ? "CALO DI TENSIONE (brownout)" : rr == ESP_RST_EXT ? "reset esterno" : rr == ESP_RST_DEEPSLEEP ? "uscita dal sonno" : "altro";
+    Serial.printf("ultimo riavvio: %s\n", why);
+    tlog.addf(nowSec(), "ultimo riavvio: %s", why);
+  }
   tlog.addf(nowSec(), "avvio: %s, firmware %s, %s, %.3f MHz, Bluetooth acceso, Wi-Fi spento", VL3_CHIP, LCR_VERSION, call[0] ? call : "(senza nominativo)", radio.frequencyKhz() / 1000.0);
 }
 

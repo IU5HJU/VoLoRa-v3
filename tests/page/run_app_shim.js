@@ -54,6 +54,9 @@ const check = (c, m) => { if (!c) { console.log('FALLITO: ' + m); fails++; } els
   await page.click('#invia');
   await page.waitForFunction(() => window.__board.done.length === 2, null, { timeout: 20000 });
   check(await page.evaluate(() => window.__board.done[1].crcOk && window.__board.done[1].data.length === 3500), 'file da 3500 byte (quattro blocchi) identico');
+  const wr = await page.evaluate(() => ({ max: window.__board.maxWrite, calls: window.__board.bleCalls.map(c => c[0]) }));
+  check(wr.calls.includes('getMtu') && wr.calls.includes('priority'), 'si legge l\'MTU e si chiede la priorita\' alta del collegamento');
+  check(wr.max > 0 && wr.max <= 182, 'nessun pacchetto oltre MTU-3 = 182 byte (il piu\' lungo: ' + wr.max + ')');
   const ka = await page.evaluate(() => window.__keepAwakeCalls);
   check(ka.includes(true) && ka[ka.length - 1] === false, 'lo schermo resta acceso durante l\'invio e si libera alla fine (' + JSON.stringify(ka) + ')');
   // ricezione dalla radio

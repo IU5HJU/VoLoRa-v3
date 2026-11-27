@@ -214,6 +214,7 @@ async function connetti() {
       if (!S.listening) { S.dev.addEventListener('gattserverdisconnected', onDisconnect); S.listening = true; }
       setStato('Mi collego a ' + (S.dev.name || 'scheda') + '…');
       const server = await S.dev.gatt.connect();
+      if (S.dev.mtu && S.dev.mtu > 23) { S.chunk = Math.min(240, S.dev.mtu - 3); log('MTU ' + S.dev.mtu + ': pacchetti da ' + S.chunk + ' byte'); }   // oltre MTU-3 la scheda scarta il pacchetto
       await attach(server);
       S.connected = true; S.wanted = true;
       setStato('Collegato a ' + (S.dev.name || 'scheda') + '.', 'ok');
