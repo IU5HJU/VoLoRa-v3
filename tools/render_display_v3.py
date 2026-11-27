@@ -2,7 +2,8 @@
 """Mockup dell'OLED della scheda mobile V3: esempi di come affiancare gli elementi della v2 a quelli del V3 (docs/images/display-v3-esempi.png).
 
 Usa lo stesso modello di Adafruit_GFX dello script della v2 (third_party/VoLoRa-v2/tools/render_display.py: font 5x7, coordinate, ritorno a capo).
-E' UN MOCKUP disegnato a mano con le coordinate di src/ui.cpp della v2 e di firmware/v3/src/display_oled.h: non e' una foto di uno schermo.
+E' UN MOCKUP disegnato a mano con le coordinate di src/ui.cpp della v2: non e' una foto di uno schermo. Il font e' quello di Adafruit_GFX (identico nelle versioni 1.2.9 e 2.0.0).
+Per il disegno ESATTO della libreria vera (Adafruit_GFX 2.0.0) vedi firmware/v3/tests/test_oled_real.cpp (make -C firmware/v3 oled-real), che scrive le schermate come PBM.
 Uso:  python3 tools/render_display_v3.py PERCORSO/glcdfont.c [uscita.png]
 """
 import importlib.util
