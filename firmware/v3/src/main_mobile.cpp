@@ -107,6 +107,9 @@ static ble::LiveBridge* bridge = nullptr;
 static Preferences prefs;
 static char call[13] = "";
 
+// Nome Bluetooth: "VoLoRa-V3 <NOMINATIVO>", cosi' si riconoscono piu' schede (senza nominativo: "VoLoRa-V3"). Cambia con CALL: la scheda si riavvia per annunciarlo.
+static String bleName() { return call[0] ? String("VoLoRa-V3 ") + call : String("VoLoRa-V3"); }
+
 static double nowS() { return esp_timer_get_time() / 1e6; }
 
 static void rebuild() {
@@ -133,10 +136,12 @@ static void handleSerial() {
         for (const char* p = line + 5; *p && k < 8; p++) if (*p != ' ') c2[k++] = static_cast<char>(toupper(*p));
         c2[k] = 0;
         if (station && station->sending()) { Serial.println("ERR invio in corso"); continue; }
+        const bool changed = strcmp(call, c2) != 0;
         prefs.putString("call", c2);
         strncpy(call, c2, sizeof(call) - 1);
         rebuild();
         Serial.printf("OK nominativo %s\n", call);
+        if (changed) { Serial.printf("riavvio per annunciare il nome Bluetooth \"%s\"...\n", bleName().c_str()); Serial.flush(); delay(300); ESP.restart(); }
       } else if (const FreqParse fp = parseFreq(line, kBoardSx1262); fp.cmd != FreqCmd::NotFreq) {
         if (fp.cmd == FreqCmd::Show) Serial.printf("frequenza %.3f MHz (campo del chip %s)\n", radio.frequencyKhz() / 1000.0, kBoardSx1262 ? "150-960 MHz" : "137-175 e 410-525 MHz");
         else if (fp.cmd == FreqCmd::Invalid) Serial.printf("ERR FREQ %s\n", fp.why);
@@ -171,7 +176,8 @@ void setup() {
   Serial.printf("nominativo: %s\n", call[0] ? call : "(non impostato: scrivi CALL IU5HJU)");
 
   passkey = 100000 + (esp_random() % 900000);           // codice a 6 cifre per l'accoppiamento (sulla seriale; lo schermo OLED dopo)
-  NimBLEDevice::init("VoLoRa-V3");
+  NimBLEDevice::init(bleName().c_str());
+  Serial.printf("nome Bluetooth: %s\n", bleName().c_str());
   NimBLEDevice::setMTU(185);
   NimBLEDevice::setSecurityAuth(true, true, true);       // bonding, MITM, connessioni sicure LE: niente "Just Works"
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);

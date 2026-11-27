@@ -101,6 +101,9 @@ static v3::ble::Bridge* bridge = nullptr;
 static Preferences prefs;
 static char call[13] = "";
 
+// Nome Bluetooth: "VoLoRa-V3 <NOMINATIVO>", cosi' si riconoscono piu' schede (senza nominativo: "VoLoRa-V3"). Cambia con CALL: la scheda si riavvia per annunciarlo.
+static String bleName() { return call[0] ? String("VoLoRa-V3 ") + call : String("VoLoRa-V3"); }
+
 static void applyCall(const char* c) {
   strncpy(call, c, sizeof(call) - 1);
   call[sizeof(call) - 1] = 0;
@@ -120,9 +123,11 @@ static void handleSerial() {
         int k = 0;
         for (const char* p = line + 5; *p && k < 12; p++) if (*p != ' ') c2[k++] = static_cast<char>(toupper(*p));
         c2[k] = 0;
+        const bool changed = strcmp(call, c2) != 0;
         prefs.putString("call", c2);
         applyCall(c2);
         Serial.printf("OK nominativo %s\n", call);
+        if (changed) { Serial.printf("riavvio per annunciare il nome Bluetooth \"%s\"...\n", bleName().c_str()); Serial.flush(); delay(300); ESP.restart(); }
       } else if (!strncmp(line, "STATO", 5) || !strncmp(line, "stato", 5)) {
         const v3::ble::Stats& s = bridge->stats();
         Serial.printf("nominativo %s, BLE %s, oggetto in corso %s, RAM %u byte, richieste %u (ripetute %u), blocchi %u, scartati %u, coda persa %u\n", call[0] ? call : "(manca: CALL xxx)",
@@ -147,7 +152,8 @@ void setup() {
   Serial.printf("nominativo: %s\n", call[0] ? call : "(non impostato: scrivi CALL IU5HJU)");
 
   passkey = 100000 + (esp_random() % 900000);           // codice a 6 cifre per l'accoppiamento (sulla seriale; lo schermo OLED dopo)
-  NimBLEDevice::init("VoLoRa-V3");
+  NimBLEDevice::init(bleName().c_str());
+  Serial.printf("nome Bluetooth: %s\n", bleName().c_str());
   NimBLEDevice::setMTU(185);
   NimBLEDevice::setSecurityAuth(true, true, true);       // bonding, MITM, connessioni sicure LE: niente "Just Works"
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
