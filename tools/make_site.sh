@@ -37,7 +37,7 @@ JSON
 done
 
 # firmware V3: quattro parti agli indirizzi di sempre (bootloader 0x1000, partizioni 0x8000, boot_app0 0xe000, programma 0x10000), cosi' le impostazioni in NVS (nominativo, accoppiamento) restano
-for env in mobile_t3 mobile_tbeam1262 bench_t3 bench_tbeam1262 ble_sim_t3 ble_sim_tbeam1262; do
+for env in mobile_t3 mobile_tbeam1262 mobile_tbeam1278 bench_t3 bench_tbeam1262 bench_tbeam1278 ble_sim_t3 ble_sim_tbeam1262; do
   art="firmware-v3-$env"
   for f in bootloader.bin partitions.bin boot_app0.bin firmware.bin; do
     test -f "$in/$art/$f" || { echo "manca $in/$art/$f" >&2; exit 1; }
