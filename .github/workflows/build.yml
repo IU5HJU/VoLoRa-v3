@@ -269,10 +269,14 @@ jobs:
         with:
           pattern: firmware-*
           path: dist
+      - uses: actions/download-artifact@v4          # l'APK ha un altro nome (volora3-apk): il pattern firmware-* non lo prende
+        with:
+          name: volora3-apk
+          path: dist/volora3-apk
       - name: Assembla il sito
         run: |
           set -euo pipefail
-          tools/make_site.sh dist _site "main-$(TZ=Europe/Rome date +%d/%m/%Y)" "$GITHUB_SHA"
+          REQUIRE_APK=1 tools/make_site.sh dist _site "main-$(TZ=Europe/Rome date +%d/%m/%Y)" "$GITHUB_SHA"
           find _site -type f | sort
       - uses: actions/setup-node@v4
         with:

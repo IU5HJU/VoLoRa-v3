@@ -66,6 +66,9 @@ if [ -f "$in/volora3-apk/VoLoRa-V3.apk" ]; then
   mkdir -p "$out/app"
   cp "$in/volora3-apk/VoLoRa-V3.apk" "$out/app/VoLoRa-V3.apk"
   echo "app Android inclusa: $(wc -c < "$out/app/VoLoRa-V3.apk") byte"
+elif [ -n "${REQUIRE_APK:-}" ]; then
+  echo "manca $in/volora3-apk/VoLoRa-V3.apk (REQUIRE_APK): il sito non va pubblicato senza l'app" >&2
+  exit 1
 fi
 
 cat > "$out/version.json" <<JSON
