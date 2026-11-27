@@ -8,6 +8,8 @@
 #include <SPI.h>
 #include <esp_timer.h>
 
+#include "battery_board.h"
+#include "display_oled.h"
 #include "freq.h"
 #include "live_bridge.h"
 #include "pmu.h"
@@ -16,6 +18,9 @@
 using namespace v3;
 using namespace v3::img;
 
+#ifndef LCR_VERSION
+#define LCR_VERSION "dev"
+#endif
 constexpr bool kTcxo = false;                 // il TCXO non si legge ancora dalla scheda: senza, R12-R14 non si annunciano (docs/confronto-datasheet.md)
 constexpr size_t kRxMax = 32768;              // oggetti dalla radio: fino a 32 kB (RAM della scheda)
 
@@ -71,8 +76,15 @@ class DataCb : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* c) override { const std::string v = c->getValue(); push(1, reinterpret_cast<const uint8_t*>(v.data()), v.size()); }
 };
 
+// avviso a tempo sul display (riga 38), come gli avvisi della v2
+static char noticeText[24] = "";
+static uint32_t noticeUntilMs = 0;
+static void setNotice(const char* t) { snprintf(noticeText, sizeof(noticeText), "%.21s", t); noticeUntilMs = millis() + v3::disp::kNoticeMs; }
+
 struct PhoneSink : ble::LiveSink {
   void evt(const uint8_t* d, size_t n) override {
+    if (n >= 4 && d[0] == ble::E_DONE) setNotice(d[3] == ble::DONE_DELIVERED ? "CONSEGNATO" : d[3] == ble::DONE_CANCELLED ? "ANNULLATO" : "INVIO FALLITO");
+    else if (n >= 4 && d[0] == ble::E_ERR) setNotice(d[3] == ble::ERR_NO_POSITION ? "MANCA LA POSIZIONE" : d[3] == ble::ERR_NO_CALL ? "IMPOSTA NOMINATIVO" : d[3] == ble::ERR_BUSY ? "OCCUPATO" : "ERRORE DEL TELEFONO");
     if (!bleConnected || !chEvt) return;
     chEvt->setValue(d, n);
     chEvt->notify();
@@ -102,9 +114,12 @@ struct RamStore : Store {
 static RamStore store;
 
 static BoardRadio radio;
+static bool radioOk = false;
 static Station* station = nullptr;
 static ble::LiveBridge* bridge = nullptr;
 static Preferences prefs;
+static OledDisplay oled;
+static BatteryReader battery;
 static char call[13] = "";
 
 // Nome Bluetooth: "VoLoRa-V3 <NOMINATIVO>", cosi' si riconoscono piu' schede (senza nominativo: "VoLoRa-V3"). Cambia con CALL: la scheda si riavvia per annunciarlo.
@@ -120,6 +135,55 @@ static void rebuild() {
                         kBoardSx1262 ? 0 : static_cast<uint16_t>(1u << 3), radio.frequencyKhz());     // R3 (LoRa 500/SF6) sull'SX1278 vuole l'intestazione implicita: il driver non lo fa
   bridge = new ble::LiveBridge(&phone, station, call, kBoardSx1262, rungMask(kBoardSx1262, kTcxo, radio.frequencyKhz()) & ~(kBoardSx1262 ? 0u : (1u << 3)), &store, kRxMax);
   if (bleConnected) bridge->onConnect(); else bridge->onDisconnect();
+}
+
+// ----- display: si costruisce lo stato e si ridisegna se cambia (display_model.h) -----
+static void updateDisplay(double now) {
+  static int seenDone = 0;
+  static char lastCall[16] = "";
+  static uint32_t lastBytes = 0, lastAtMs = 0;
+  static bool lastOk = true, haveLast = false;
+  using namespace v3::disp;
+  const uint32_t ms = millis();
+  battery.update(ms);
+  Input in;
+  in.call = call;
+  in.radioOk = radioOk;
+  in.noCall = !call[0];
+  in.freqMhz = radio.frequencyKhz() / 1000.0;
+  in.batteryV = battery.volts();
+  in.bleConnected = bleConnected;
+  in.pairCode = passkey;
+  static String name;
+  name = bleName();
+  in.bleName = name.c_str();
+  in.powerDbm = radio.boostState().power();
+  in.power = radio.boostState().iofOn() ? Power::Iof : radio.boostState().boostOn() ? Power::Boost : Power::Normal;
+  in.notice = (noticeText[0] && ms < noticeUntilMs) ? noticeText : "";
+  if (station && bridge) {
+    Receiver& rx = station->receiver();
+    if (rx.doneCount() < seenDone) seenDone = 0;                 // stazione ricreata (CALL o FREQ)
+    if (rx.doneCount() != seenDone) {
+      seenDone = rx.doneCount();
+      snprintf(lastCall, sizeof(lastCall), "%.12s", reinterpret_cast<const char*>(rx.peerCall()));
+      lastBytes = rx.doneBytes(); lastOk = rx.doneOk(); lastAtMs = ms; haveLast = true;
+    }
+    in.rung = station->link().rung;
+    in.linkLost = station->link().lost;
+    in.sending = station->sending();
+    in.sendPct = bridge->sendPct();
+    in.sendKind = bridge->sendKind();
+    in.receiving = rx.receiving() && now - station->lastRxAt() < 30.0;
+    in.rxCall = reinterpret_cast<const char*>(rx.peerCall());
+    in.rxPct = rx.piecesOffered() > 0 ? 100 * rx.piecesHave() / rx.piecesOffered() : 0;
+    in.rssi = station->lastRssi(); in.snr = station->lastSnr();
+    in.hasPos = bridge->hasPosition();
+    bridge->positionText(in.posText);
+    in.haveLast = haveLast; in.lastCall = lastCall; in.lastBytes = lastBytes; in.lastOk = lastOk; in.lastAgoMs = ms - lastAtMs;
+  }
+  Screen sc;
+  build(in, &sc);
+  oled.show(sc, ms, in.sending || in.receiving);
 }
 
 static void handleSerial() {
@@ -148,6 +212,9 @@ static void handleSerial() {
         else if (station && station->sending()) Serial.println("ERR invio in corso");
         else if (!radio.setFrequencyKhz(fp.khz)) Serial.println("ERR la radio non accetta questa frequenza");
         else { prefs.putUInt("khz", static_cast<uint32_t>(fp.khz + 0.5)); rebuild(); Serial.printf("OK frequenza %.3f MHz (salvata): impostala uguale sull'altra scheda\n", fp.khz / 1000.0); }
+      } else if (!strncasecmp(line, "DISPLAY", 7)) {
+        if (!oled.present()) Serial.println("display OLED non trovato");
+        else { oled.enable(line[8] != '0'); Serial.printf("display %s\n", oled.enabled() ? "acceso" : "spento"); }
       } else if (radio.boostCommand(line)) {
         // gestito dal driver radio (BOOST ON RISCHIO | OFF | STATUS)
       } else if (!strncasecmp(line, "STATO", 5)) {
@@ -156,7 +223,7 @@ static void handleSerial() {
         Serial.printf("%s BLE %s, %.3f MHz, gradino R%d%s, invio %s, in RAM %u byte, richieste %u (ripetute %u), scartati %u, oggetti ricevuti %u, errori radio %u, coda persa %u\n", call, bleConnected ? "collegato" : "scollegato",
                       radio.frequencyKhz() / 1000.0, station->link().rung, station->link().lost ? " (in ricerca)" : "", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(bridge->held()), s.pulls, s.repulls, s.dropped, s.rxObjects,
                       static_cast<unsigned>(radio.rxErrors()), static_cast<unsigned>(qDropped));
-      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
+      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | DISPLAY 0|1 | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
     } else if (n < static_cast<int>(sizeof(line)) - 1) line[n++] = c;
   }
 }
@@ -167,7 +234,10 @@ void setup() {
   Serial.printf("\nVoLoRa V3 mobile con radio vera (STUDIO) %s, %.3f MHz, %d dBm\n", VL3_CHIP, radio.frequencyKhz() / 1000.0, kPowerDbm);
   pmuBegin();
   SPI.begin(pins::kRadioSclk, pins::kRadioMiso, pins::kRadioMosi, pins::kRadioCs);
-  Serial.println(radio.begin() ? "radio pronta a R10" : "ERRORE: la radio non parte");
+  radioOk = radio.begin();
+  Serial.println(radioOk ? "radio pronta a R10" : "ERRORE: la radio non parte");
+  battery.begin();
+  oled.begin();
   prefs.begin("vl3", false);
   { const uint32_t k = prefs.getUInt("khz", 0); if (k && !radio.setFrequencyKhz(k)) Serial.printf("frequenza salvata %u kHz non valida: resta %.3f MHz\n", static_cast<unsigned>(k), radio.frequencyKhz() / 1000.0); }
   const String saved = prefs.getString("call", "");
@@ -178,6 +248,7 @@ void setup() {
   passkey = 100000 + (esp_random() % 900000);           // codice a 6 cifre per l'accoppiamento (sulla seriale; lo schermo OLED dopo)
   NimBLEDevice::init(bleName().c_str());
   Serial.printf("nome Bluetooth: %s\n", bleName().c_str());
+  { v3::disp::Screen st; v3::disp::buildStartup(call, LCR_VERSION, &st); oled.showNow(st); delay(1800); }      // la versione del firmware all'accensione, come la v2
   NimBLEDevice::setMTU(185);
   NimBLEDevice::setSecurityAuth(true, true, true);       // bonding, MITM, connessioni sicure LE: niente "Just Works"
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
@@ -210,10 +281,11 @@ void loop() {
     else if (bridge) { if (f.kind == 0) bridge->onCommand(f.d, f.len); else bridge->onData(f.d, f.len); }
   }
   handleSerial();
-  if (!station) { delay(5); return; }
+  if (!station) { updateDisplay(nowS()); delay(5); return; }
   const double now = nowS();
   radio.service(*station, now);
   station->poll(now);
   bridge->poll(now);
+  updateDisplay(now);
   delay(1);
 }

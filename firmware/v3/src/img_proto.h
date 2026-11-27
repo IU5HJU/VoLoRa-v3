@@ -113,6 +113,10 @@ class Receiver {
   void setAccepting(bool on, uint32_t maxBytes = 0xFFFFFFFFu) { accepting_ = on; maxBytes_ = maxBytes; }
   // quello che l'ultima offerta e l'ultimo DONE hanno detto
   int doneCount() const { return doneCount_; }
+  // per il display: un oggetto e' in arrivo (offerta accettata, DONE non ancora arrivato), pezzi offerti e pezzi gia' arrivati
+  bool receiving() const { return rxActive_; }
+  int piecesOffered() const { return haveOffer_ ? nPieces_ : 0; }
+  int piecesHave() const { int n = 0; if (haveOffer_) for (int i = 0; i < nPieces_; i++) if (hasPiece(i)) n++; return n; }
   const uint8_t* peerCall() const { return peerCall_; }
   size_t peerCallLen() const { return peerCallLen_; }
   uint8_t objType() const { return objType_; }
@@ -150,6 +154,7 @@ class Receiver {
         return r;
       case OFFER:
         if (!accepting_ || f.size > maxBytes_) return r;
+        rxActive_ = true;
         objType_ = f.objType; objSize_ = f.size; objCrc_ = f.crc; offerHasPos_ = f.hasPos;
         if (f.hasPos) memcpy(offerPos_, f.pos, 7);
         peerCallLen_ = f.callLen > kMaxCall ? kMaxCall : f.callLen; memcpy(peerCall_, f.call, peerCallLen_); peerCall_[peerCallLen_] = 0;
@@ -188,7 +193,7 @@ class Receiver {
           crc = crc32Update(crc, pb, n);
           have += n;
         }
-        hasDone_ = true; doneOk_ = have == f.nbytes && crc == f.crc; doneLayers_ = f.layers; doneBytes_ = f.nbytes; doneCount_++;
+        hasDone_ = true; doneOk_ = have == f.nbytes && crc == f.crc; doneLayers_ = f.layers; doneBytes_ = f.nbytes; doneCount_++; rxActive_ = false;
         r.len = encStatus(buf_, sizeof(buf_), sess_, static_cast<uint16_t>(nOk), 0, 0, 0, 0, f.layers, 1); r.frame = buf_;
         return r;
       }
@@ -248,7 +253,7 @@ class Receiver {
   uint8_t have_[kMaxPieces / 8];
   long double sumR_ = 0, sumS_ = 0;
   int nSamples_ = 0, windowHeard_ = 0, probeHeard_ = 0, probeCount_ = 0, probeRung_ = 0;
-  bool hasDone_ = false, doneOk_ = false, accepting_ = true, offerHasPos_ = false;
+  bool hasDone_ = false, doneOk_ = false, accepting_ = true, offerHasPos_ = false, rxActive_ = false;
   uint32_t maxBytes_ = 0xFFFFFFFFu, objSize_ = 0, objCrc_ = 0, doneBytes_ = 0;
   uint8_t peerCall_[kMaxCall + 1] = {0}, objType_ = 0, offerPos_[7] = {0}, doneLayers_ = 0;
   size_t peerCallLen_ = 0;

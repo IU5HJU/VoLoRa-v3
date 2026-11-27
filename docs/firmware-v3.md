@@ -109,6 +109,30 @@ Il **mezzo** è ciò che porta le azioni del mittente sulla radio e sui timer. S
 
 **Cosa NON è stato provato:** il driver radio e il mezzo **non sono mai girati su una scheda**; il canale del banco di prova è un modello. Il comportamento reale (tempi di commutazione della radio, ascolto prima di parlare, collisioni, interferenze) può cambiare i tempi limite.
 
+### Confronto con la radio mobile v2 (cosa manca al V3)
+La mobile **V2** è una radio vocale a turni (Codec2 su LoRa) con PTT, menu a bordo e tante funzioni; la mobile **V3** per ora è il **ponte telefono → protocollo immagini/dati**. Stato, funzione per funzione (v2 letta in `third_party/VoLoRa-v2`):
+
+| Funzione della v2 | V3 mobile |
+|---|---|
+| Display OLED 128×64: layout, batteria `(Batt=…V)`, versione all'avvio, barra, avvisi | **fatto** (sezione sotto), non visto su schermo vero |
+| Nominativo, frequenza configurabile, "solo RX" senza nominativo, potenza | **fatto** (`CALL`, `FREQ`; potenza +17 dBm, BOOST, IOF MODE) |
+| Aggiornamento dalla pagina web senza perdere le impostazioni | **fatto** (pagina `firmware-v3.html`, quattro parti) |
+| Messaggi di testo (SMS, 150 caratteri) e file/immagini | **fatto, in modo nuovo**: dal telefono via Bluetooth, sul protocollo V3 con livelli e ritrasmissione selettiva |
+| Casella dei messaggi ricevuti (busta, "leggi") | **sul telefono** (sezione "Ricevuti dalla radio"); la scheda li passa e li libera |
+| Posizione: QTH fisso o GPS, distanza dalla stazione, T-Beam col GPS | **parziale**: la posizione arriva dal telefono (locatore o GPS) e va nell'OFFER; il **GPS del T-Beam non è usato**, nessuna distanza sul display |
+| Pulsanti: PTT (GPIO0), volume lungo per il menu | **manca** (non c'è né PTT né menu: si comanda dal telefono e dalla seriale) |
+| **Voce a turni** con Codec2 (profili Standard, Range, Messaggio, Diretta), microfono, altoparlante, PTT | **manca**: il V3 è un protocollo dati; la voce non è nel firmware V3 (il V3 è retrocompatibile con la voce v2 solo a livello di protocollo, non implementato sulla scheda) |
+| Configurazione dal Wi-Fi della scheda (`192.168.4.1`) e comandi `CFG` | **manca** (si usano `CALL`, `FREQ`, `BOOST`, `IOF`, `DISPLAY` sulla seriale) |
+| Shift del ripetitore (0-10 MHz) | **manca** |
+| MeshCom (escursione sulle reti di testo a 433,175 MHz) | **manca** |
+| Prova di collegamento e prova di potenza (frame noti, esito sul display) | **manca** (c'è il banco `bench_*` e il firmware di misura) |
+| Ruoli ripetitore RX/TX, comandi del sysop, nodo Internet e reflector | **manca** (ruoli nodo e ripetitore del V3 non scritti; il reflector V3 è in C++ sul PC) |
+| Identificativo periodico anche in Morse in FM | **manca** |
+| Beacon periodico | **manca** |
+
+### Display OLED
+La scheda mobile mostra sull'OLED lo stato come la v2 (stesso layout, batteria, versione all'avvio) con in più il **codice di accoppiamento Bluetooth**, gradino e potenza, avanzamento di invio e ricezione, e la lettera **V / B / I** per potenza normale / BOOST / IOF MODE. Dettagli e schermate in [display-v3.md](display-v3.md). Modello provato sul PC (61 controlli); **disegno mai visto su uno schermo vero**. Comando seriale `DISPLAY 0|1`.
+
 ### Frequenza configurabile (`freq.h`)
 Come da nota dell'autore ([regole-radioamatoriali.md](regole-radioamatoriali.md)): la frequenza del canale di T3 e T-Beam è **liberamente configurabile** e il firmware controlla **solo il campo di sintonia del chip** (SX1278: 137-175 e 410-525 MHz; SX1262: 150-960 MHz, dai datasheet). Nessun altro limite, nessuna avvertenza. Il valore di partenza è 433,700 MHz.
 - **Comando seriale** (mobile e banco): `FREQ` mostra la frequenza e il campo del chip; `FREQ 433.700` (o con la virgola, fino a 3 decimali = 1 kHz) la imposta. Fuori dal campo del chip il comando risponde con il campo giusto e non cambia niente. Nella scheda **mobile** la frequenza si **salva** (resta dopo lo spegnimento); sul banco no. `STATO` e l'avvio stampano la frequenza in uso.

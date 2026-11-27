@@ -9,9 +9,13 @@
 #include <Wire.h>
 #include <XPowersLib.h>
 
+inline XPowersLibInterface*& pmuPtr() { static XPowersLibInterface* p = nullptr; return p; }
+// tensione della batteria in mV, -1 se assente o PMU non disponibile
+inline int pmuBatteryMv() { XPowersLibInterface* p = pmuPtr(); return (p && p->isBatteryConnect()) ? static_cast<int>(p->getBattVoltage()) : -1; }
+
 inline bool pmuBegin() {
   Wire.begin(pins::kOledSda, pins::kOledScl);
-  static XPowersLibInterface* pmu = new XPowersAXP2101(Wire, pins::kOledSda, pins::kOledScl);
+  XPowersLibInterface* pmu = pmuPtr() = new XPowersAXP2101(Wire, pins::kOledSda, pins::kOledScl);
   if (!pmu->init()) {
     Serial.println("[pmu] AXP2101 non risponde: la radio potrebbe non essere alimentata");
     return false;
@@ -38,4 +42,5 @@ inline bool pmuBegin() {
 }
 #else
 inline bool pmuBegin() { return true; }
+inline int pmuBatteryMv() { return -1; }
 #endif

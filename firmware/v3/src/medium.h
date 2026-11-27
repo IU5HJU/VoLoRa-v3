@@ -69,12 +69,18 @@ class Station {
   FailKind sendFailure() const { return snd_ ? snd_->failure() : FAIL_NONE; }
   int layersDelivered() const { return snd_ ? snd_->layersDelivered() : 0; }
   uint32_t bytesDelivered() const { return snd_ ? snd_->bytesDelivered() : 0; }
+  // ultimo frame sentito (per il display)
+  double lastRssi() const { return lastRssi_; }
+  double lastSnr() const { return lastSnr_; }
+  double lastRxAt() const { return lastRxAt_; }
+  uint32_t rxFrames() const { return rxFrames_; }
   const Receiver& receiver() const { return rx_; }
   Receiver& receiver() { return rx_; }
   const Link& link() const { return link_; }
 
   // ----- eventi -----
   void onRx(const uint8_t* f, size_t n, double rssi, double snr, double now) {
+    lastRssi_ = rssi; lastSnr_ = snr; lastRxAt_ = now; rxFrames_++;
     Msg m;
     if (!decode(f, n, &m)) { link_.onHeard(now, -1, false); return; }
     link_.onHeard(now, m.type, m.type == HELLO && m.reply);
@@ -265,6 +271,8 @@ class Station {
   Answer ans_;
   Pending reply_;
   bool txBusy_ = false;
+  double lastRssi_ = 0, lastSnr_ = 0, lastRxAt_ = -1e9;
+  uint32_t rxFrames_ = 0;
   Tx txKind_ = Tx::None;
   double dataIdleAt_ = -1, probeIdleAt_ = -1;
 };

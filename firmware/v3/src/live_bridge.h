@@ -40,6 +40,12 @@ class LiveBridge : public img::ObjectSource {
   bool rxBusy() const { return rxPending_; }          // sta ancora passando al telefono un oggetto arrivato dalla radio
   uint32_t held() const { uint32_t h = 0; for (int i = 0; i < kLiveBlocks; i++) if (slot_[i].blk >= 0) h += slot_[i].fill; return h; }
 
+  // per il display
+  uint8_t sendKind() const { return kind_; }
+  int sendPct() const { const int t = st_->piecesTotal(); return t > 0 ? 100 * st_->piecesAcked() / t : 0; }
+  bool hasPosition() const { return havePos_; }
+  // "JN53ab" (locatore) o "GPS" (posizione assoluta) in out (almeno 7 byte)
+  void positionText(char* out) const { if (!havePos_) { out[0] = 0; return; } if (pos_[0] == 0) { memcpy(out, pos_ + 1, 6); out[6] = 0; } else strcpy(out, "GPS"); }
   void onConnect() { connected_ = true; updateGate(); }
   void onDisconnect() {
     connected_ = false;
