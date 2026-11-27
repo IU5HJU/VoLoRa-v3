@@ -85,6 +85,19 @@ int main() {
   in.lastAgoMs = kLastShownMs + 1; build(in, &s);
   CHECK(std::strcmp(s.l38, "Telefono collegato") == 0, "dopo 20 s torna lo stato di riposo");
   in.haveLast = false;
+  // GPS e distanza (come la v2)
+  in.gpsEnabled = true; in.gpsFix = false; build(in, &s);
+  CHECK(std::strcmp(s.l47, "GPS cerco satelliti") == 0, "GPS acceso senza fix");
+  in.gpsFix = true; in.gpsSats = 8; build(in, &s);
+  CHECK(std::strcmp(s.l47, "GPS fix, 8 satelliti") == 0 && fits(s), "GPS con fix e satelliti");
+  in.gpsEnabled = false;
+  in.receiving = true; in.rxCall = "IZ5FSN"; in.rxPct = 10; in.rssi = -97; std::snprintf(in.distText, sizeof(in.distText), "125.8km"); build(in, &s);
+  CHECK(std::strcmp(s.l47, "125.8km  RSSI -97") == 0, "ricezione con distanza: distanza e RSSI");
+  in.receiving = false; in.haveLast = true; in.lastOk = true; in.lastCall = "IZ5FSN"; in.lastAgoMs = 100; std::snprintf(in.lastDistText, sizeof(in.lastDistText), "12.3km"); build(in, &s);
+  CHECK(std::strcmp(s.l38, "Ultimo IZ5FSN 12.3km") == 0 && fits(s), "ultimo con distanza (20 caratteri)");
+  in.lastCall = "IU5HJU/P"; in.lastOk = false; build(in, &s);
+  CHECK(std::strcmp(s.l38, "Ultimo IU5HJU/P ERR") == 0, "la distanza non si aggiunge se la riga supera i 21 caratteri");
+  in.haveLast = false; in.distText[0] = 0; in.lastDistText[0] = 0; in.lastOk = true;
   // livelli di potenza
   in.rung = 10; in.power = Power::Boost; in.powerDbm = 20; build(in, &s);
   CHECK(s.badge == 'B' && std::strcmp(s.left, "R10 20dBm") == 0, "BOOST: lettera B e +20 dBm");

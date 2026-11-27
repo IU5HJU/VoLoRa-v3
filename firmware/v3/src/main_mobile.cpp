@@ -11,6 +11,8 @@
 #include "battery_board.h"
 #include "display_oled.h"
 #include "freq.h"
+#include "gps_board.h"
+#include "position.h"
 #include "live_bridge.h"
 #include "pmu.h"
 #include "radio_board.h"
@@ -120,6 +122,7 @@ static ble::LiveBridge* bridge = nullptr;
 static Preferences prefs;
 static OledDisplay oled;
 static BatteryReader battery;
+static GpsBoard gps;
 static char call[13] = "";
 
 // Nome Bluetooth: "VoLoRa-V3 <NOMINATIVO>", cosi' si riconoscono piu' schede (senza nominativo: "VoLoRa-V3"). Cambia con CALL: la scheda si riavvia per annunciarlo.
@@ -138,14 +141,37 @@ static void rebuild() {
 }
 
 // ----- display: si costruisce lo stato e si ridisegna se cambia (display_model.h) -----
+// distanza fra due blocchi di posizione da 7 byte (locatore o GPS); testo vuoto se una delle due non c'e' o non e' valida
+static void distanceText(const uint8_t* mine, bool haveMine, const uint8_t* peer, bool havePeer, char* out, size_t cap) {
+  out[0] = 0;
+  v3::Position a, b;
+  if (haveMine && havePeer && v3::positionFromBlock(mine, a) && v3::positionFromBlock(peer, b)) v3::formatDistance(out, cap, v3::distanceKm(a, b));
+}
+
+// il GPS della scheda (T-Beam) va al ponte: con un fix la posizione dell'OFFER e' il GPS, senza torna quella del telefono
+static void feedGps(uint32_t ms) {
+  gps.loop(ms);
+  static uint32_t lastMs = 0;
+  if (!bridge || ms - lastMs < 1000) return;
+  lastMs = ms;
+  if (gps.hasFix(ms)) {
+    v3::Position p; p.valid = true; p.fromGps = true; p.latE7 = gps.latE7(); p.lonE7 = gps.lonE7();
+    uint8_t blk[7];
+    if (v3::encodePosition(p, blk)) { bridge->setGps(blk); return; }
+  }
+  bridge->setGps(nullptr);
+}
+
 static void updateDisplay(double now) {
   static int seenDone = 0;
   static char lastCall[16] = "";
   static uint32_t lastBytes = 0, lastAtMs = 0;
   static bool lastOk = true, haveLast = false;
+  static char lastDist[12] = "";
   using namespace v3::disp;
   const uint32_t ms = millis();
   battery.update(ms);
+  feedGps(ms);
   Input in;
   in.call = call;
   in.radioOk = radioOk;
@@ -167,6 +193,7 @@ static void updateDisplay(double now) {
       seenDone = rx.doneCount();
       snprintf(lastCall, sizeof(lastCall), "%.12s", reinterpret_cast<const char*>(rx.peerCall()));
       lastBytes = rx.doneBytes(); lastOk = rx.doneOk(); lastAtMs = ms; haveLast = true;
+      distanceText(bridge->positionBlock(), bridge->hasPosition(), rx.offerPos(), rx.offerHasPos(), lastDist, sizeof(lastDist));
     }
     in.rung = station->link().rung;
     in.linkLost = station->link().lost;
@@ -178,6 +205,9 @@ static void updateDisplay(double now) {
     in.rxPct = rx.piecesOffered() > 0 ? 100 * rx.piecesHave() / rx.piecesOffered() : 0;
     in.rssi = station->lastRssi(); in.snr = station->lastSnr();
     in.hasPos = bridge->hasPosition();
+    in.gpsEnabled = gps.active(); in.gpsFix = gps.hasFix(ms); in.gpsSats = gps.satellites();
+    distanceText(bridge->positionBlock(), bridge->hasPosition(), rx.offerPos(), rx.offerHasPos(), in.distText, sizeof(in.distText));
+    snprintf(in.lastDistText, sizeof(in.lastDistText), "%s", lastDist);
     bridge->positionText(in.posText);
     in.haveLast = haveLast; in.lastCall = lastCall; in.lastBytes = lastBytes; in.lastOk = lastOk; in.lastAgoMs = ms - lastAtMs;
   }
@@ -212,6 +242,15 @@ static void handleSerial() {
         else if (station && station->sending()) Serial.println("ERR invio in corso");
         else if (!radio.setFrequencyKhz(fp.khz)) Serial.println("ERR la radio non accetta questa frequenza");
         else { prefs.putUInt("khz", static_cast<uint32_t>(fp.khz + 0.5)); rebuild(); Serial.printf("OK frequenza %.3f MHz (salvata): impostala uguale sull'altra scheda\n", fp.khz / 1000.0); }
+      } else if (!strncasecmp(line, "GPS", 3)) {
+        if (!gps.present()) Serial.println("questa scheda non ha il GPS (solo il T-Beam)");
+        else if (line[4] == 'O' || line[4] == 'o') {                       // GPS ON / GPS OFF (salvato; spento di base come la v2)
+          const bool on = (line[5] == 'N' || line[5] == 'n');
+          prefs.putBool("gps", on);
+          gps.begin(on);
+          if (!on && bridge) bridge->setGps(nullptr);
+          Serial.printf("GPS %s\n", on ? "acceso: serve il cielo aperto, il primo fix puo' richiedere alcuni minuti" : "spento");
+        } else Serial.printf("GPS %s, %s, %u satelliti (GPS ON | GPS OFF)\n", gps.active() ? "acceso" : "spento", gps.hasFix(millis()) ? "fix" : "nessun fix", static_cast<unsigned>(gps.satellites()));
       } else if (!strncasecmp(line, "DISPLAY", 7)) {
         if (!oled.present()) Serial.println("display OLED non trovato");
         else { oled.enable(line[8] != '0'); Serial.printf("display %s\n", oled.enabled() ? "acceso" : "spento"); }
@@ -223,7 +262,7 @@ static void handleSerial() {
         Serial.printf("%s BLE %s, %.3f MHz, gradino R%d%s, invio %s, in RAM %u byte, richieste %u (ripetute %u), scartati %u, oggetti ricevuti %u, errori radio %u, coda persa %u\n", call, bleConnected ? "collegato" : "scollegato",
                       radio.frequencyKhz() / 1000.0, station->link().rung, station->link().lost ? " (in ricerca)" : "", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(bridge->held()), s.pulls, s.repulls, s.dropped, s.rxObjects,
                       static_cast<unsigned>(radio.rxErrors()), static_cast<unsigned>(qDropped));
-      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | DISPLAY 0|1 | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
+      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | DISPLAY 0|1 | GPS ON|OFF | STATO | BOOST|IOF ON RISCHIO|OFF|STATUS");
     } else if (n < static_cast<int>(sizeof(line)) - 1) line[n++] = c;
   }
 }
@@ -243,6 +282,7 @@ void setup() {
   const String saved = prefs.getString("call", "");
   strncpy(call, saved.c_str(), sizeof(call) - 1);
   rebuild();
+  gps.begin(prefs.getBool("gps", false));
   Serial.printf("nominativo: %s\n", call[0] ? call : "(non impostato: scrivi CALL IU5HJU)");
 
   passkey = 100000 + (esp_random() % 900000);           // codice a 6 cifre per l'accoppiamento (sulla seriale; lo schermo OLED dopo)

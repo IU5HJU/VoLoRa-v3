@@ -44,6 +44,10 @@ class LiveBridge : public img::ObjectSource {
   uint8_t sendKind() const { return kind_; }
   int sendPct() const { const int t = st_->piecesTotal(); return t > 0 ? 100 * st_->piecesAcked() / t : 0; }
   bool hasPosition() const { return havePos_; }
+  // Posizione GPS della scheda (T-Beam): se c'e' un fix e' lei che va nell'OFFER ("la posizione GPS assoluta e' meglio", regole-radioamatoriali.md), altrimenti quella del telefono.
+  // Blocco di 7 byte: byte 0 = 1, poi latitudine e longitudine a 24 bit (position.h). Senza fix: setGps(nullptr).
+  void setGps(const uint8_t* block7) { haveGps_ = block7 != nullptr; if (block7) memcpy(gpsPos_, block7, 7); refreshPos(); }
+  const uint8_t* positionBlock() const { return pos_; }
   // "JN53ab" (locatore) o "GPS" (posizione assoluta) in out (almeno 7 byte)
   void positionText(char* out) const { if (!havePos_) { out[0] = 0; return; } if (pos_[0] == 0) { memcpy(out, pos_ + 1, 6); out[6] = 0; } else strcpy(out, "GPS"); }
   void onConnect() { connected_ = true; updateGate(); }
@@ -69,7 +73,7 @@ class LiveBridge : public img::ObjectSource {
         notify(o, 13 + cl);
       } else if (c == C_POSITION) {
         if (n != 8 || (b[1] != 0 && b[1] != 1) || (b[1] == 0 && !detail::ascii(b + 2, 6))) ok = false;
-        else { memcpy(pos_, b + 1, 7); havePos_ = true; }
+        else { memcpy(phonePos_, b + 1, 7); havePhone_ = true; refreshPos(); }
       } else if (c == C_BEGIN) {
         ok = begin(b, n);
       } else if (c == C_CANCEL || c == C_RESUME || c == C_RX_ACK) {
@@ -152,6 +156,11 @@ class LiveBridge : public img::ObjectSource {
  private:
   struct Slot { int16_t blk = -1; uint16_t fill = 0; bool complete = false; uint32_t used = 0; uint8_t data[kBlock]; };
 
+  void refreshPos() {
+    if (haveGps_) { memcpy(pos_, gpsPos_, 7); havePos_ = true; }
+    else if (havePhone_) { memcpy(pos_, phonePos_, 7); havePos_ = true; }
+    else havePos_ = false;
+  }
   void notify(const uint8_t* d, size_t n) { if (connected_) sink_->evt(d, n); }
   void err(uint16_t obj, uint8_t code) { uint8_t o[4]; o[0] = E_ERR; detail::wr(o + 1, obj, 2); o[3] = code; notify(o, 4); }
   uint32_t nblocks() const { return (size_ + kBlock - 1) / kBlock; }
@@ -373,7 +382,8 @@ class LiveBridge : public img::ObjectSource {
   uint32_t rxMax_;
   char call_[13] = {0};
   uint8_t pos_[7] = {0};
-  bool havePos_ = false, connected_ = true, have_ = false;
+  bool havePos_ = false, havePhone_ = false, haveGps_ = false, connected_ = true, have_ = false;
+  uint8_t phonePos_[7] = {0}, gpsPos_[7] = {0};
   double now_ = 0, stallSince_ = 0, lastProgress_ = 0;
   Stats stats_;
   // oggetto in uscita

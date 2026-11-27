@@ -119,7 +119,7 @@ La mobile **V2** è una radio vocale a turni (Codec2 su LoRa) con PTT, menu a bo
 | Aggiornamento dalla pagina web senza perdere le impostazioni | **fatto** (pagina `firmware-v3.html`, quattro parti) |
 | Messaggi di testo (SMS, 150 caratteri) e file/immagini | **fatto, in modo nuovo**: dal telefono via Bluetooth, sul protocollo V3 con livelli e ritrasmissione selettiva |
 | Casella dei messaggi ricevuti (busta, "leggi") | **sul telefono** (sezione "Ricevuti dalla radio"); la scheda li passa e li libera |
-| Posizione: QTH fisso o GPS, distanza dalla stazione, T-Beam col GPS | **parziale**: la posizione arriva dal telefono (locatore o GPS) e va nell'OFFER; il **GPS del T-Beam non è usato**, nessuna distanza sul display |
+| Posizione: QTH fisso o GPS, distanza dalla stazione, T-Beam col GPS | **fatto** (sezione "GPS e distanza"): GPS del T-Beam (`GPS ON`), posizione del telefono come ripiego, locatore Maidenhead, distanza sul display. Provato sul PC, **non su una scheda** |
 | Pulsanti: PTT (GPIO0), volume lungo per il menu | **manca** (non c'è né PTT né menu: si comanda dal telefono e dalla seriale) |
 | **Voce a turni** con Codec2 (profili Standard, Range, Messaggio, Diretta), microfono, altoparlante, PTT | **manca**: il V3 è un protocollo dati; la voce non è nel firmware V3 (il V3 è retrocompatibile con la voce v2 solo a livello di protocollo, non implementato sulla scheda) |
 | Configurazione dal Wi-Fi della scheda (`192.168.4.1`) e comandi `CFG` | **manca** (si usano `CALL`, `FREQ`, `BOOST`, `IOF`, `DISPLAY` sulla seriale) |
@@ -129,6 +129,12 @@ La mobile **V2** è una radio vocale a turni (Codec2 su LoRa) con PTT, menu a bo
 | Ruoli ripetitore RX/TX, comandi del sysop, nodo Internet e reflector | **manca** (ruoli nodo e ripetitore del V3 non scritti; il reflector V3 è in C++ sul PC) |
 | Identificativo periodico anche in Morse in FM | **manca** |
 | Beacon periodico | **manca** |
+
+### GPS e distanza
+- **GPS del T-Beam** (u-blox, 9600 baud, ALDO3 del PMU): porta di `src/gps.cpp` e dell'interprete NMEA della v2 (`nmea.h`, provato con gli stessi 45 controlli della v2). **Spento di base** come nella v2: seriale `GPS ON` / `GPS OFF` (salvato), `GPS` mostra stato e satelliti. Sulla T3 non c'è il GPS.
+- **Quale posizione va nell'OFFER:** con un fix recente (meno di 15 s) la **posizione GPS assoluta** (come vuole [regole-radioamatoriali.md](regole-radioamatoriali.md): "la GPS è meglio"); senza fix quella che il telefono manda (locatore o GPS del telefono). Con il solo GPS si può inviare anche senza che il telefono abbia mandato la posizione.
+- **Distanza:** dal blocco di posizione di chi manda (nell'OFFER) e dalla propria, anche se una delle due è solo un locatore (`position.h`: centro del quadrato Maidenhead, 4, 6 o 8 caratteri; formula dell'emisenoverso della v2). Sul display: `12.3km  RSSI -97` mentre si riceve, `Ultimo IZ5FSN 12.3km` dopo. Con un locatore a 6 caratteri l'errore è di qualche km.
+- Provato sul PC: `test_position` (56) e `test_nmea` (45) sono i test della v2 sul codice portato; `test_geo` (15: locatore, distanze, blocco da 7 byte); `test_live` (GPS preferito al locatore, ripiego senza fix, invio con il solo GPS, distanza A↔B); `test_display` (stato del GPS, distanza). **Mai provato con un GPS vero.**
 
 ### Display OLED
 La scheda mobile mostra sull'OLED lo stato come la v2 (stesso layout, batteria, versione all'avvio) con in più il **codice di accoppiamento Bluetooth**, gradino e potenza, avanzamento di invio e ricezione, e la lettera **V / B / I** per potenza normale / BOOST / IOF MODE. Dettagli e schermate in [display-v3.md](display-v3.md). Modello provato sul PC (61 controlli); **disegno mai visto su uno schermo vero**. Comando seriale `DISPLAY 0|1`.

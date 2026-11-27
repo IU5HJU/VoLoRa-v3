@@ -38,6 +38,12 @@ struct Input {
   const char* bleName = "VoLoRa-V3";
   bool hasPos = false;
   char posText[8] = "";
+  // GPS (T-Beam): acceso, fix, satelliti
+  bool gpsEnabled = false, gpsFix = false;
+  int gpsSats = 0;
+  // distanza dal mittente dell'oggetto in arrivo e dall'ultimo ricevuto ("12.3km"), vuota se non nota
+  char distText[12] = "";
+  char lastDistText[12] = "";
   // invio dal telefono
   bool sending = false;
   int sendPct = 0;
@@ -124,7 +130,8 @@ inline void build(const Input& in, Screen* s) {
     if (in.rxPct > 0) std::snprintf(b, sizeof(b), "Ricevo messaggio %d%%", in.rxPct > 100 ? 100 : in.rxPct);
     else std::snprintf(b, sizeof(b), "Ricevo il messaggio");
     put(s->l38, sizeof(s->l38), b);
-    std::snprintf(b, sizeof(b), "RSSI %d  SNR %.1f", static_cast<int>(std::lround(in.rssi)), in.snr);
+    if (in.distText[0]) std::snprintf(b, sizeof(b), "%s  RSSI %d", in.distText, static_cast<int>(std::lround(in.rssi)));   // come la v2 col messaggio: distanza e RSSI
+    else std::snprintf(b, sizeof(b), "RSSI %d  SNR %.1f", static_cast<int>(std::lround(in.rssi)), in.snr);
     put(s->l47, sizeof(s->l47), b);
   } else if (!in.bleConnected) {                            // senza telefono la scheda non puo' mandare ne' accettare: serve il codice per collegarlo
     s->kind = Kind::Pairing;
@@ -134,13 +141,17 @@ inline void build(const Input& in, Screen* s) {
   } else {
     std::snprintf(s->big, sizeof(s->big), "ASCOLTO");
     if (in.haveLast && in.lastAgoMs < kLastShownMs) {
-      std::snprintf(b, sizeof(b), "Ultimo %s%s", in.lastCall[0] ? in.lastCall : "-", in.lastOk ? "" : " ERR");
+      int n = std::snprintf(b, sizeof(b), "Ultimo %s%s", in.lastCall[0] ? in.lastCall : "-", in.lastOk ? "" : " ERR");
+      if (in.lastDistText[0] && n > 0 && n + 1 + static_cast<int>(std::strlen(in.lastDistText)) <= kCols) std::snprintf(b + n, sizeof(b) - n, " %s", in.lastDistText);   // la distanza solo se la riga resta nei 21 caratteri
       put(s->l38, sizeof(s->l38), b);
       std::snprintf(b, sizeof(b), "%lu byte CRC %s", static_cast<unsigned long>(in.lastBytes), in.lastOk ? "ok" : "NO");
       put(s->l47, sizeof(s->l47), b);
     } else {
       put(s->l38, sizeof(s->l38), "Telefono collegato");
-      if (in.hasPos) { std::snprintf(b, sizeof(b), "Pos %s", in.posText); put(s->l47, sizeof(s->l47), b); }
+      if (in.gpsEnabled) {                                  // come la v2: stato del GPS sulla riga libera a riposo
+        if (in.gpsFix) { std::snprintf(b, sizeof(b), "GPS fix, %d satelliti", in.gpsSats); put(s->l47, sizeof(s->l47), b); }
+        else put(s->l47, sizeof(s->l47), "GPS cerco satelliti");
+      } else if (in.hasPos) { std::snprintf(b, sizeof(b), "Pos %s", in.posText); put(s->l47, sizeof(s->l47), b); }
       else put(s->l47, sizeof(s->l47), "Manca la posizione");
     }
   }

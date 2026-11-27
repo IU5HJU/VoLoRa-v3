@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../src/live_bridge.h"
+#include "../src/position.h"
 #include "sim_world.h"
 
 using namespace v3::ble;
@@ -304,6 +305,42 @@ int main() {
     CHECK(r.pA.done == DONE_DELIVERED || r.pA.done == DONE_FAILED, "canale cattivo: esito definito (%d)", r.pA.done);
     if (r.pA.done == DONE_DELIVERED) checkDelivered("canale cattivo", r, obj, kKindImage);
     CHECK(!r.brA.stats().crcMismatch, "canale cattivo: CRC dei blocchi coerente");
+  }
+  // 12. posizione GPS della scheda: se c'e' un fix va nell'OFFER al posto del locatore del telefono; senza fix torna il locatore; senza telefono e con il GPS si parte lo stesso
+  {
+    Rig r(12, -100.0);
+    r.position(r.brA); r.position(r.brB);                 // locatore JN53ab dal telefono
+    v3::Position gp; gp.valid = true; gp.fromGps = true; gp.latE7 = 437696000; gp.lonE7 = 112558000;
+    uint8_t blk[7];
+    CHECK(v3::encodePosition(gp, blk), "il blocco GPS si codifica");
+    r.brA.setGps(blk);
+    CHECK(r.brA.positionBlock()[0] == 1, "con il GPS la posizione e' quella del GPS");
+    const std::vector<uint8_t> o1 = randomBytes(300, 121);
+    r.send(30, kKindText, o1, {300});
+    r.runUntilDone(); r.settleB();
+    CHECK(r.pA.done == DONE_DELIVERED && r.b.receiver().offerHasPos() && r.b.receiver().offerPos()[0] == 1, "l'OFFER porta la posizione GPS");
+    v3::Position got;
+    CHECK(v3::positionFromBlock(r.b.receiver().offerPos(), got) && got.fromGps && std::abs(got.latE7 - gp.latE7) < 20000 && std::abs(got.lonE7 - gp.lonE7) < 30000, "la posizione GPS arriva al ricevente entro 2 m");
+    // il ricevente puo' calcolare la distanza da se' (locatore JN53ab, centro 43.0625 N 10.0417 E)
+    v3::Position mine;
+    CHECK(v3::positionFromBlock(r.brB.positionBlock(), mine) && !mine.fromGps, "il ricevente ha il locatore del suo telefono");
+    const double km = v3::distanceKm(got, mine);
+    std::printf("distanza fra il GPS di A (43.7696 N 11.2558 E) e il locatore di B (JN53ab): %.1f km\n", km);
+    CHECK(km > 125.0 && km < 126.5, "distanza attesa 125,8 km (0,707 gradi di latitudine = 78,6 km e 1,214 gradi di longitudine a 43,4 N = 98,2 km): %.1f", km);
+    // fix perso: torna il locatore
+    r.brA.setGps(nullptr);
+    CHECK(r.brA.positionBlock()[0] == 0 && std::memcmp(r.brA.positionBlock() + 1, "JN53ab", 6) == 0, "senza fix torna il locatore del telefono");
+  }
+  // 13. solo GPS, nessuna posizione dal telefono: l'invio parte (la posizione c'e')
+  {
+    Rig r(13, -100.0);
+    r.position(r.brB);
+    v3::Position gp; gp.valid = true; gp.fromGps = true; gp.latE7 = 437696000; gp.lonE7 = 112558000;
+    uint8_t blk[7]; v3::encodePosition(gp, blk);
+    r.brA.setGps(blk);
+    const std::vector<uint8_t> o1 = randomBytes(100, 131);
+    r.send(31, kKindText, o1, {100});
+    CHECK(r.pA.beginOk == 1 && r.pA.errs.empty(), "con il solo GPS BEGIN non da NO_POSITION");
   }
   std::printf("firmware/v3 ponte collegato al mezzo: %d controlli, %d falliti\n", g_checks, g_fails);
   return g_fails ? 1 : 0;

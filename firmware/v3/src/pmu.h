@@ -13,6 +13,15 @@ inline XPowersLibInterface*& pmuPtr() { static XPowersLibInterface* p = nullptr;
 // tensione della batteria in mV, -1 se assente o PMU non disponibile
 inline int pmuBatteryMv() { XPowersLibInterface* p = pmuPtr(); return (p && p->isBatteryConnect()) ? static_cast<int>(p->getBattVoltage()) : -1; }
 
+// alimentazione del GPS (ALDO3), come la v2 (src/pmu.cpp: setGpsPower)
+inline void pmuGpsPower(bool on) {
+  XPowersLibInterface* p = pmuPtr();
+  if (!p) return;
+  if (on) { p->setPowerChannelVoltage(XPOWERS_ALDO3, 3300); p->enablePowerOutput(XPOWERS_ALDO3); }
+  else p->disablePowerOutput(XPOWERS_ALDO3);
+  Serial.printf("[pmu] GPS ALDO3 %s\n", p->isPowerChannelEnable(XPOWERS_ALDO3) ? "acceso" : "spento");
+}
+
 inline bool pmuBegin() {
   Wire.begin(pins::kOledSda, pins::kOledScl);
   XPowersLibInterface* pmu = pmuPtr() = new XPowersAXP2101(Wire, pins::kOledSda, pins::kOledScl);
@@ -43,4 +52,5 @@ inline bool pmuBegin() {
 #else
 inline bool pmuBegin() { return true; }
 inline int pmuBatteryMv() { return -1; }
+inline void pmuGpsPower(bool) {}
 #endif

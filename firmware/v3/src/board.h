@@ -14,6 +14,8 @@ constexpr int kRadioDio2 = 32;
 constexpr int kRadioBusy = kRadioDio2;  // SX1262: BUSY (come nella v2)
 constexpr int kOledSda = 21;            // OLED SSD1306 (T3: a bordo; T-Beam: esterno facoltativo) e PMU AXP2101 della T-Beam
 constexpr int kOledScl = 22;
+constexpr int kGpsRx = 34;              // T-Beam V1.2: ingresso dell'ESP32 (TX del GPS u-blox)
+constexpr int kGpsTx = 12;              // T-Beam V1.2: uscita dell'ESP32 (RX del GPS); sulla T3 non c'e' il GPS
 constexpr int kBatteryAdc = 35;         // T3: tensione della batteria (partitore 100k/100k); sulla T-Beam e' l'interrupt del PMU e la batteria si legge dall'AXP2101
 }  // namespace pins
 
