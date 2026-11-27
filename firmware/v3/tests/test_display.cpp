@@ -136,6 +136,25 @@ int main() {
   CHECK(std::strcmp(s.big, "AVVIO") == 0 && std::strcmp(s.footer, "fw v0.1.0-rc.1") == 0, "avvio: AVVIO e la versione");
   buildStartup("IU5HJU", "v0.1.0-rc.1-12-g833fcd5-dirty", &s);
   CHECK(std::strlen(s.footer) <= static_cast<size_t>(kCols) && std::strstr(s.footer, "833fcd5-dirty"), "versione lunga: si mostra la coda col codice del commit (%s)", s.footer);
+  // menu e info (come la v2)
+  {
+    char lab[8][24] = {"Wi-Fi: accendi", "Potenza: 17 dBm", "GPS: accendi", "Info", "Esci", "", "", ""};
+    Input mi; mi.call = "IU5HJU";
+    buildMenu(mi, lab, 5, 0, &s);
+    CHECK(s.kind == Kind::Menu && s.rowSel == 0 && std::strcmp(s.rows[0], "Wi-Fi: accendi") == 0 && std::strcmp(s.rows[4], "Esci") == 0, "menu: cinque voci, la prima scelta");
+    CHECK(std::strcmp(s.footer, "breve=avanti lungo=ok") == 0 && std::strlen(s.footer) <= 21, "menu: istruzioni in basso entro i 21 caratteri");
+    buildMenu(mi, lab, 5, 3, &s);
+    CHECK(s.rowSel == 3 && std::strcmp(s.rows[3], "Info") == 0, "menu: la quarta voce e' la scelta");
+    char lab2[8][24] = {"uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto"};
+    buildMenu(mi, lab2, 8, 7, &s);
+    CHECK(s.rowSel == 4 && std::strcmp(s.rows[4], "otto") == 0 && std::strcmp(s.rows[0], "quattro") == 0, "menu: con otto voci la finestra scorre e la scelta resta visibile");
+    buildMenu(mi, lab2, 8, 0, &s);
+    CHECK(s.rowSel == 0 && std::strcmp(s.rows[0], "uno") == 0 && std::strcmp(s.rows[4], "cinque") == 0, "menu: all'inizio si vedono le prime cinque");
+    buildInfo(mi, "fw v0.1.0-rc.1", "BT VoLoRa-V3 IU5HJU", "WiFi VoLoRa-IU5HJU", "Pass 48291637", "http://192.168.4.1", &s);
+    CHECK(s.kind == Kind::Info && s.rowSel == -1 && std::strcmp(s.rows[3], "Pass 48291637") == 0 && std::strlen(s.rows[1]) <= 21, "info: cinque righe fisse");
+    buildInfo(mi, "una riga molto molto lunga che supera lo schermo", nullptr, "", "", "", &s);
+    CHECK(std::strlen(s.rows[0]) == 21 && s.rows[1][0] == 0, "info: le righe lunghe si tagliano a 21 caratteri, nullptr e' vuoto");
+  }
   // batteria: formato e medie come la v2
   char b[20];
   formatBatteryText(b, sizeof(b), 4.123f); CHECK(std::strcmp(b, "(Batt=4.12V)") == 0, "formato batteria");

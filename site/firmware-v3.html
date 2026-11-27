@@ -85,7 +85,7 @@ STATO</pre>
     <p><code>FREQ</code> mostra la frequenza (di partenza 433,700 MHz); <code>FREQ 434.100</code> la cambia, liberamente dentro il campo del chip (SX1278: 137-175 e 410-525 MHz; SX1262: 150-960 MHz). <strong>Impostala uguale su tutte e due le schede</strong>; sulla mobile resta salvata.</p>
     <ul>
       <li><strong>Mobile, Android (Bluetooth):</strong> installa l&rsquo;<a href="#app">app VoLoRa-V3.apk</a>, aprila, scegli la scheda <code>VoLoRa-V3 NOMINATIVO</code> e accoppia con il codice a 6 cifre (display e seriale). Il Bluetooth &egrave; sempre acceso.</li>
-      <li><strong>Mobile, iPhone (Wi-Fi della scheda):</strong> tieni premuto il tasto <strong>BOOT</strong> della scheda per 2 secondi (oppure <code>WIFI ON</code> sulla seriale): il Bluetooth si spegne e nasce il Wi-Fi <code>VoLoRa-NOMINATIVO</code> con la password a 8 cifre sul display. Sull&rsquo;iPhone: Impostazioni &rarr; Wi-Fi &rarr; quella rete; poi apri <strong>http://192.168.4.1</strong> in Safari: la pagina &egrave; nella scheda, non serve Internet. Per tornare al Bluetooth: di nuovo BOOT 2 s (<code>WIFI OFF</code>).</li>
+      <li><strong>Mobile, iPhone (Wi-Fi della scheda):</strong> tieni premuto il tasto <strong>BOOT</strong> della scheda per 2 secondi: si apre il <strong>menu</strong> sul display (prima voce &ldquo;Wi-Fi: accendi&rdquo;); tienilo premuto ancora 2 secondi per confermare (oppure <code>WIFI ON</code> sulla seriale): il Bluetooth si spegne e nasce il Wi-Fi <code>VoLoRa-NOMINATIVO</code> con la password a 8 cifre sul display. Sull&rsquo;iPhone: Impostazioni &rarr; Wi-Fi &rarr; quella rete; poi apri <strong>http://192.168.4.1</strong> in Safari: la pagina &egrave; nella scheda, non serve Internet. Per tornare al Bluetooth: BOOT 2 s, BOOT 2 s di nuovo (voce &ldquo;Wi-Fi: spegni&rdquo;) oppure <code>WIFI OFF</code>.</li>
       <li><code>STATO</code> mostra collegamento, gradino, richieste di blocchi e errori; <code>LOG</code> (o &ldquo;Registro della scheda&rdquo; nella pagina) d&agrave; il registro delle prove.</li>
     </ul>
     <p class="muted">Cosa guardare e come riferirlo: <a href="https://github.com/IU5HJU/VoLoRa-v3/blob/main/docs/firmware-v3.md">documentazione del firmware V3</a>.</p>
@@ -111,7 +111,7 @@ STATO</pre>
   (function () {
     var $ = function (id) { return document.getElementById(id); };
     var DESC = {
-      mobile_t3: 'Telefono \u2192 scheda \u2192 radio vera SX1278 a 433,700 MHz, e radio \u2192 telefono. Android: app VoLoRa-V3.apk via Bluetooth LE (sempre acceso). iPhone: Wi-Fi della scheda con la pagina dentro, acceso solo su richiesta (tasto BOOT 2 s). Nessuna microSD: il buffer \u00e8 il telefono.',
+      mobile_t3: 'Telefono \u2192 scheda \u2192 radio vera SX1278 a 433,700 MHz, e radio \u2192 telefono. Android: app VoLoRa-V3.apk via Bluetooth LE (sempre acceso). iPhone: Wi-Fi della scheda con la pagina dentro, acceso solo su richiesta (menu: tasto BOOT 2 s). Nessuna microSD: il buffer \u00e8 il telefono.',
       mobile_tbeam1262: 'Come la T3, con la radio SX1262, il GPS (GPS ON) e il livello IOF MODE.',
       mobile_tbeam1278: 'Come la T3 (radio SX1278), sulla T-Beam: con il GPS (GPS ON). Guarda la sigla sul modulo radio: SX1278 (questo) o SX1262 (quello sopra). Senza IOF MODE (solo SX1262).',
       bench_t3: 'Una scheda manda un oggetto di prova (SEND), l\u2019altra lo riceve. Serve per misurare tempi e gradini con le radio vere. Servono due schede uguali.',

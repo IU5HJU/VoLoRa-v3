@@ -1,6 +1,6 @@
 # Prove del nucleo del firmware V3 sul PC (serve solo g++ con C++17). I vettori vengono dal riferimento Python (tools/gen_vettori_firmware.py).
 CXX ?= g++
-test: build/test_conformance build/test_frames build/test_limits build/test_protocol build/test_medium build/test_live build/test_boost build/test_freq build/test_display build/test_position build/test_nmea build/test_geo build/test_testlog
+test: build/test_conformance build/test_frames build/test_limits build/test_protocol build/test_medium build/test_live build/test_boost build/test_freq build/test_display build/test_position build/test_nmea build/test_geo build/test_testlog build/test_menu
 	./build/test_conformance tests/vettori
 	./build/test_frames tests/vettori
 	./build/test_limits tests/vettori
@@ -16,6 +16,7 @@ test: build/test_conformance build/test_frames build/test_limits build/test_prot
 	./build/test_nmea
 	./build/test_geo
 	./build/test_testlog
+	./build/test_menu
 	python3 tools/embed_site.py --check ../../site build/web_assets.h
 build/test_medium: tests/test_medium.cpp tests/sim_world.h src/medium.h src/img_proto.h src/frames.h src/limits.h src/estimate.h
 	mkdir -p build
@@ -44,6 +45,9 @@ build/test_geo: tests/test_geo.cpp src/position.h tests/testing.h
 build/test_testlog: tests/test_testlog.cpp src/testlog.h tests/testing.h
 	mkdir -p build
 	$(CXX) -std=c++17 -Wall -Wextra -O1 -g -fsanitize=address,undefined -I tests -o $@ tests/test_testlog.cpp
+build/test_menu: tests/test_menu.cpp src/menu.h tests/testing.h
+	mkdir -p build
+	$(CXX) -std=c++17 -Wall -Wextra -O1 -g -fsanitize=address,undefined -I tests -o $@ tests/test_menu.cpp
 build/test_protocol: tests/test_protocol.cpp src/img_proto.h src/frames.h src/limits.h src/estimate.h
 	mkdir -p build
 	$(CXX) -std=c++17 -Wall -Wextra -O1 -g -fsanitize=address,undefined -o $@ tests/test_protocol.cpp

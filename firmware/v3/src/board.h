@@ -16,6 +16,7 @@ constexpr int kOledSda = 21;            // OLED SSD1306 (T3: a bordo; T-Beam: es
 constexpr int kOledScl = 22;
 constexpr int kGpsRx = 34;              // T-Beam V1.2: ingresso dell'ESP32 (TX del GPS u-blox)
 constexpr int kGpsTx = 12;              // T-Beam V1.2: uscita dell'ESP32 (RX del GPS); sulla T3 non c'e' il GPS
+constexpr int kUserButton = 38;         // T-Beam V1.2: tasto utente (il "PTT" della v2); sulla T3 il tasto e' il BOOT (GPIO0)
 constexpr int kBatteryAdc = 35;         // T3: tensione della batteria (partitore 100k/100k); sulla T-Beam e' l'interrupt del PMU e la batteria si legge dall'AXP2101
 }  // namespace pins
 

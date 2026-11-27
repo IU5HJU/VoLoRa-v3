@@ -79,6 +79,21 @@ class OledDisplay {
     d_.print(s.head);
     badge(s.badge);
     d_.drawFastHLine(0, 10, 128, SSD1306_WHITE);
+    if (s.kind == v3::disp::Kind::Menu || s.kind == v3::disp::Kind::Info) {         // menu (come la v2: voce scelta in negativo) e schermata Info
+      d_.setTextSize(1);
+      for (int i = 0; i < 5; i++) {
+        if (!s.rows[i][0]) continue;
+        const int y = 12 + i * 9;
+        const bool sel = i == s.rowSel;
+        if (sel) { d_.fillRect(0, y - 1, 128, 9, SSD1306_WHITE); d_.setTextColor(SSD1306_BLACK); }
+        d_.setCursor(2, y);
+        d_.print(s.rows[i]);
+        d_.setTextColor(SSD1306_WHITE);
+      }
+      if (s.footer[0]) { d_.setCursor(0, 57); d_.print(s.footer); }
+      d_.display();
+      return;
+    }
     if (s.kind == v3::disp::Kind::Pairing) {              // come la schermata Wi-Fi della v2: il codice in carattere doppio e in grassetto
       d_.setCursor(0, 13);
       d_.print(s.l38);

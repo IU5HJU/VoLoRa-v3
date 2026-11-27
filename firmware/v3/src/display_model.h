@@ -21,7 +21,7 @@ constexpr uint32_t kLastShownMs = 20000;                   // "Ultimo ..." resta
 constexpr uint32_t kNoticeMs = 4000;
 
 enum class Power { Normal, Boost, Iof };
-enum class Kind { Normal, Pairing, Message };
+enum class Kind { Normal, Pairing, Message, Menu, Info };
 
 struct Input {
   const char* call = "";
@@ -79,7 +79,9 @@ struct Screen {
   char left[12] = "";            // ultima riga a sinistra
   char batt[20] = "";            // ultima riga a destra
   bool lowBatt = false;
-  char footer[24] = "";          // schermata a messaggio: riga in basso (y=52)
+  char footer[24] = "";          // schermata a messaggio: riga in basso (y=52); menu: istruzioni (y=57)
+  char rows[5][24] = {"", "", "", "", ""};   // menu e info: righe di testo piccolo da y=12, una ogni 9 punti
+  int rowSel = -1;               // menu: riga scelta (in negativo), -1 nessuna
   bool operator==(const Screen& o) const { return std::memcmp(this, &o, sizeof(Screen)) == 0; }
 };
 
@@ -171,6 +173,31 @@ inline void buildStartup(const char* call, const char* version, Screen* s) {
   char b[40];
   std::snprintf(b, sizeof(b), "fw %s", vl > 18 ? version + (vl - 18) : version);
   put(s->footer, sizeof(s->footer), b);
+}
+
+// Menu a bordo (come drawMenu della v2): cinque righe da 9 punti sotto l'intestazione, la voce scelta in negativo; con piu' voci la finestra scorre e la scelta resta visibile.
+inline void buildMenu(const Input& in, const char (*labels)[24], size_t count, size_t selected, Screen* s) {
+  *s = Screen();
+  s->kind = Kind::Menu;
+  std::snprintf(s->head, sizeof(s->head), "%.8s %.3fMHz", in.call[0] ? in.call : "-", in.freqMhz);
+  s->badge = badgeFor(in.power);
+  constexpr size_t kRows = 5;
+  const size_t first = selected >= kRows ? selected - (kRows - 1) : 0;
+  for (size_t i = first; i < count && i < first + kRows; i++) {
+    put(s->rows[i - first], sizeof(s->rows[0]), labels[i]);
+    if (i == selected) s->rowSel = static_cast<int>(i - first);
+  }
+  put(s->footer, sizeof(s->footer), "breve=avanti lungo=ok");
+}
+
+// Schermata "Info" della voce di menu: cinque righe fisse (versione, nomi di collegamento, password), per qualche secondo.
+inline void buildInfo(const Input& in, const char* l1, const char* l2, const char* l3, const char* l4, const char* l5, Screen* s) {
+  *s = Screen();
+  s->kind = Kind::Info;
+  std::snprintf(s->head, sizeof(s->head), "%.8s %.3fMHz", in.call[0] ? in.call : "-", in.freqMhz);
+  s->badge = badgeFor(in.power);
+  const char* l[5] = {l1, l2, l3, l4, l5};
+  for (int i = 0; i < 5; i++) put(s->rows[i], sizeof(s->rows[0]), l[i] ? l[i] : "");
 }
 
 }  // namespace disp

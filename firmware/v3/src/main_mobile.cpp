@@ -24,6 +24,7 @@
 #include "gps_board.h"
 #include "position.h"
 #include "live_bridge.h"
+#include "menu.h"
 #include "pmu.h"
 #include "radio_board.h"
 #include "testlog.h"
@@ -195,6 +196,13 @@ static void rebuild() {
   if (bleConnected) bridge->onConnect(); else bridge->onDisconnect();
 }
 
+// menu a bordo (menu.h): le funzioni dei tasti sono piu' sotto
+static v3::menu::Menu menuM;
+static v3::menu::Flow menuFlow(menuM);
+static v3::menu::Gesture gestA, gestB;
+static char menuLabels[8][24];
+static uint32_t infoUntilMs = 0;
+
 // ----- display: si costruisce lo stato e si ridisegna se cambia (display_model.h) -----
 // distanza fra due blocchi di posizione da 7 byte (locatore o GPS); testo vuoto se una delle due non c'e' o non e' valida
 static void distanceText(const uint8_t* mine, bool haveMine, const uint8_t* peer, bool havePeer, char* out, size_t cap) {
@@ -245,8 +253,8 @@ static void updateDisplay(double now) {
   } else {                                               // Bluetooth (Android): codice a 6 cifre; ogni 4 s un richiamo per chi ha l'iPhone
     snprintf(code, sizeof(code), "%06u", static_cast<unsigned>(passkey % 1000000u));
     const bool hint = (millis() / 4000) % 2 == 1;
-    top = hint ? String("iPhone: tasto BOOT") : String("Collega il telefono");
-    bottom = hint ? String("premuto 2 s = Wi-Fi") : bleName();
+    top = hint ? String("iPhone: BOOT lungo") : String("Collega il telefono");
+    bottom = hint ? String("poi di nuovo = Wi-Fi") : bleName();
     in.pairTop = top.c_str();
     in.pairSecret = code;
     in.pairBottom = bottom.c_str();
@@ -280,7 +288,20 @@ static void updateDisplay(double now) {
     in.haveLast = haveLast; in.lastCall = lastCall; in.lastBytes = lastBytes; in.lastOk = lastOk; in.lastAgoMs = ms - lastAtMs;
   }
   Screen sc;
-  build(in, &sc);
+  if (menuM.isOpen()) {
+    for (size_t i = 0; i < menuM.count() && i < 8; i++) snprintf(menuLabels[i], sizeof(menuLabels[i]), "%s", menuM.item(i).label);
+    v3::disp::buildMenu(in, menuLabels, menuM.count(), menuM.selectedIndex(), &sc);
+  } else if (ms < infoUntilMs) {
+    char l1[24], l2[24], l3[24], l4[24];
+    const char* v = LCR_VERSION; const size_t vl = strlen(v);
+    snprintf(l1, sizeof(l1), "fw %s", vl > 18 ? v + (vl - 18) : v);
+    snprintf(l2, sizeof(l2), "BT %s", bleName().c_str());
+    snprintf(l3, sizeof(l3), "WiFi %s", wifiName().c_str());
+    snprintf(l4, sizeof(l4), "Pass %s", wifiPass);
+    v3::disp::buildInfo(in, l1, l2, l3, l4, "http://192.168.4.1", &sc);
+  } else {
+    build(in, &sc);
+  }
   oled.show(sc, ms, in.sending || in.receiving);
 }
 
@@ -312,15 +333,52 @@ static void setWifi(bool on) {
   }
 }
 
-// tasto BOOT (GPIO0): tenuto premuto 2 s accende o spegne il Wi-Fi della scheda (per chi ha l'iPhone); sulla T3 e sul T-Beam e' il pulsante di bordo
-static void checkButton() {
-  static uint32_t downAt = 0;
-  static bool fired = false;
-  const bool down = digitalRead(0) == LOW;
-  const uint32_t ms = millis();
-  if (!down) { downAt = 0; fired = false; return; }
-  if (downAt == 0) downAt = ms;
-  if (!fired && ms - downAt >= 2000) { fired = true; setWifi(!wifiOn); setNotice(wifiOn ? "WI-FI ACCESO" : "WI-FI SPENTO"); }
+// ---- tasti e menu a bordo (menu.h, come la v2): tasto A = BOOT (T3: GPIO0; T-Beam: GPIO38 e GPIO0), tasto B = GPIO15 esterno e facoltativo (verso massa) ----
+// B lungo (2 s) o A lungo a scheda ferma apre il menu; A breve = avanti; B breve o A lungo = conferma; B lungo = esce; 10 s senza tasti = esce.
+
+static bool buttonA() {
+  bool p = digitalRead(0) == LOW;
+#if defined(BOARD_TBEAM_V12)
+  p = p || digitalRead(pins::kUserButton) == LOW;
+#endif
+  return p;
+}
+static bool buttonB() { return digitalRead(15) == LOW; }
+
+static void fillMenu() {
+  using namespace v3::menu;
+  Item it[kMaxItems];
+  size_t n = 0;
+  auto add = [&](uint8_t id, const char* fmt, int arg) { snprintf(it[n].label, sizeof(it[n].label), fmt, arg); it[n].id = id; it[n].enabled = true; n++; };
+  add(kIdWifi, wifiOn ? "Wi-Fi: spegni (BT)" : "Wi-Fi: accendi (iPhone)", 0);
+  add(kIdPower, "Potenza: %d dBm", radio.basePowerDbm());
+  if (gps.present()) add(kIdGps, gps.active() ? "GPS: spegni" : "GPS: accendi", 0);
+  add(kIdInfo, "Info", 0);
+  add(kIdExit, "Esci", 0);
+  menuM.setItems(it, n);
+}
+
+static void menuAction(uint8_t id) {
+  using namespace v3::menu;
+  if (id == kIdWifi) { setWifi(!wifiOn); setNotice(wifiOn ? "WI-FI ACCESO" : "WI-FI SPENTO"); }
+  else if (id == kIdPower) {
+    const int next = nextPower(radio.basePowerDbm(), radio.boostState().minDbm());
+    if (radio.setBasePowerDbm(next)) { prefs.putInt("pwr", next); char b[24]; snprintf(b, sizeof(b), "POTENZA %d dBm", next); setNotice(b); tlog.addf(nowSec(), "potenza normale %d dBm (menu)", next); }
+  } else if (id == kIdGps) {
+    const bool on = !gps.active();
+    prefs.putBool("gps", on); gps.begin(on);
+    if (!on && bridge) bridge->setGps(nullptr);
+    setNotice(on ? "GPS ACCESO" : "GPS SPENTO");
+  } else if (id == kIdInfo) infoUntilMs = millis() + 8000;
+}
+
+static void checkButtons(uint32_t ms) {
+  const auto ea = gestA.update(buttonA(), ms), eb = gestB.update(buttonB(), ms);
+  bool idle = true;
+  if (station) idle = !station->sending() && !station->receiver().receiving();
+  if (menuFlow.wantsOpen(ea, eb, idle)) { fillMenu(); menuM.open(ms); return; }
+  const auto act = menuFlow.update(ea, eb, idle, ms);
+  if (act.outcome.kind == v3::menu::Menu::Outcome::Kind::Selected) menuAction(act.outcome.id);
 }
 
 // registro delle prove: cambi di gradino, ricerca del collegamento, oggetti ricevuti
@@ -472,7 +530,11 @@ void setup() {
   adv->setScanResponse(true);
   adv->start();
   Serial.printf("BLE acceso. Codice di accoppiamento: %06u\n", static_cast<unsigned>(passkey));
-  pinMode(0, INPUT_PULLUP);                              // tasto BOOT
+  pinMode(0, INPUT_PULLUP);                              // tasto BOOT (tasto A)
+  pinMode(15, INPUT_PULLUP);                             // tasto B esterno facoltativo (GPIO15 verso massa; se manca resta alto)
+#if defined(BOARD_TBEAM_V12)
+  pinMode(pins::kUserButton, INPUT);                     // T-Beam: tasto utente (IO38, con la resistenza di pull-up sulla scheda)
+#endif
   {                                                      // perche' la scheda si e' riavviata: un blocco o un calo di tensione in trasmissione fa cadere il Bluetooth e sembra "telefono sparito"
     const esp_reset_reason_t rr = esp_reset_reason();
     const char* why = rr == ESP_RST_POWERON ? "accensione" : rr == ESP_RST_SW ? "riavvio da programma" : rr == ESP_RST_PANIC ? "ERRORE DEL PROGRAMMA (panic)" : rr == ESP_RST_INT_WDT ? "BLOCCO (watchdog di interrupt)" :
@@ -497,7 +559,7 @@ void loop() {
     else if (bridge) { if (f.kind == 0) bridge->onCommand(f.d, f.len); else if (f.kind == 1) bridge->onData(f.d, f.len); }
   }
   handleSerial();
-  checkButton();
+  checkButtons(millis());
   if (!station) { updateDisplay(nowS()); delay(5); return; }
   const double now = nowS();
   radio.service(*station, now);
