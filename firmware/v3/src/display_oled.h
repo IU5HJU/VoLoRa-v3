@@ -79,7 +79,7 @@ class OledDisplay {
     d_.print(s.head);
     badge(s.badge);
     d_.drawFastHLine(0, 10, 128, SSD1306_WHITE);
-    if (s.kind == v3::disp::Kind::Menu || s.kind == v3::disp::Kind::Info) {         // menu (come la v2: voce scelta in negativo) e schermata Info
+    if (s.kind == v3::disp::Kind::Menu) {                                          // menu, come la v2: voce scelta in negativo
       d_.setTextSize(1);
       for (int i = 0; i < 5; i++) {
         if (!s.rows[i][0]) continue;

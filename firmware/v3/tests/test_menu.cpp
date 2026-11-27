@@ -1,95 +1,228 @@
+// COPIA dei test del menu della v2 (third_party/VoLoRa-v2/tests/test_menu.cpp) sul codice portato in src/menu.h: la logica del menu e' quella della v2.
 #include <cstring>
 
 #include "../src/menu.h"
 #include "testing.h"
 
 using namespace v3::menu;
-using G = Gesture::Event;
+using P = PttButton::Event;
+using G = ButtonGesture::Event;
+using K = Menu::Outcome::Kind;
 
-static void fill(Menu& m) {
-  Item it[4];
-  std::strcpy(it[0].label, "Wi-Fi: accendi"); it[0].id = kIdWifi;
-  std::strcpy(it[1].label, "Potenza: 17 dBm"); it[1].id = kIdPower;
-  std::strcpy(it[2].label, "Info"); it[2].id = kIdInfo;
-  std::strcpy(it[3].label, "Esci"); it[3].id = kIdExit;
-  m.setItems(it, 4);
+static void testGesture() {
+  ButtonGesture g(30, 2000);
+  // Pressione breve: Short al rilascio.
+  CHECK(g.update(true, 100) == G::None);
+  CHECK(g.update(true, 140) == G::None);  // Pressed interno
+  CHECK(g.down());
+  CHECK(g.update(true, 600) == G::None);
+  CHECK(g.update(false, 700) == G::None);
+  CHECK(g.update(false, 740) == G::Short);
+  CHECK(!g.down());
+
+  // Pressione lunga: Long una sola volta, il rilascio non da' Short.
+  CHECK(g.update(true, 1000) == G::None);
+  CHECK(g.update(true, 1040) == G::None);
+  CHECK(g.update(true, 2900) == G::None);
+  CHECK(g.update(true, 3040) == G::Long);
+  CHECK(g.update(true, 3500) == G::None);
+  CHECK(g.update(true, 9000) == G::None);
+  CHECK(g.update(false, 9100) == G::None);
+  CHECK(g.update(false, 9140) == G::None);
+
+  // Dopo una lunga, una breve torna a funzionare.
+  CHECK(g.update(true, 10000) == G::None);
+  CHECK(g.update(true, 10040) == G::None);
+  CHECK(g.update(false, 10200) == G::None);
+  CHECK(g.update(false, 10240) == G::Short);
+
+  // Giro del contatore del tempo a 32 bit.
+  ButtonGesture w(30, 2000);
+  const uint32_t t0 = 0xFFFFFC00u;
+  CHECK(w.update(true, t0) == G::None);
+  CHECK(w.update(true, t0 + 40) == G::None);
+  CHECK(w.update(true, t0 + 1900) == G::None);
+  CHECK(w.update(true, t0 + 2100) == G::Long);
+}
+
+static void testMenu() {
+  size_t n = 0;
+  const MenuItem* items = defaultMenuItems(n);
+  CHECK(n == 8);
+  // i tre profili si chiamano "Modo ...": Standard (id 2, Codec2 3200), Range (id 0, Codec2 1200), Messaggio (id 1); le altre voci no
+  CHECK(strcmp(items[0].label, "Modo Standard") == 0 && items[0].id == 2);
+  CHECK(strcmp(items[1].label, "Modo Range") == 0 && items[1].id == 0);
+  CHECK(strcmp(items[2].label, "Modo Messaggio") == 0 && items[2].id == 1);
+  CHECK(strcmp(items[3].label, "Modo Diretta") == 0 && items[3].id == 3);  // Diretta (14/11/2026): come lo Standard, ma frequenza propria e senza shift
+  for (size_t i = 0; i < n; i++) CHECK(strlen(items[i].label) <= 16);  // entrano nelle righe del menu (21 caratteri con "* ")
+  Menu m(items, n);
+  CHECK(!m.isOpen());
+
+  // Si apre sulla voce in uso (Range, id 0).
+  CHECK(m.open(0, 0));
+  CHECK(m.isOpen() && m.selectedIndex() == 1);
+  // Range -> Messaggio -> Diretta -> Invia testo -> MeshCom -> MeshCom ascolto -> Wi-Fi -> Standard -> Range
+  m.next(100);
+  CHECK(m.selectedIndex() == 2 && m.item(2).id == 1);
+  m.next(110);
+  CHECK(m.selectedIndex() == 3 && m.item(3).id == 3);  // Diretta
+  m.next(120);
+  CHECK(m.selectedIndex() == 4 && m.item(4).id == kMenuTextId);  // Invia testo
+  m.next(125);
+  CHECK(m.selectedIndex() == 5 && m.item(5).id == kMenuMeshId);  // MeshCom (escursione)
+  m.next(128);
+  CHECK(m.selectedIndex() == 6 && m.item(6).id == kMenuMeshListenId);  // MeshCom ascolto
+  m.next(130);
+  CHECK(m.selectedIndex() == 7 && m.item(7).id == kMenuWifiId);
+  m.next(150);
+  CHECK(m.selectedIndex() == 0);
+  m.next(200);
+  CHECK(m.selectedIndex() == 1);
+  // Conferma della stessa voce: niente da cambiare.
+  Menu::Outcome o = m.confirm(300);
+  CHECK(o.kind == K::Closed && !m.isOpen());
+
+  // Conferma di una voce diversa (da Range a Messaggio).
+  CHECK(m.open(0, 1000));
+  m.next(1100);
+  o = m.confirm(1200);
+  CHECK(o.kind == K::Selected && o.id == 1);
+
+  // Le altre voci si scelgono da qualunque profilo: Invia testo (101), MeshCom (102), Wi-Fi (100); si parte da Messaggio (id 1)
+  CHECK(m.open(1, 490));
+  m.next(495);
+  o = m.confirm(498);
+  CHECK(o.kind == K::Selected && o.id == 3);  // Diretta: id 3, e' un profilo
+  CHECK(m.open(1, 500));
+  m.next(505);
+  m.next(510);
+  o = m.confirm(520);
+  CHECK(o.kind == K::Selected && o.id == kMenuTextId);  // Invia testo: id 101
+  CHECK(m.open(1, 600));
+  m.next(605);
+  m.next(610);
+  m.next(615);
+  o = m.confirm(620);
+  CHECK(o.kind == K::Selected && o.id == kMenuMeshId);  // MeshCom: id 102, non e' un profilo
+  CHECK(m.open(1, 700));
+  m.next(705);
+  m.next(710);
+  m.next(720);
+  m.next(725);
+  o = m.confirm(730);
+  CHECK(o.kind == K::Selected && o.id == kMenuMeshListenId);  // MeshCom ascolto: id 104
+  CHECK(m.open(1, 740));
+  m.next(745);
+  m.next(750);
+  m.next(760);
+  m.next(765);
+  m.next(768);
+  o = m.confirm(770);
+  CHECK(o.kind == K::Selected && o.id == kMenuWifiId);
+  // Dallo Standard (id 2, in cima) si va al Range con un tocco
+  CHECK(m.open(2, 800));
+  CHECK(m.selectedIndex() == 0);
+  m.next(810);
+  o = m.confirm(820);
+  CHECK(o.kind == K::Selected && o.id == 0);
+
+  // Tempo massimo: 10 s dall'ultimo tasto.
+  CHECK(m.open(0, 5000));
+  m.next(8000);
+  CHECK(!m.tick(17999) && m.isOpen());
+  CHECK(m.tick(18000) && !m.isOpen());
+  CHECK(!m.tick(30000));
+
+  // Profilo in uso non disponibile: si evidenzia la prima voce scegliibile.
+  static const MenuItem part[] = {{"A", 0, true}, {"B", 1, true}, {"C", 2, false}};
+  Menu pm(part, 3);
+  CHECK(pm.open(2, 0));
+  CHECK(pm.selectedIndex() == 0);
+  pm.cancel();
+  CHECK(!pm.isOpen());
+  CHECK(m.open(2, 0) && m.selectedIndex() == 0);  // lo Standard e' la prima voce
+  m.cancel();
+
+  // Nessuna voce disponibile: non si apre.
+  static const MenuItem none[] = {{"A", 0, false}};
+  Menu e(none, 1);
+  CHECK(!e.open(0, 0));
+}
+
+static void testFlow() {
+  size_t n = 0;
+  const MenuItem* items = defaultMenuItems(n);
+  Menu m(items, n);
+  MenuFlow f(m);
+  uint32_t t = 1000;
+
+  // Fuori dal menu il PTT va al nodo, il volume breve alza il volume.
+  MenuFlow::Actions a = f.update(P::Pressed, G::None, true, 0, t);
+  CHECK(a.pttToNode && !a.volumeUp);
+  a = f.update(P::Released, G::None, true, 0, t += 500);
+  CHECK(a.pttToNode);
+  a = f.update(P::None, G::Short, true, 0, t += 100);
+  CHECK(a.volumeUp && !a.pttToNode && !m.isOpen());
+
+  // Volume lungo con la scheda occupata: non apre.
+  a = f.update(P::None, G::Long, false, 0, t += 100);
+  CHECK(!m.isOpen() && a.beep == MenuBeep::None);
+
+  // Volume lungo a riposo: apre.
+  a = f.update(P::None, G::Long, true, 0, t += 100);
+  CHECK(m.isOpen() && a.redraw && a.beep == MenuBeep::Open && !a.volumeUp);
+
+  // PTT nel menu: voce successiva, non trasmette, il rilascio non arriva al nodo.
+  a = f.update(P::Pressed, G::None, true, 0, t += 500);
+  CHECK(!a.pttToNode && a.redraw && a.beep == MenuBeep::Next && m.selectedIndex() == 2);
+  a = f.update(P::Released, G::None, true, 0, t += 200);
+  CHECK(!a.pttToNode);
+
+  // Conferma con il volume breve: scelto Messaggio (1), salvataggio a carico del chiamante.
+  a = f.update(P::None, G::Short, true, 0, t += 200);
+  CHECK(a.outcome.kind == K::Selected && a.outcome.id == 1 && a.beep == MenuBeep::Confirm && !m.isOpen());
+  CHECK(!a.volumeUp);
+
+  // Uscita con il volume lungo: nessun cambio.
+  f.update(P::None, G::Long, true, 1, t += 100);
+  CHECK(m.isOpen());
+  a = f.update(P::None, G::Long, true, 1, t += 100);
+  CHECK(!m.isOpen() && a.outcome.kind == K::None && a.beep == MenuBeep::Cancel);
+
+  // Voce uguale a quella in uso: chiude senza cambiare.
+  f.update(P::None, G::Long, true, 0, t += 100);
+  a = f.update(P::None, G::Short, true, 0, t += 100);
+  CHECK(a.outcome.kind == K::Closed);
+
+  // Dieci secondi senza tasti: chiude da solo, senza cambiare.
+  f.update(P::None, G::Long, true, 0, t += 100);
+  CHECK(m.isOpen());
+  a = f.update(P::None, G::None, true, 0, t += 9000);
+  CHECK(m.isOpen() && !a.redraw);
+  a = f.update(P::None, G::None, true, 0, t += 1000);
+  CHECK(!m.isOpen() && a.redraw && a.beep == MenuBeep::Cancel && a.outcome.kind == K::None);
+
+  // Arriva una ricezione con il menu aperto: si chiude.
+  f.update(P::None, G::Long, true, 0, t += 100);
+  CHECK(m.isOpen());
+  a = f.update(P::None, G::None, false, 0, t += 100);
+  CHECK(!m.isOpen() && a.redraw);
+
+  // PTT premuto nel menu e rilasciato dopo la chiusura (volume lungo): il nodo non lo vede.
+  f.update(P::None, G::Long, true, 0, t += 100);
+  f.update(P::Pressed, G::None, true, 0, t += 100);
+  a = f.update(P::None, G::Long, true, 0, t += 100);
+  CHECK(!m.isOpen());
+  a = f.update(P::Released, G::None, true, 0, t += 100);
+  CHECK(!a.pttToNode);
+  // E poi il PTT torna normale.
+  a = f.update(P::Pressed, G::None, true, 0, t += 100);
+  CHECK(a.pttToNode);
 }
 
 int main() {
-  // antirimbalzo: un rimbalzo breve non e' una pressione
-  Debounce d(30);
-  CHECK(d.update(true, 0) == Debounce::Event::None);
-  CHECK(d.update(false, 10) == Debounce::Event::None);
-  CHECK(d.update(true, 20) == Debounce::Event::None);
-  CHECK(d.update(true, 49) == Debounce::Event::None);
-  CHECK(d.update(true, 60) == Debounce::Event::Pressed && d.pressed());
-  CHECK(d.update(false, 100) == Debounce::Event::None && d.update(false, 131) == Debounce::Event::Released && !d.pressed());
-  // gesti: breve, lungo (una volta, senza Short dopo)
-  Gesture g(30, 2000);
-  CHECK(g.update(true, 0) == G::None && g.update(true, 40) == G::None);
-  CHECK(g.update(false, 300) == G::None && g.update(false, 340) == G::Short);
-  CHECK(g.update(true, 1000) == G::None && g.update(true, 1040) == G::None && g.update(true, 2900) == G::None && g.update(true, 3050) == G::Long);
-  CHECK(g.update(true, 3500) == G::None);                                  // una volta sola
-  CHECK(g.update(false, 4000) == G::None && g.update(false, 4040) == G::None);   // il rilascio dopo un lungo non da' Short
-
-  Menu m; Flow f(m);
-  fill(m);
-  // chiuso: i gesti brevi non fanno niente, il lungo chiede l'apertura (da A o da B) solo a scheda ferma
-  CHECK(!f.wantsOpen(G::Short, G::None, true) && !f.wantsOpen(G::None, G::Short, true));
-  CHECK(f.wantsOpen(G::Long, G::None, true) && f.wantsOpen(G::None, G::Long, true));
-  CHECK(!f.wantsOpen(G::Long, G::None, false));
-  CHECK(f.update(G::Short, G::None, true, 0).redraw == false);               // chiuso: update non fa niente
-  CHECK(m.open(0) && m.isOpen() && m.selectedIndex() == 0);
-  // A breve = avanti, con giro
-  CHECK(f.update(G::Short, G::None, true, 100).redraw && m.selectedIndex() == 1);
-  f.update(G::Short, G::None, true, 200); f.update(G::Short, G::None, true, 300);
-  CHECK(m.selectedIndex() == 3);
-  f.update(G::Short, G::None, true, 400);
-  CHECK(m.selectedIndex() == 0);
-  // B breve = conferma la voce
-  f.update(G::Short, G::None, true, 500);
-  Flow::Actions r = f.update(G::None, G::Short, true, 600);
-  CHECK(r.outcome.kind == Menu::Outcome::Kind::Selected && r.outcome.id == kIdPower && !m.isOpen());
-  // un solo tasto: A lungo apre, A breve avanti, A lungo conferma
-  m.open(1000);
-  f.update(G::Short, G::None, true, 1100); f.update(G::Short, G::None, true, 1150);
-  r = f.update(G::Long, G::None, true, 1200);
-  CHECK(r.outcome.kind == Menu::Outcome::Kind::Selected && r.outcome.id == kIdInfo && !m.isOpen());
-  // "Esci" chiude senza voce scelta
-  m.open(2000); f.update(G::Short, G::None, true, 2100); f.update(G::Short, G::None, true, 2200); f.update(G::Short, G::None, true, 2300);
-  r = f.update(G::None, G::Short, true, 2400);
-  CHECK(r.outcome.kind == Menu::Outcome::Kind::Closed && r.outcome.id == kIdExit && !m.isOpen());
-  // B lungo esce senza scegliere
-  m.open(3000); f.update(G::Short, G::None, true, 3100);
-  r = f.update(G::None, G::Long, true, 3200);
-  CHECK(r.outcome.kind == Menu::Outcome::Kind::None && !m.isOpen() && r.redraw);
-  // 10 s senza tasti: si chiude da solo
-  m.open(4000);
-  CHECK(!f.update(G::None, G::None, true, 13999).redraw && m.isOpen());
-  r = f.update(G::None, G::None, true, 14000);
-  CHECK(r.redraw && !m.isOpen());
-  // un tasto resetta il tempo
-  m.open(20000); f.update(G::Short, G::None, true, 29000);
-  CHECK(m.isOpen() && !f.update(G::None, G::None, true, 38999).redraw && m.isOpen());
-  // arriva una ricezione (scheda non piu' a riposo): il menu si chiude
-  r = f.update(G::None, G::None, false, 39000);
-  CHECK(r.redraw && !m.isOpen());
-  // voci non disponibili si saltano
-  Item it[3];
-  std::strcpy(it[0].label, "a"); it[0].id = kIdWifi;
-  std::strcpy(it[1].label, "b"); it[1].id = kIdPower; it[1].enabled = false;
-  std::strcpy(it[2].label, "c"); it[2].id = kIdInfo;
-  m.setItems(it, 3);
-  m.open(50000); m.next(50100);
-  CHECK(m.selectedIndex() == 2);
-  m.next(50200);
-  CHECK(m.selectedIndex() == 0);
-  // nessuna voce possibile: non si apre
-  it[0].enabled = false; it[2].enabled = false; m.setItems(it, 3); m.cancel();
-  CHECK(!m.open(60000) && !m.isOpen());
-  // giro della potenza
-  CHECK(nextPower(17, 2) == 10 && nextPower(10, 2) == 5 && nextPower(5, 2) == 2 && nextPower(2, 2) == 17);        // SX1278: minimo 2
-  CHECK(nextPower(2, -9) == -3 && nextPower(-3, -9) == -9 && nextPower(-9, -9) == 17);                           // SX1262: fino a -9
-  CHECK(nextPower(8, 2) == 17 || nextPower(8, 2) == 10);                                                            // un valore fuori giro riparte dall'inizio del giro
+  testGesture();
+  testMenu();
+  testFlow();
   TEST_MAIN_END();
 }

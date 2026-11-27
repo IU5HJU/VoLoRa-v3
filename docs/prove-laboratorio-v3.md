@@ -11,7 +11,7 @@ Prove dell'autore (IU5HJU) con due schede T3, segnalate a voce (senza registro a
 - Non provati su schede o telefoni: il **Wi-Fi della scheda** con la pagina dentro (iPhone), **GPS**, **BOOST/IOF**, **display**, **frequenza configurabile**, il **motivo dell'ultimo riavvio** nel registro.
 
 ## Cosa serve
-- Due schede uguali con il firmware **`mobile_t3`** (T3) o **`mobile_tbeam1262`** (T-Beam), caricate dalla [pagina di installazione](../site/firmware-v3.html). In laboratorio senza app si usa il **Wi-Fi della scheda** (si accende dal menu: tasto BOOT premuto 2 s, poi di nuovo 2 s sulla voce "Wi-Fi"; oppure con `WIFI ON`; all'avvio è spento); con l'app Android si usa il Bluetooth. Due telefoni, oppure uno solo che si ricollega all'altra scheda.
+- Due schede uguali con il firmware **`mobile_t3`** (T3) o **`mobile_tbeam1262`** (T-Beam), caricate dalla [pagina di installazione](../site/firmware-v3.html). In laboratorio senza app si usa il **Wi-Fi della scheda** (si accende dalla voce "Wi-Fi" del menu a bordo, o con `WIFI ON`; all'avvio è spento); con l'app Android si usa il Bluetooth. Due telefoni, oppure uno solo che si ricollega all'altra scheda.
 - Antenna a 433 MHz **o** un attenuatore da 30-40 dB fra i connettori (con le schede vicine il ricevitore si satura: vedi [piano-misure.md](piano-misure.md)). Mai senza carico.
 - Un computer con un monitor seriale a 115200 baud, solo per leggere il registro.
 

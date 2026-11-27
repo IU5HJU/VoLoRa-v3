@@ -196,12 +196,17 @@ static void rebuild() {
   if (bleConnected) bridge->onConnect(); else bridge->onDisconnect();
 }
 
-// menu a bordo (menu.h): le funzioni dei tasti sono piu' sotto
-static v3::menu::Menu menuM;
-static v3::menu::Flow menuFlow(menuM);
-static v3::menu::Gesture gestA, gestB;
-static char menuLabels[8][24];
-static uint32_t infoUntilMs = 0;
+// menu a bordo (menu.h = porta fedele del menu della v2); le voci che nel V3 non esistono ancora non si mostrano
+static v3::menu::MenuItem menuItems[8];
+static size_t menuCount = 0;
+static v3::menu::Menu* menuM = nullptr;
+static v3::menu::MenuFlow* menuFlow = nullptr;
+static v3::menu::ButtonGesture volumeButton(30, 2000);   // volume: breve = (non c'e' ancora la voce), lunga (2 s) = menu
+static v3::menu::PttButton pttButton(30);
+static bool volumeArmed = false, pttArmed = false;        // come la v2: un tasto gia' premuto all'accensione non vale
+static const char* menuLabels[8];
+static bool menuEnabled[8];
+static uint8_t menuIds[8];
 
 // ----- display: si costruisce lo stato e si ridisegna se cambia (display_model.h) -----
 // distanza fra due blocchi di posizione da 7 byte (locatore o GPS); testo vuoto se una delle due non c'e' o non e' valida
@@ -253,8 +258,8 @@ static void updateDisplay(double now) {
   } else {                                               // Bluetooth (Android): codice a 6 cifre; ogni 4 s un richiamo per chi ha l'iPhone
     snprintf(code, sizeof(code), "%06u", static_cast<unsigned>(passkey % 1000000u));
     const bool hint = (millis() / 4000) % 2 == 1;
-    top = hint ? String("iPhone: BOOT lungo") : String("Collega il telefono");
-    bottom = hint ? String("poi di nuovo = Wi-Fi") : bleName();
+    top = hint ? String("iPhone: VOL lungo") : String("Collega il telefono");
+    bottom = hint ? String("poi voce Wi-Fi") : bleName();
     in.pairTop = top.c_str();
     in.pairSecret = code;
     in.pairBottom = bottom.c_str();
@@ -288,17 +293,9 @@ static void updateDisplay(double now) {
     in.haveLast = haveLast; in.lastCall = lastCall; in.lastBytes = lastBytes; in.lastOk = lastOk; in.lastAgoMs = ms - lastAtMs;
   }
   Screen sc;
-  if (menuM.isOpen()) {
-    for (size_t i = 0; i < menuM.count() && i < 8; i++) snprintf(menuLabels[i], sizeof(menuLabels[i]), "%s", menuM.item(i).label);
-    v3::disp::buildMenu(in, menuLabels, menuM.count(), menuM.selectedIndex(), &sc);
-  } else if (ms < infoUntilMs) {
-    char l1[24], l2[24], l3[24], l4[24];
-    const char* v = LCR_VERSION; const size_t vl = strlen(v);
-    snprintf(l1, sizeof(l1), "fw %s", vl > 18 ? v + (vl - 18) : v);
-    snprintf(l2, sizeof(l2), "BT %s", bleName().c_str());
-    snprintf(l3, sizeof(l3), "WiFi %s", wifiName().c_str());
-    snprintf(l4, sizeof(l4), "Pass %s", wifiPass);
-    v3::disp::buildInfo(in, l1, l2, l3, l4, "http://192.168.4.1", &sc);
+  if (menuM && menuM->isOpen()) {
+    for (size_t i = 0; i < menuM->count(); i++) { menuLabels[i] = menuM->item(i).label; menuEnabled[i] = menuM->item(i).enabled; menuIds[i] = menuM->item(i).id; }
+    v3::disp::buildMenu(in, menuLabels, menuEnabled, menuIds, menuM->count(), menuM->selectedIndex(), 255, &sc);
   } else {
     build(in, &sc);
   }
@@ -333,51 +330,31 @@ static void setWifi(bool on) {
   }
 }
 
-// ---- tasti e menu a bordo (menu.h, come la v2): tasto A = BOOT (T3: GPIO0; T-Beam: GPIO38 e GPIO0), tasto B = GPIO15 esterno e facoltativo (verso massa) ----
-// B lungo (2 s) o A lungo a scheda ferma apre il menu; A breve = avanti; B breve o A lungo = conferma; B lungo = esce; 10 s senza tasti = esce.
-
-static bool buttonA() {
-  bool p = digitalRead(0) == LOW;
-#if defined(BOARD_TBEAM_V12)
-  p = p || digitalRead(pins::kUserButton) == LOW;
-#endif
-  return p;
-}
-static bool buttonB() { return digitalRead(15) == LOW; }
-
-static void fillMenu() {
-  using namespace v3::menu;
-  Item it[kMaxItems];
+// ---- tasti e menu a bordo, come la v2 (menu.h): PTT (T3 GPIO0, T-Beam GPIO38) e volume (GPIO15, esterno e facoltativo, verso massa).
+//   volume lungo (2 s) a scheda ferma = apre il menu; nel menu: PTT breve = voce successiva, volume breve = conferma, volume lungo = esce, 10 s senza tasti = esce.
+// Nel V3 non c'e' il PTT: fuori dal menu i tasti non fanno altro. Le voci del menu della v2 che nel V3 non esistono ancora non si mostrano (restano nel codice: MenuItem::enabled).
+static void menuSetup() {
   size_t n = 0;
-  auto add = [&](uint8_t id, const char* fmt, int arg) { snprintf(it[n].label, sizeof(it[n].label), fmt, arg); it[n].id = id; it[n].enabled = true; n++; };
-  add(kIdWifi, wifiOn ? "Wi-Fi: spegni (BT)" : "Wi-Fi: accendi (iPhone)", 0);
-  add(kIdPower, "Potenza: %d dBm", radio.basePowerDbm());
-  if (gps.present()) add(kIdGps, gps.active() ? "GPS: spegni" : "GPS: accendi", 0);
-  add(kIdInfo, "Info", 0);
-  add(kIdExit, "Esci", 0);
-  menuM.setItems(it, n);
+  const v3::menu::MenuItem* all = v3::menu::defaultMenuItems(n);
+  for (size_t i = 0; i < n; i++) if (all[i].id == v3::menu::kMenuWifiId) menuItems[menuCount++] = all[i];       // per ora esiste solo la voce Wi-Fi
+  menuM = new v3::menu::Menu(menuItems, menuCount);
+  menuFlow = new v3::menu::MenuFlow(*menuM);
 }
 
 static void menuAction(uint8_t id) {
-  using namespace v3::menu;
-  if (id == kIdWifi) { setWifi(!wifiOn); setNotice(wifiOn ? "WI-FI ACCESO" : "WI-FI SPENTO"); }
-  else if (id == kIdPower) {
-    const int next = nextPower(radio.basePowerDbm(), radio.boostState().minDbm());
-    if (radio.setBasePowerDbm(next)) { prefs.putInt("pwr", next); char b[24]; snprintf(b, sizeof(b), "POTENZA %d dBm", next); setNotice(b); tlog.addf(nowSec(), "potenza normale %d dBm (menu)", next); }
-  } else if (id == kIdGps) {
-    const bool on = !gps.active();
-    prefs.putBool("gps", on); gps.begin(on);
-    if (!on && bridge) bridge->setGps(nullptr);
-    setNotice(on ? "GPS ACCESO" : "GPS SPENTO");
-  } else if (id == kIdInfo) infoUntilMs = millis() + 8000;
+  if (id == v3::menu::kMenuWifiId) { setWifi(!wifiOn); setNotice(wifiOn ? "WI-FI ACCESO" : "WI-FI SPENTO"); }
 }
 
 static void checkButtons(uint32_t ms) {
-  const auto ea = gestA.update(buttonA(), ms), eb = gestB.update(buttonB(), ms);
+  const bool pttRaw = digitalRead(pins::kPtt) == LOW;
+  if (!pttRaw) pttArmed = true;
+  const auto pttEvent = pttButton.update(pttArmed && pttRaw, ms);
+  const bool volRaw = digitalRead(pins::kVolume) == LOW;
+  if (!volRaw) volumeArmed = true;
+  const auto volEvent = volumeButton.update(volumeArmed && volRaw, ms);
   bool idle = true;
   if (station) idle = !station->sending() && !station->receiver().receiving();
-  if (menuFlow.wantsOpen(ea, eb, idle)) { fillMenu(); menuM.open(ms); return; }
-  const auto act = menuFlow.update(ea, eb, idle, ms);
+  const auto act = menuFlow->update(pttEvent, volEvent, idle, 255, ms);
   if (act.outcome.kind == v3::menu::Menu::Outcome::Kind::Selected) menuAction(act.outcome.id);
 }
 
@@ -530,11 +507,9 @@ void setup() {
   adv->setScanResponse(true);
   adv->start();
   Serial.printf("BLE acceso. Codice di accoppiamento: %06u\n", static_cast<unsigned>(passkey));
-  pinMode(0, INPUT_PULLUP);                              // tasto BOOT (tasto A)
-  pinMode(15, INPUT_PULLUP);                             // tasto B esterno facoltativo (GPIO15 verso massa; se manca resta alto)
-#if defined(BOARD_TBEAM_V12)
-  pinMode(pins::kUserButton, INPUT);                     // T-Beam: tasto utente (IO38, con la resistenza di pull-up sulla scheda)
-#endif
+  pinMode(pins::kPtt, pins::kPttHasInternalPullup ? INPUT_PULLUP : INPUT);   // PTT: come la v2
+  pinMode(pins::kVolume, INPUT_PULLUP);                  // volume (facoltativo): se manca resta alto e non fa nulla
+  menuSetup();
   {                                                      // perche' la scheda si e' riavviata: un blocco o un calo di tensione in trasmissione fa cadere il Bluetooth e sembra "telefono sparito"
     const esp_reset_reason_t rr = esp_reset_reason();
     const char* why = rr == ESP_RST_POWERON ? "accensione" : rr == ESP_RST_SW ? "riavvio da programma" : rr == ESP_RST_PANIC ? "ERRORE DEL PROGRAMMA (panic)" : rr == ESP_RST_INT_WDT ? "BLOCCO (watchdog di interrupt)" :
