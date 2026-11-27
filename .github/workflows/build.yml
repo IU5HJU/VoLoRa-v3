@@ -132,6 +132,21 @@ jobs:
       - name: Compila (guscio + nucleo)
         working-directory: firmware/v3
         run: pio run -e ${{ matrix.env }}
+      - name: Raccogli i binari per il flasher (quattro parti, le impostazioni restano)
+        run: |
+          set -euo pipefail
+          B=firmware/v3/.pio/build/${{ matrix.env }}
+          BOOT_APP0=$(find "$HOME/.platformio/packages" -name boot_app0.bin | head -n 1)
+          test -n "$BOOT_APP0"
+          mkdir -p dist
+          cp "$B/bootloader.bin" "$B/partitions.bin" "$B/firmware.bin" "$BOOT_APP0" dist/
+          (cd dist && sha256sum *.bin > SHA256SUMS)
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-v3-${{ matrix.env }}
+          path: dist/*
+          if-no-files-found: error
 
   firmware:
     name: Firmware ${{ matrix.board }}
@@ -189,7 +204,7 @@ jobs:
   pages:
     name: Pubblica su GitHub Pages
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: firmware
+    needs: [firmware, firmware-v3]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -224,6 +239,7 @@ jobs:
           node tests/page/run.js _site
           node tests/page/run_nodo.js _site
           node tests/page/run_telefono.js _site
+          node tests/page/run_v3.js _site
       - uses: actions/configure-pages@v5
         with:
           # prova ad attivare Pages da solo; con il token di default puo' non essere permesso (allora: Settings -> Pages -> Source: GitHub Actions)

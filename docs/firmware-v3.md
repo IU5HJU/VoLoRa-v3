@@ -109,6 +109,9 @@ Il **mezzo** è ciò che porta le azioni del mittente sulla radio e sui timer. S
 
 **Cosa NON è stato provato:** il driver radio e il mezzo **non sono mai girati su una scheda**; il canale del banco di prova è un modello. Il comportamento reale (tempi di commutazione della radio, ascolto prima di parlare, collisioni, interferenze) può cambiare i tempi limite.
 
+### Installare il firmware V3 dalla pagina web
+La pagina `firmware-v3.html` (sul sito di GitHub Pages, accanto a quella del firmware di misura) installa dal browser (Chrome, Edge od Opera) uno dei sei firmware V3: `mobile_t3`, `mobile_tbeam1262` (scheda mobile completa), `bench_t3`, `bench_tbeam1262` (prova a banco), `ble_sim_t3`, `ble_sim_tbeam1262` (ponte BLE con radio simulata). A ogni push su `main` la CI compila i sei firmware, ne tiene i binari e pubblica la pagina con la versione e il commit (si vedono sulla pagina). **Si scrivono quattro parti** (bootloader a 0x1000, partizioni a 0x8000, boot_app0 a 0xe000, programma a 0x10000) e **non si cancella la scheda**: nominativo e accoppiamento Bluetooth, salvati in NVS, restano. Seriale a 115200 baud. La logica della pagina è provata in CI (`tests/page/run_v3.js`: sei manifest con gli indirizzi giusti, scelta della scheda, avviso di firmware mancante, tema chiaro e scuro, 390 px); **la scrittura sulla scheda dal browser non si prova in CI** (come per il firmware di misura).
+
 ### Prova a banco fra due schede (`main_bench.cpp`, da fare tu)
 Firmware senza Bluetooth che usa il mezzo e il driver radio: **una scheda manda un oggetto di prova, l'altra lo riceve**. Compila in CI per T3 e T-Beam.
 ```bash

@@ -2,7 +2,8 @@
 # Assembla il sito statico (pagina di installazione del firmware di misura) in una cartella.
 #   tools/make_site.sh <cartella-artefatti> <cartella-uscita> <versione> <commit>
 # <cartella-artefatti> contiene firmware-t3/ e firmware-tbeam1262/ (come li scarica actions/download-artifact), ognuna con web_factory.bin.
-# Struttura prodotta: index.html, version.json, firmware/<scheda>/{web_factory.bin,manifest.json}
+# Firmware V3: <cartella-artefatti>/firmware-v3-<env>/ con bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin (env: mobile_t3 mobile_tbeam1262 bench_t3 bench_tbeam1262 ble_sim_t3 ble_sim_tbeam1262).
+# Struttura prodotta: index.html, firmware-v3.html, version.json, firmware/<scheda>/{web_factory.bin,manifest.json}, firmware-v3/<env>/{4 binari,manifest.json}
 # Il firmware di misura non salva impostazioni, quindi si scrive l'immagine intera all'indirizzo 0 (un solo pezzo).
 set -euo pipefail
 in=${1:?cartella degli artefatti}
@@ -13,7 +14,7 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 
 rm -rf "$out"
 mkdir -p "$out/firmware"
-cp "$here/site/index.html" "$here/site/nodo.html" "$here/site/telefono.html" "$here/site/jpeg_prog.js" "$out/"
+cp "$here/site/index.html" "$here/site/firmware-v3.html" "$here/site/nodo.html" "$here/site/telefono.html" "$here/site/jpeg_prog.js" "$out/"
 touch "$out/.nojekyll"
 
 for pair in "t3:firmware-t3" "tbeam1262:firmware-tbeam1262"; do
@@ -29,6 +30,31 @@ for pair in "t3:firmware-t3" "tbeam1262:firmware-tbeam1262"; do
   "new_install_prompt_erase": false,
   "builds": [
     { "chipFamily": "ESP32", "parts": [ { "path": "web_factory.bin", "offset": 0 } ] }
+  ]
+}
+JSON
+done
+
+# firmware V3: quattro parti agli indirizzi di sempre (bootloader 0x1000, partizioni 0x8000, boot_app0 0xe000, programma 0x10000), cosi' le impostazioni in NVS (nominativo, accoppiamento) restano
+for env in mobile_t3 mobile_tbeam1262 bench_t3 bench_tbeam1262 ble_sim_t3 ble_sim_tbeam1262; do
+  art="firmware-v3-$env"
+  for f in bootloader.bin partitions.bin boot_app0.bin firmware.bin; do
+    test -f "$in/$art/$f" || { echo "manca $in/$art/$f" >&2; exit 1; }
+  done
+  mkdir -p "$out/firmware-v3/$env"
+  cp "$in/$art/bootloader.bin" "$in/$art/partitions.bin" "$in/$art/boot_app0.bin" "$in/$art/firmware.bin" "$out/firmware-v3/$env/"
+  cat > "$out/firmware-v3/$env/manifest.json" <<JSON
+{
+  "name": "VoLoRa V3 firmware V3 ($env)",
+  "version": "$version",
+  "new_install_prompt_erase": false,
+  "builds": [
+    { "chipFamily": "ESP32", "parts": [
+      { "path": "bootloader.bin", "offset": 4096 },
+      { "path": "partitions.bin", "offset": 32768 },
+      { "path": "boot_app0.bin", "offset": 57344 },
+      { "path": "firmware.bin", "offset": 65536 }
+    ] }
   ]
 }
 JSON
