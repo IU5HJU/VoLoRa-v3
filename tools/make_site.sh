@@ -15,7 +15,7 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 
 rm -rf "$out"
 mkdir -p "$out/firmware"
-cp "$here/site/index.html" "$here/site/firmware-v3.html" "$here/site/nodo.html" "$here/site/telefono.html" "$here/site/jpeg_prog.js" "$out/"
+cp "$here/site/index.html" "$here/site/firmware-v3.html" "$here/site/nodo.html" "$here/site/telefono.html" "$here/site/modi.html" "$here/site/jpeg_prog.js" "$out/"
 touch "$out/.nojekyll"
 
 for pair in "t3:firmware-t3" "tbeam1262:firmware-tbeam1262" "tbeam1278:firmware-tbeam1278"; do

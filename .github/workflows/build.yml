@@ -46,6 +46,8 @@ jobs:
         run: python3 tests/sim/test_ebyte_e28.py
       - name: Prove tabella dei canali
         run: python3 tests/sim/test_canali.py
+      - name: Prove documento dei modi radio
+        run: python3 tests/sim/test_doc_modi.py
       - name: Prove nodo a scheda singola
         run: python3 tests/sim/test_nodo_semplice.py
       - name: Prove configurazione del nodo
