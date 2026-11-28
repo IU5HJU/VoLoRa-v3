@@ -5,7 +5,7 @@
 //    SERVE LA PAGINA DEL TELEFONO (incorporata nel firmware, niente Internet) su http://192.168.4.1 e parla con la pagina via WebSocket (/ws). Con il Wi-Fi acceso il Bluetooth tace.
 // Nucleo: src/live_bridge.h (ponte collegato al mezzo), src/medium.h (stazione), src/radio_board.h (driver RadioLib).
 // Il buffer e' il telefono: la scheda tiene 8 blocchi da 1 kB e li chiede a richiesta (E_PULL); nessuna microSD. Gli oggetti dalla radio si accettano solo col telefono collegato.
-// Seriale a 115200 baud: CALL, FREQ, WIFI, GPS, BOOST, IOF, DISPLAY, LOG, STATO.
+// Seriale a 115200 baud: CALL, FREQ, WIFI, GPS, TCXO, BOOST, IOF, DISPLAY, LOG, STATO.
 #include <Arduino.h>
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
@@ -39,7 +39,7 @@ using namespace v3::img;
 #ifndef VL3_DISPLAY_LAYOUT
 #define VL3_DISPLAY_LAYOUT B
 #endif
-constexpr bool kTcxo = false;                 // il TCXO non si legge ancora dalla scheda: senza, R12-R14 non si annunciano (docs/confronto-datasheet.md)
+static bool kTcxo = false;                    // il TCXO non si legge dalla scheda: lo dichiara chi sa di averlo (TCXO ON, salvato); senza, R12-R14 non si annunciano (docs/confronto-datasheet.md)
 constexpr size_t kRxMax = 32768;              // oggetti dalla radio: fino a 32 kB (RAM della scheda)
 
 static const char* kService = "c49a1433-9f1b-4af8-9826-951953e47edb";
@@ -442,6 +442,15 @@ static void handleSerial() {
         else if (!strncasecmp(line + 4, " ON", 3)) setWifi(true);
         else if (!strncasecmp(line + 4, " OFF", 4)) setWifi(false);
         else Serial.printf("Wi-Fi %s: rete \"%s\", password %s, pagina http://192.168.4.1/ (WIFI ON | WIFI OFF | WIFI NUOVA)\n", wifiOn ? "ACCESO" : "spento", wifiSsid, wifiPass);
+      } else if (!strncasecmp(line, "TCXO", 4)) {                         // TCXO ON/OFF (salvato): dichiara che la scheda ha un TCXO, cosi' annuncia anche R12-R14; TCXO mostra lo stato
+        const char* a = line + 4;
+        while (*a == ' ') a++;
+        if (!strncasecmp(a, "ON", 2) || !strncasecmp(a, "OFF", 3)) {
+          kTcxo = !strncasecmp(a, "ON", 2);
+          prefs.putBool("tcxo", kTcxo);
+          rebuild();
+          Serial.printf("TCXO %s (salvato): %s\n", kTcxo ? "ON" : "OFF", kTcxo ? "annuncio anche R12-R14 (31,25 / 15,6 / 7,8 kHz): dichiaralo solo se la scheda ha davvero un TCXO, e l'altra stazione deve averlo per usarli" : "R12-R14 non si annunciano");
+        } else Serial.printf("TCXO %s (TCXO ON | TCXO OFF); gradini annunciati: maschera 0x%04X\n", kTcxo ? "ON" : "OFF", static_cast<unsigned>(rungMask(kBoardSx1262, kTcxo, radio.frequencyKhz())));
       } else if (!strncasecmp(line, "GPS", 3)) {
         if (!gps.present()) Serial.println("questa scheda non ha il GPS (solo il T-Beam)");
         else if (line[4] == 'O' || line[4] == 'o') {                       // GPS ON / GPS OFF (salvato; spento di base come la v2)
@@ -462,7 +471,7 @@ static void handleSerial() {
         Serial.printf("%s BLE %s, %.3f MHz, gradino R%d%s, invio %s, in RAM %u byte, richieste %u (ripetute %u), scartati %u, oggetti ricevuti %u, errori radio %u, coda persa %u\n", call, bleConnected ? "collegato" : "scollegato",
                       radio.frequencyKhz() / 1000.0, station->link().rung, station->link().lost ? " (in ricerca)" : "", station->sending() ? "in corso" : "fermo", static_cast<unsigned>(bridge->held()), s.pulls, s.repulls, s.dropped, s.rxObjects,
                       static_cast<unsigned>(radio.rxErrors()), static_cast<unsigned>(qDropped));
-      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | DISPLAY 0|1 | GPS ON|OFF | LOG | WIFI | STATO | POWER <dBm> | BOOST|IOF ON RISCHIO|OFF|STATUS");
+      } else if (line[0]) Serial.println("comandi: CALL <nominativo> | FREQ <MHz> | DISPLAY 0|1 | GPS ON|OFF | TCXO ON|OFF | LOG | WIFI | STATO | POWER <dBm> | BOOST|IOF ON RISCHIO|OFF|STATUS");
     } else if (n < static_cast<int>(sizeof(line)) - 1) line[n++] = c;
   }
 }
@@ -480,6 +489,8 @@ void setup() {
   prefs.begin("vl3", false);
   { const int pw = prefs.getInt("pwr", boost::kNormalDbm); if (pw != boost::kNormalDbm && !radio.setBasePowerDbm(pw)) Serial.printf("potenza salvata %d dBm non valida: resta %d\n", pw, radio.basePowerDbm()); radio.onBasePower = [](int d) { prefs.putInt("pwr", d); }; if (radio.basePowerDbm() != boost::kNormalDbm) Serial.printf("ATTENZIONE potenza ridotta a %d dBm (salvata): POWER 17 per tornare alla normale\n", radio.basePowerDbm()); }
   { const uint32_t k = prefs.getUInt("khz", 0); if (k && !radio.setFrequencyKhz(k)) Serial.printf("frequenza salvata %u kHz non valida: resta %.3f MHz\n", static_cast<unsigned>(k), radio.frequencyKhz() / 1000.0); }
+  kTcxo = prefs.getBool("tcxo", false);
+  if (kTcxo) Serial.println("TCXO dichiarato (salvato): annuncio anche R12-R14. TCXO OFF per toglierlo");
   const String saved = prefs.getString("call", "");
   strncpy(call, saved.c_str(), sizeof(call) - 1);
   rebuild();
