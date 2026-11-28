@@ -113,4 +113,4 @@ Con il tempo massimo di **10 minuti** per oggetto (budget del protocollo), il gr
 - **STATUS:** la risposta del ricevitore ogni 16 frame con la mappa di quello che ha ricevuto: si ritrasmette solo il mancante.
 
 ## Fonti nel progetto
-[scala-modi.md](scala-modi.md) (scala e sensibilità), [protocollo-immagini.md](protocollo-immagini.md) (protocollo e gradini), [confronto-datasheet.md](confronto-datasheet.md) (limiti dei chip), [prove-laboratorio-v3.md](prove-laboratorio-v3.md) (come provare), `tools/protocollo_immagini.py` (i numeri).
+[scala-modi.md](scala-modi.md) (scala e sensibilità), [protocollo-immagini.md](protocollo-immagini.md) (protocollo e gradini), [confronto-datasheet.md](confronto-datasheet.md) (limiti dei chip), [prove-laboratorio-v3.md](prove-laboratorio-v3.md) (come provare), `tools/protocollo_immagini.py` (i numeri). **PDF da allegare:** [pdf/modi-e-negoziazione-v3.pdf](pdf/modi-e-negoziazione-v3.pdf) (i modi e la logica di negoziazione fra le schede, 7 pagine).

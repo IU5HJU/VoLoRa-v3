@@ -48,6 +48,8 @@ jobs:
         run: python3 tests/sim/test_canali.py
       - name: Prove documento dei modi radio
         run: python3 tests/sim/test_doc_modi.py
+      - name: Prove PDF modi e negoziazione
+        run: python3 tests/sim/test_pdf_modi.py
       - name: Prove nodo a scheda singola
         run: python3 tests/sim/test_nodo_semplice.py
       - name: Prove configurazione del nodo
