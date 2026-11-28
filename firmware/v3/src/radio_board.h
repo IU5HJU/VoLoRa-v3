@@ -1,4 +1,4 @@
-// Driver radio per la scheda (RadioLib): implementa v3::img::Radio per il mezzo (medium.h). SX1278 sulla T3, SX1262 sul T-Beam. STUDIO: mai eseguito su una scheda.
+// Driver radio per la scheda (RadioLib): implementa v3::img::Radio per il mezzo (medium.h). SX1278 sulla T3, SX1262 sul T-Beam e sulla Heltec WiFi LoRa 32 V3. STUDIO: mai eseguito su una scheda.
 // Ogni gradino (docs/protocollo-immagini.md, punto 3) e' un modo LoRa (banda, SF, CR 4/5) o FSK (bit rate, deviazione, filtro di ricezione); cambiare gradino riconfigura la radio e la
 // rimette in ascolto. Non supportato: R3 (LoRa 500/SF6) sull'SX1278, che vuole l'intestazione implicita (lunghezza fissa): il firmware non lo annuncia.
 #pragma once
@@ -150,8 +150,11 @@ class BoardRadio : public Radio {
     int st;
     if (r.lora) {
 #if defined(RADIO_SX1262)
-      st = vl3Radio.begin(freqMhz(), static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8, 1.6f);
+      st = vl3Radio.begin(freqMhz(), static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8, MISURA_TCXO_V);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(true);
+#if defined(VL3_DIO2_RF_SWITCH)
+      if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setDio2AsRfSwitch(true);
+#endif
 #else
       if (r.b == 6) { Serial.println("[radio] R3 (SF6) non supportato sull'SX1278: serve l'intestazione implicita"); return false; }
       st = vl3Radio.begin(freqMhz(), static_cast<float>(r.a), static_cast<uint8_t>(r.b), 5, kSyncWord, boost_.power(), 8);
@@ -159,9 +162,12 @@ class BoardRadio : public Radio {
 #endif
     } else {
 #if defined(RADIO_SX1262)
-      st = vl3Radio.beginFSK(freqMhz(), static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(true, r.a, r.b), boost_.power(), 16, 1.6f);
+      st = vl3Radio.beginFSK(freqMhz(), static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(true, r.a, r.b), boost_.power(), 16, MISURA_TCXO_V);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.variablePacketLengthMode(255);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setCRC(2);
+#if defined(VL3_DIO2_RF_SWITCH)
+      if (st == RADIOLIB_ERR_NONE) st = vl3Radio.setDio2AsRfSwitch(true);
+#endif
 #else
       st = vl3Radio.beginFSK(freqMhz(), static_cast<float>(r.a), static_cast<float>(r.b), fskRxBw(false, r.a, r.b), boost_.power(), 16, false);
       if (st == RADIOLIB_ERR_NONE) st = vl3Radio.variablePacketLengthMode(64);

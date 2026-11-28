@@ -3,7 +3,7 @@
 #   tools/make_site.sh <cartella-artefatti> <cartella-uscita> <versione> <commit>
 # <cartella-artefatti> contiene firmware-t3/, firmware-tbeam1262/ e firmware-tbeam1278/ (come li scarica actions/download-artifact), ognuna con web_factory.bin.
 # App Android (facoltativa): <cartella-artefatti>/volora3-apk/VoLoRa-V3.apk -> app/VoLoRa-V3.apk
-# Firmware V3: <cartella-artefatti>/firmware-v3-<env>/ con bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin (env: mobile_t3 mobile_tbeam1262 mobile_tbeam1278 bench_t3 bench_tbeam1262 bench_tbeam1278 ble_sim_t3 ble_sim_tbeam1262).
+# Firmware V3: <cartella-artefatti>/firmware-v3-<env>/ con bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin (env: mobile_t3 mobile_tbeam1262 mobile_tbeam1278 mobile_heltec_v3 bench_t3 bench_tbeam1262 bench_tbeam1278 ble_sim_t3 ble_sim_tbeam1262).
 # Struttura prodotta: index.html, firmware-v3.html, version.json, firmware/<scheda>/{web_factory.bin,manifest.json}, firmware-v3/<env>/{4 binari,manifest.json}
 # Il firmware di misura non salva impostazioni, quindi si scrive l'immagine intera all'indirizzo 0 (un solo pezzo).
 set -euo pipefail
@@ -37,8 +37,9 @@ JSON
 done
 
 # firmware V3: quattro parti agli indirizzi di sempre (bootloader 0x1000, partizioni 0x8000, boot_app0 0xe000, programma 0x10000), cosi' le impostazioni in NVS (nominativo, accoppiamento) restano
-for env in mobile_t3 mobile_tbeam1262 mobile_tbeam1278 bench_t3 bench_tbeam1262 bench_tbeam1278 ble_sim_t3 ble_sim_tbeam1262; do
+for env in mobile_t3 mobile_tbeam1262 mobile_tbeam1278 mobile_heltec_v3 bench_t3 bench_tbeam1262 bench_tbeam1278 ble_sim_t3 ble_sim_tbeam1262; do
   art="firmware-v3-$env"
+  family=ESP32; boot=4096; [ "$env" = mobile_heltec_v3 ] && { family=ESP32-S3; boot=0; }   # l'ESP32-S3 vuole il bootloader a 0x0
   for f in bootloader.bin partitions.bin boot_app0.bin firmware.bin; do
     test -f "$in/$art/$f" || { echo "manca $in/$art/$f" >&2; exit 1; }
   done
@@ -50,8 +51,8 @@ for env in mobile_t3 mobile_tbeam1262 mobile_tbeam1278 bench_t3 bench_tbeam1262 
   "version": "$version",
   "new_install_prompt_erase": false,
   "builds": [
-    { "chipFamily": "ESP32", "parts": [
-      { "path": "bootloader.bin", "offset": 4096 },
+    { "chipFamily": "$family", "parts": [
+      { "path": "bootloader.bin", "offset": $boot },
       { "path": "partitions.bin", "offset": 32768 },
       { "path": "boot_app0.bin", "offset": 57344 },
       { "path": "firmware.bin", "offset": 65536 }

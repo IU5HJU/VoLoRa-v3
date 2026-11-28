@@ -1,4 +1,4 @@
-// Alimentazione della T-Beam V1.2 (AXP2101): la radio e' sul canale ALDO2 e senza questa sequenza non si accende.
+// Alimentazione della T-Beam V1.2 (AXP2101), e Vext/reset OLED della Heltec V3: la radio e' sul canale ALDO2 e senza questa sequenza non si accende.
 // Sequenza ripresa dalla v2 (VoLoRa v0.1.0-rc.1, src/pmu.cpp), a sua volta dal codice di riferimento LILYGO. Sulla T3 non c'e' PMU: non fa niente.
 #pragma once
 #include <Arduino.h>
@@ -49,6 +49,21 @@ inline bool pmuBegin() {
                 pmu->isPowerChannelEnable(XPOWERS_ALDO2) ? "acceso" : "SPENTO");
   return true;
 }
+#elif defined(BOARD_HELTEC_V3)
+// Heltec V3: niente PMU. Vext (GPIO36, attivo BASSO) alimenta l'OLED; l'OLED ha il suo reset (GPIO21), da tenere basso per un istante.
+inline bool pmuBegin() {
+  pinMode(pins::kVext, OUTPUT);
+  digitalWrite(pins::kVext, LOW);
+  pinMode(pins::kOledRst, OUTPUT);
+  digitalWrite(pins::kOledRst, LOW);
+  delay(20);
+  digitalWrite(pins::kOledRst, HIGH);
+  delay(20);
+  Serial.println("[avvio] Vext acceso (GPIO36 basso), reset dell'OLED fatto");
+  return true;
+}
+inline int pmuBatteryMv() { return -1; }
+inline void pmuGpsPower(bool) {}
 #else
 inline bool pmuBegin() { return true; }
 inline int pmuBatteryMv() { return -1; }

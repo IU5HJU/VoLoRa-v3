@@ -8,7 +8,7 @@ const path = require('path');
 const site = path.resolve(process.argv[2] || '_site');
 const shots = process.argv[3] ? path.resolve(process.argv[3]) : null;
 const types = { '.html': 'text/html', '.json': 'application/json', '.bin': 'application/octet-stream' };
-const ENVS = ['mobile_t3', 'mobile_tbeam1262', 'mobile_tbeam1278', 'bench_t3', 'bench_tbeam1262', 'bench_tbeam1278', 'ble_sim_t3', 'ble_sim_tbeam1262'];
+const ENVS = ['mobile_t3', 'mobile_tbeam1262', 'mobile_tbeam1278', 'mobile_heltec_v3', 'bench_t3', 'bench_tbeam1262', 'bench_tbeam1278', 'ble_sim_t3', 'ble_sim_tbeam1262'];
 let fails = 0;
 const check = (c, m) => { if (!c) { console.log('FALLITO: ' + m); fails++; } else console.log('ok: ' + m); };
 
@@ -18,7 +18,7 @@ const check = (c, m) => { if (!c) { console.log('FALLITO: ' + m); fails++; } els
     const d = path.join(site, 'firmware-v3', e);
     const m = JSON.parse(fs.readFileSync(path.join(d, 'manifest.json'), 'utf8'));
     const parts = m.builds[0].parts;
-    check(parts.map(p => p.offset).join() === '4096,32768,57344,65536' && parts.map(p => p.path).join() === 'bootloader.bin,partitions.bin,boot_app0.bin,firmware.bin', `${e}: manifest con le quattro parti agli indirizzi 0x1000, 0x8000, 0xe000, 0x10000`);
+    check(parts.map(p => p.offset).join() === (e === 'mobile_heltec_v3' ? '0,32768,57344,65536' : '4096,32768,57344,65536') && m.builds[0].chipFamily === (e === 'mobile_heltec_v3' ? 'ESP32-S3' : 'ESP32') && parts.map(p => p.path).join() === 'bootloader.bin,partitions.bin,boot_app0.bin,firmware.bin', `${e}: manifest con le quattro parti agli indirizzi giusti (0x1000 o, per ESP32-S3, 0x0; poi 0x8000, 0xe000, 0x10000)`);
     check(parts.every(p => fs.existsSync(path.join(d, p.path))) && m.new_install_prompt_erase === false, `${e}: i quattro file ci sono e la scheda non si cancella`);
   }
   const server = http.createServer((req, res) => {

@@ -1,5 +1,6 @@
 // Tensione della batteria da mostrare sul display (come la v2, src/battery.cpp), lettura NON bloccante.
 //  - T-Beam V1.2: dal chip AXP2101 (-1 se la batteria non c'e'), ogni 2 s.
+//  - Heltec V3: ADC su GPIO1 con partitore abilitato dal GPIO37 (valori da confermare, board.h).
 //  - T3 V1.6.1: ADC su GPIO35 con partitore 100k/100k, calibrazione del chip, media di 16 letture (una ogni 50 ms) e media lenta (2,5 s) perche' con l'USB e senza batteria
 //    si legge la linea del caricatore, che oscilla. STUDIO: mai provato su una scheda.
 #pragma once
@@ -14,9 +15,10 @@ class BatteryReader {
   void begin() {
 #if !defined(BOARD_TBEAM_V12)
     pinMode(pins::kBatteryAdc, INPUT);
+    if (pins::kBatteryCtrl >= 0) { pinMode(pins::kBatteryCtrl, OUTPUT); digitalWrite(pins::kBatteryCtrl, LOW); }   // Heltec V3: abilita il partitore (livello basso)
     analogSetPinAttenuation(pins::kBatteryAdc, ADC_11db);       // fino a circa 3,1 V sul pin = 6,2 V di batteria
     for (int i = 0; i < 16; i++) { filter_.add(static_cast<float>(analogReadMilliVolts(pins::kBatteryAdc))); delay(3); }
-    volts_ = smoother_.update(filter_.average() * 2.0f / 1000.0f);
+    volts_ = smoother_.update(filter_.average() * pins::kBatteryDivider / 1000.0f);
 #endif
   }
   void update(uint32_t nowMs) {
@@ -29,7 +31,7 @@ class BatteryReader {
     if (nowMs - lastMs_ < 50) return;
     lastMs_ = nowMs;
     filter_.add(static_cast<float>(analogReadMilliVolts(pins::kBatteryAdc)));
-    volts_ = smoother_.update(filter_.average() * 2.0f / 1000.0f);
+    volts_ = smoother_.update(filter_.average() * pins::kBatteryDivider / 1000.0f);
 #endif
   }
   float volts() const { return volts_; }

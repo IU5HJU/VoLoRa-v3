@@ -1,5 +1,5 @@
 // Pilota dell'OLED SSD1306 128x64: cerca il display, ridisegna solo se cambia qualcosa. Il disegno delle schermate (stesse coordinate, font e barra della v2, src/ui.cpp) e' in display_draw.h.
-// T3 V1.6.1: OLED a bordo (SDA 21, SCL 22). T-Beam: display esterno facoltativo. Si prova 0x3C e poi 0x3D come nella v2; se il display non c'e' tutto resta muto.
+// T3 V1.6.1: OLED a bordo (SDA 21, SCL 22). Heltec V3: OLED a bordo (SDA 17, SCL 18), acceso da pmuBegin() (Vext). T-Beam: display esterno facoltativo. Si prova 0x3C e poi 0x3D come nella v2; se il display non c'e' tutto resta muto.
 // Disegnare costa circa 25 ms (I2C): non piu' di 10 volte al secondo, e `DISPLAY 0` lo spegne (la radio si accorge dei pacchetti dopo il disegno, non durante). STUDIO: mai visto su un OLED vero.
 #pragma once
 #include <Adafruit_GFX.h>

@@ -111,6 +111,8 @@ jobs:
             board: T3 V1.6.1 completa (Bluetooth + Wi-Fi)
           - env: mobile_tbeam1262
             board: T-Beam V1.2 SX1262 completa (Bluetooth + Wi-Fi)
+          - env: mobile_heltec_v3
+            board: Heltec WiFi LoRa 32 V3 completa (Bluetooth + Wi-Fi)
           - env: ble_sim_t3
             board: T3 solo BLE (radio simulata)
           - env: ble_sim_tbeam1262
